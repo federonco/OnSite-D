@@ -1,0 +1,619 @@
+"use client";
+
+import { RefreshCw } from "lucide-react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import Link from "next/link";
+import { AuthPanel } from "@/components/auth-panel";
+import { useToast } from "@/components/toast";
+import { getSupabaseBrowser } from "@/lib/supabase/browser";
+import {
+  ITR_PAGE_SIZE,
+  getITRProgress,
+  groupRecordsIntoITRs,
+} from "@/lib/drainer";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { Loader2 } from "lucide-react";
+
+type Section = {
+  id: string;
+  name: string;
+  start_ch: number | null;
+  end_ch: number | null;
+  direction: string | null;
+  project_name: string | null;
+  project_number: string | null;
+  itp_number: string | null;
+};
+
+type RecordRow = {
+  id: string;
+  chainage: number;
+  date_installed: string | null;
+};
+
+export default function AdminPage() {
+  const supabase = getSupabaseBrowser();
+  const { pushToast } = useToast();
+  const [authEmail, setAuthEmail] = useState<string | null>(null);
+  const [isAdmin, setIsAdmin] = useState<boolean | null>(null);
+  const [sections, setSections] = useState<Section[]>([]);
+  const [sectionId, setSectionId] = useState("");
+  const [records, setRecords] = useState<RecordRow[]>([]);
+  const [modalOpen, setModalOpen] = useState(false);
+  const [modalMode, setModalMode] = useState<"create" | "edit">("create");
+  const [editId, setEditId] = useState<string | null>(null);
+  const [name, setName] = useState("");
+  const [startCh, setStartCh] = useState("");
+  const [endCh, setEndCh] = useState("");
+  const [direction, setDirection] = useState<string>("onwards");
+  const [projectName, setProjectName] = useState("");
+  const [projectNumber, setProjectNumber] = useState("");
+  const [itpNumber, setItpNumber] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [auditLoading, setAuditLoading] = useState(false);
+  const [printingItrIndex, setPrintingItrIndex] = useState<number | null>(null);
+
+  const getAccessToken = useCallback(async () => {
+    const { data } = await supabase.auth.getSession();
+    if (data.session?.access_token) return data.session.access_token;
+    const refreshed = await supabase.auth.refreshSession();
+    return refreshed.data.session?.access_token ?? null;
+  }, [supabase]);
+
+  const loadSections = useCallback(async () => {
+    const token = await getAccessToken();
+    const res = await fetch("/api/drainer/sections", {
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    });
+    const data = await res.json();
+    if (data.sections) {
+      setSections(data.sections);
+      setSectionId((prev) => {
+        const next = data.sections.find((s: Section) => s.id === prev)?.id;
+        return next ?? (data.sections[0]?.id ?? "");
+      });
+    }
+  }, [getAccessToken]);
+
+  const loadRecords = useCallback(async () => {
+    if (!sectionId) return;
+    const token = await getAccessToken();
+    const res = await fetch(`/api/drainer/records?sectionId=${sectionId}`, {
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    });
+    const data = await res.json();
+    setRecords(data.records ?? []);
+  }, [sectionId, getAccessToken]);
+
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data }) => {
+      setAuthEmail(data.session?.user.email ?? null);
+    });
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_event, session) => {
+      setAuthEmail(session?.user.email ?? null);
+    });
+    return () => subscription.unsubscribe();
+  }, [supabase]);
+
+  useEffect(() => {
+    if (!authEmail) {
+      setIsAdmin(null);
+      return;
+    }
+    const check = async () => {
+      const token = await getAccessToken();
+      const res = await fetch("/api/drainer/me", {
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      });
+      const json = await res.json();
+      setIsAdmin(json.isAdmin ?? false);
+      if (json.isAdmin) loadSections();
+    };
+    check();
+  }, [authEmail, getAccessToken, loadSections]);
+
+  useEffect(() => {
+    if (sectionId && isAdmin) loadRecords();
+    else setRecords([]);
+  }, [sectionId, isAdmin, loadRecords]);
+
+  const selectedSection = useMemo(
+    () => sections.find((s) => s.id === sectionId),
+    [sections, sectionId]
+  );
+
+  const itrBlocks = useMemo(() => {
+    const pages = groupRecordsIntoITRs(records);
+    return pages.map((page, i) => {
+      const status = page.length === ITR_PAGE_SIZE ? "READY" : "OPEN";
+      const range =
+        page.length > 0
+          ? `${page[0].chainage} → ${page[page.length - 1].chainage}`
+          : "—";
+      const pendingCount = ITR_PAGE_SIZE - page.length;
+      const progressPercent = Math.round((page.length / ITR_PAGE_SIZE) * 100);
+      return {
+        index: i + 1,
+        status,
+        range,
+        recordCount: page.length,
+        pendingCount,
+        progressPercent,
+        chainages: page.map((r) => r.chainage),
+      };
+    });
+  }, [records]);
+
+  const progress = useMemo(
+    () => getITRProgress(records.length),
+    [records.length]
+  );
+
+  const openCreate = () => {
+    setModalMode("create");
+    setEditId(null);
+    setName("");
+    setStartCh("");
+    setEndCh("");
+    setDirection("onwards");
+    setProjectName("");
+    setProjectNumber("");
+    setItpNumber("");
+    setModalOpen(true);
+  };
+
+  const openEdit = (s: Section) => {
+    setModalMode("edit");
+    setEditId(s.id);
+    setName(s.name);
+    setStartCh(s.start_ch != null ? String(s.start_ch) : "");
+    setEndCh(s.end_ch != null ? String(s.end_ch) : "");
+    setDirection(s.direction ?? "onwards");
+    setProjectName(s.project_name ?? "");
+    setProjectNumber(s.project_number ?? "");
+    setItpNumber(s.itp_number ?? "");
+    setModalOpen(true);
+  };
+
+  const handleSave = async () => {
+    if (!name) {
+      pushToast({ type: "error", title: "Name required" });
+      return;
+    }
+    setLoading(true);
+    try {
+      const token = await getAccessToken();
+      if (!token) {
+        pushToast({ type: "error", title: "Sign in required" });
+        setLoading(false);
+        return;
+      }
+      const payload = {
+        name,
+        start_ch: startCh ? Number(startCh) : null,
+        end_ch: endCh ? Number(endCh) : null,
+        direction: direction || null,
+        project_name: projectName || null,
+        project_number: projectNumber || null,
+        itp_number: itpNumber || null,
+      };
+      const url =
+        modalMode === "edit" && editId
+          ? `/api/drainer/sections/${editId}`
+          : "/api/drainer/sections";
+      const method = modalMode === "edit" ? "PUT" : "POST";
+      const res = await fetch(url, {
+        method,
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify(payload),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? "Save failed");
+      pushToast({ type: "success", title: "Section saved" });
+      setModalOpen(false);
+      loadSections();
+    } catch (err) {
+      pushToast({
+        type: "error",
+        title: "Save failed",
+        message: err instanceof Error ? err.message : "Unknown error",
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handlePrintITR = async (itrIndex: number) => {
+    if (!sectionId) return;
+    const token = await getAccessToken();
+    if (!token) {
+      pushToast({ type: "error", title: "Sign in required" });
+      return;
+    }
+    setPrintingItrIndex(itrIndex);
+    try {
+      const res = await fetch("/api/drainer/report/itr-pla-001/email", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ sectionId, itrIndex }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? "Send failed");
+      pushToast({
+        type: "success",
+        title: "Email sent",
+        message: "The PDF was emailed to your admin account.",
+      });
+    } catch (err) {
+      pushToast({
+        type: "error",
+        title: "Send failed",
+        message: err instanceof Error ? err.message : "Unknown error",
+      });
+    } finally {
+      setPrintingItrIndex(null);
+    }
+  };
+
+  const handleAuditReport = async () => {
+    if (!sectionId) {
+      pushToast({ type: "error", title: "Select a section first" });
+      return;
+    }
+    const token = await getAccessToken();
+    if (!token) {
+      pushToast({ type: "error", title: "Sign in required" });
+      return;
+    }
+    setAuditLoading(true);
+    try {
+      const res = await fetch(
+        `/api/drainer/sections/audit?sectionId=${sectionId}`,
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      if (!res.ok) throw new Error("Audit failed");
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      window.open(url, "_blank");
+      URL.revokeObjectURL(url);
+    } catch {
+      pushToast({ type: "error", title: "Audit report failed" });
+    } finally {
+      setAuditLoading(false);
+    }
+  };
+
+  const loadingState = authEmail !== null && isAdmin === null;
+
+  if (loadingState) {
+    return (
+      <div className="drainer-page">
+        <div className="drainer-shell">
+          <p className="text-sm text-[var(--muted-foreground)]">Loading...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (!authEmail) {
+    return (
+      <div className="drainer-page">
+        <div className="drainer-shell">
+          <div className="drainer-header">
+            <h1 className="drainer-title text-xl">Drainer Admin</h1>
+            <AuthPanel onAuthChange={setAuthEmail} />
+          </div>
+          <p className="text-sm text-[var(--muted-foreground)] mt-4">
+            Sign in to access admin.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  if (!isAdmin) {
+    return (
+      <div className="drainer-page">
+        <div className="drainer-shell">
+          <div className="drainer-header">
+            <h1 className="drainer-title text-xl">Drainer Admin</h1>
+            <AuthPanel onAuthChange={setAuthEmail} />
+          </div>
+          <p className="text-sm text-[var(--muted-foreground)] mt-4">
+            Access denied. Your email is not in the admin allowlist.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="drainer-page">
+      <div className="drainer-shell max-w-2xl">
+        <div className="drainer-header flex flex-col gap-3">
+          <div className="flex items-center justify-between">
+            <h1 className="drainer-title text-xl">Drainer Admin Center</h1>
+            <Link href="/">
+              <Button variant="ghost" size="sm">
+                Back to Lodge
+              </Button>
+            </Link>
+          </div>
+          <AuthPanel onAuthChange={setAuthEmail} />
+        </div>
+
+        <Card className="drainer-card h-[90px] gap-2 py-2">
+          <CardHeader className="pb-0">
+            <CardTitle className="text-sm">Section</CardTitle>
+          </CardHeader>
+          <CardContent className="flex flex-1 items-center gap-2 pt-0">
+            <Select
+              value={sectionId || undefined}
+              onValueChange={setSectionId}
+            >
+              <SelectTrigger className="drainer-input w-full">
+                <SelectValue placeholder="Select section" />
+              </SelectTrigger>
+              <SelectContent>
+                {sections.map((s) => (
+                  <SelectItem key={s.id} value={s.id}>
+                    {s.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="outline" size="sm" className="h-9 w-9 px-0">
+                  ⋮
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem onClick={openCreate}>
+                  Create Section
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  onClick={() => selectedSection && openEdit(selectedSection)}
+                  disabled={!sectionId}
+                >
+                  Edit Section
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  onClick={handleAuditReport}
+                  disabled={!sectionId || auditLoading}
+                >
+                  {auditLoading ? "Generating…" : "Audit Report"}
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </CardContent>
+        </Card>
+
+        {selectedSection && (
+          <Card className="drainer-card">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm">
+                {selectedSection.name} — ITR Reports
+              </CardTitle>
+              <div className="flex items-center gap-2 mt-2">
+                <Badge className="rounded-full bg-[#16a34a] px-2 py-0.5 text-[10px] font-semibold text-white">
+                  Ready {progress.completeITRs}
+                </Badge>
+                <Badge className="rounded-full bg-[#f59e0b] px-2 py-0.5 text-[10px] font-semibold text-white">
+                  Open {progress.currentOpenCount > 0 ? 1 : 0}
+                </Badge>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-7 w-7 shrink-0 rounded-full"
+                  onClick={loadRecords}
+                  title="Refresh"
+                >
+                  <RefreshCw className="size-4" />
+                </Button>
+              </div>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <p className="text-xs text-[var(--muted-foreground)]">
+                Records: {records.length}
+              </p>
+              <div className="flex justify-between text-xs text-[var(--muted-foreground)] mb-1">
+                <span>ITR progress</span>
+                <span>{progress.percent}%</span>
+              </div>
+              <div className="h-2 rounded-full bg-[var(--surface-alt)] overflow-hidden">
+                <div
+                  className="h-full bg-[var(--primary)] transition-all duration-300"
+                  style={{ width: `${progress.percent}%` }}
+                />
+              </div>
+              {itrBlocks.length > 0 ? (
+                <div className="max-h-[280px] space-y-3 overflow-y-auto pr-1">
+                  {itrBlocks.map((block) => (
+                    <div
+                      key={block.index}
+                      className="flex items-center justify-between rounded-[20px] bg-[var(--surface)] px-4 py-3 shadow-[0_1px_4px_rgba(0,0,0,0.06)]"
+                    >
+                      <div>
+                        <p className="text-xs text-[var(--muted-foreground)]">
+                          ITR-{block.index}
+                        </p>
+                        <p className="text-sm font-semibold">{block.range}</p>
+                        <p className="mt-1 text-xs text-[var(--muted-foreground)]">
+                          Status:{" "}
+                          <span
+                            className={`inline-flex rounded-full px-2 py-0.5 text-[10px] font-semibold text-white ${
+                              block.status === "READY"
+                                ? "bg-[#16a34a]"
+                                : "bg-[#f59e0b]"
+                            }`}
+                          >
+                            {block.status === "READY"
+                              ? "Complete"
+                              : `${block.recordCount} / 9 records`}
+                          </span>
+                        </p>
+                        {block.status === "OPEN" && (
+                          <div className="mt-2 space-y-1">
+                            <div className="flex justify-between text-[10px] text-[var(--muted-foreground)]">
+                              <span>Complete</span>
+                              <span>{block.progressPercent}%</span>
+                            </div>
+                            <div className="h-2 w-full overflow-hidden rounded-full bg-[var(--surface-alt)]">
+                              <div
+                                className="h-full rounded-full bg-[#f59e0b]"
+                                style={{ width: `${block.progressPercent}%` }}
+                              />
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                      {block.status === "READY" ? (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="h-9 px-4 text-xs border-0 text-white shadow-[0_4px_14px_rgba(22,163,74,0.35)] disabled:opacity-80 bg-[#16a34a]"
+                          onClick={() => handlePrintITR(block.index)}
+                          disabled={printingItrIndex !== null}
+                        >
+                          {printingItrIndex === block.index ? (
+                            <>
+                              <Loader2 className="h-4 w-4 animate-spin shrink-0" />
+                              Sending…
+                            </>
+                          ) : (
+                            `Print ITR-${block.index}`
+                          )}
+                        </Button>
+                      ) : null}
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-sm text-[var(--muted-foreground)] py-4 text-center">
+                  No records yet. Lodge records from the main page.
+                </p>
+              )}
+            </CardContent>
+          </Card>
+        )}
+      </div>
+
+      <Dialog open={modalOpen} onOpenChange={setModalOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>
+              {modalMode === "create" ? "Create Section" : "Edit Section"}
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div>
+              <label className="drainer-label block mb-1">Name</label>
+              <Input
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                placeholder="Section name"
+                className="drainer-input"
+              />
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="drainer-label block mb-1">Start CH</label>
+                <Input
+                  type="number"
+                  value={startCh}
+                  onChange={(e) => setStartCh(e.target.value)}
+                  className="drainer-input"
+                />
+              </div>
+              <div>
+                <label className="drainer-label block mb-1">End CH</label>
+                <Input
+                  type="number"
+                  value={endCh}
+                  onChange={(e) => setEndCh(e.target.value)}
+                  className="drainer-input"
+                />
+              </div>
+            </div>
+            <div>
+              <label className="drainer-label block mb-1">Direction</label>
+              <Select value={direction} onValueChange={setDirection}>
+                <SelectTrigger className="drainer-input">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="onwards">Onwards</SelectItem>
+                  <SelectItem value="backwards">Backwards</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <label className="drainer-label block mb-1">Project Name</label>
+              <Input
+                value={projectName}
+                onChange={(e) => setProjectName(e.target.value)}
+                className="drainer-input"
+              />
+            </div>
+            <div>
+              <label className="drainer-label block mb-1">Project Number</label>
+              <Input
+                value={projectNumber}
+                onChange={(e) => setProjectNumber(e.target.value)}
+                className="drainer-input"
+              />
+            </div>
+            <div>
+              <label className="drainer-label block mb-1">ITP Number</label>
+              <Input
+                value={itpNumber}
+                onChange={(e) => setItpNumber(e.target.value)}
+                className="drainer-input"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setModalOpen(false)}>
+              Cancel
+            </Button>
+            <Button onClick={handleSave} disabled={loading}>
+              {loading ? "Saving…" : "Save"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+}
