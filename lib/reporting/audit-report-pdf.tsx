@@ -6,7 +6,7 @@ import {
   Text,
   View,
   Image,
-  pdf,
+  renderToBuffer,
 } from "@react-pdf/renderer";
 
 const styles = StyleSheet.create({
@@ -265,7 +265,7 @@ export async function generateAuditReportPdf(
     </Document>
   );
 
-  const buffer = await pdf(doc).toBuffer();
+  const buffer = (await renderToBuffer(doc)) as Buffer;
   const safeName = (section.name ?? "section").replace(/\s+/g, "-");
   return {
     buffer,
