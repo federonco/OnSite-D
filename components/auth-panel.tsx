@@ -70,12 +70,15 @@ export function AuthPanel({ onAuthChange }: AuthPanelProps) {
       return;
     }
     setRecoveryLoading(true);
-    const redirectTo =
-      "https://on-site-d.vercel.app/auth/callback?next=/auth/reset-password";
-    const { data, error } = await supabase.auth.resetPasswordForEmail(email, {
+    const baseUrl =
+      process.env.NEXT_PUBLIC_SITE_URL ||
+      (typeof window !== "undefined"
+        ? window.location.origin
+        : "https://on-site-d.vercel.app");
+    const redirectTo = `${baseUrl}/auth/callback?next=/auth/reset-password`;
+    const { error } = await supabase.auth.resetPasswordForEmail(email, {
       redirectTo,
     });
-    console.log("Recovery email result:", { data, error, email, redirectTo });
     setRecoveryLoading(false);
     if (error) {
       pushToast({
@@ -87,8 +90,7 @@ export function AuthPanel({ onAuthChange }: AuthPanelProps) {
     }
     pushToast({
       type: "success",
-      title: "Check your email",
-      message: "We sent a recovery link to " + email,
+      title: "Recovery email sent — check your inbox",
     });
   };
 
@@ -121,6 +123,11 @@ export function AuthPanel({ onAuthChange }: AuthPanelProps) {
         placeholder="Email"
         type="email"
       />
+      {!email.trim() && (
+        <p className="text-[11px] text-[var(--muted-foreground)]">
+          Enter your email above then click Forgot password?
+        </p>
+      )}
       <Input
         className="drainer-input h-9 text-[16px] md:text-xs"
         value={password}
