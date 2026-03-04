@@ -70,9 +70,12 @@ export function AuthPanel({ onAuthChange }: AuthPanelProps) {
       return;
     }
     setRecoveryLoading(true);
-    const { error } = await supabase.auth.resetPasswordForEmail(email, {
-      redirectTo: "https://on-site-d.vercel.app/auth/callback?next=/auth/reset-password",
+    const redirectTo =
+      "https://on-site-d.vercel.app/auth/callback?next=/auth/reset-password";
+    const { data, error } = await supabase.auth.resetPasswordForEmail(email, {
+      redirectTo,
     });
+    console.log("Recovery email result:", { data, error, email, redirectTo });
     setRecoveryLoading(false);
     if (error) {
       pushToast({
