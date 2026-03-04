@@ -121,7 +121,7 @@ export async function generateAuditReportPdf(
 ) {
   const doc = (
     <Document>
-      <Page size="A4" style={styles.page}>
+      <Page size="A4" orientation="landscape" style={styles.page}>
         <View style={styles.header}>
           <Text style={styles.title}>Section Audit — Raw Records</Text>
           <View style={styles.meta}>

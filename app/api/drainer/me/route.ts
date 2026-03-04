@@ -10,5 +10,6 @@ export async function GET(request: NextRequest) {
   return NextResponse.json({
     email: user.email,
     isAdmin: isAdminEmail(user.email),
+    reportDefaultEmail: process.env.REPORT_DEFAULT_EMAIL || user.email,
   });
 }

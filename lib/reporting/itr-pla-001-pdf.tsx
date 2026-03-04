@@ -22,7 +22,9 @@ const ITR_PAGE_SIZE = 9;
 /** Column widths (px, landscape A4 ~801 usable): A-N per Excel template */
 const COL_WIDTHS = [55, 48, 75, 40, 45, 45, 95, 48, 42, 55, 52, 52, 58, 55];
 
-const DARK_BLUE = "#1e3a5f";
+const BLUE_4472C4 = "#4472C4";
+const BLUE_8EA9D8 = "#8EA9D8";
+const GRAY_F2F2F2 = "#F2F2F2";
 
 const styles = StyleSheet.create({
   page: {
@@ -30,16 +32,17 @@ const styles = StyleSheet.create({
     fontSize: 6,
     flexDirection: "column",
   },
-  // Header: single row, 3 sections ~25% | ~45% | ~30%
-  headerGrid: {
+  // Header: single bordered container, 3 columns 25% | 45% | 30%
+  headerOuter: {
     flexDirection: "row",
     marginBottom: 8,
+    borderWidth: 1,
+    borderStyle: "solid",
+    borderColor: "#333",
   },
   headerLeft: {
     width: "25%",
-    minWidth: 160,
-    borderWidth: 1,
-    borderStyle: "solid",
+    borderRightWidth: 0.5,
     borderColor: "#333",
   },
   headerLeftCell: {
@@ -58,30 +61,27 @@ const styles = StyleSheet.create({
   headerLeftValue: { flex: 1 },
   headerCenter: {
     width: "45%",
-    flex: 1,
     justifyContent: "center",
     alignItems: "center",
+    borderRightWidth: 0.5,
+    borderColor: "#333",
   },
-  titleLine1: { fontSize: 12, fontWeight: "bold" },
+  titleLine1: { fontSize: 11, fontWeight: "bold" },
   titleLine2: { fontSize: 10, fontWeight: "bold", marginTop: 2 },
   headerRight: {
     width: "30%",
-    minWidth: 100,
-    borderWidth: 1,
-    borderStyle: "solid",
-    borderColor: "#333",
     alignItems: "flex-end",
     justifyContent: "center",
     padding: 4,
   },
   logoPlaceholder: {
     fontSize: 7,
-    color: "#1e3a5f",
+    color: "#4472C4",
     fontWeight: "bold",
     textAlign: "center",
   },
-  logoImg: { maxHeight: 40, maxWidth: 110 },
-  // Project info
+  logoImg: { height: 35, maxWidth: 110 },
+  // Project info: blue title row, white data rows
   projectSection: {
     borderWidth: 1,
     borderStyle: "solid",
@@ -89,7 +89,7 @@ const styles = StyleSheet.create({
     marginBottom: 6,
   },
   projectTitleRow: {
-    backgroundColor: DARK_BLUE,
+    backgroundColor: BLUE_4472C4,
     padding: 4,
   },
   projectTitle: {
@@ -98,17 +98,19 @@ const styles = StyleSheet.create({
     fontSize: 8,
     textAlign: "center",
   },
-  projectRow: {
+  projectDataRow: {
     flexDirection: "row",
-    backgroundColor: DARK_BLUE,
+    backgroundColor: "white",
   },
-  projectCell: {
+  projectDataCell: {
     flex: 1,
     padding: 4,
     borderTopWidth: 0.5,
-    borderColor: "rgba(255,255,255,0.3)",
+    borderBottomWidth: 0.5,
+    borderRightWidth: 0.5,
+    borderColor: "#333",
   },
-  projectCellText: { color: "white", fontSize: 7 },
+  projectDataCellText: { color: "black", fontSize: 7 },
   // Pipe records table
   pipeRecordsSection: {
     borderWidth: 1,
@@ -116,7 +118,7 @@ const styles = StyleSheet.create({
     borderColor: "#333",
   },
   pipeRecordsTitle: {
-    backgroundColor: DARK_BLUE,
+    backgroundColor: BLUE_4472C4,
     padding: 4,
   },
   pipeRecordsTitleText: {
@@ -127,18 +129,19 @@ const styles = StyleSheet.create({
   },
   groupHeaderRow: {
     flexDirection: "row",
-    backgroundColor: DARK_BLUE,
+    backgroundColor: BLUE_8EA9D8,
   },
   groupHeaderCell: {
     flex: 1,
     padding: 3,
     borderTopWidth: 0.5,
-    borderColor: "rgba(255,255,255,0.3)",
+    borderRightWidth: 0.5,
+    borderColor: "rgba(255,255,255,0.5)",
   },
-  groupHeaderText: { color: "white", fontSize: 6, textAlign: "center" },
+  groupHeaderText: { color: "white", fontSize: 6, fontWeight: "bold", textAlign: "center" },
   colHeaderRow: {
     flexDirection: "row",
-    backgroundColor: DARK_BLUE,
+    backgroundColor: BLUE_4472C4,
   },
   cell: {
     borderRightWidth: 0.5,
@@ -148,16 +151,16 @@ const styles = StyleSheet.create({
   },
   headerCell: {
     color: "white",
-    fontSize: 5,
+    fontSize: 6,
     textAlign: "center",
   },
   subheaderRow: {
     flexDirection: "row",
-    backgroundColor: "#e5e7eb",
+    backgroundColor: GRAY_F2F2F2,
   },
-  subheaderCell: { fontSize: 5, fontStyle: "italic" },
-  dataRow: { flexDirection: "row", minHeight: 16 },
-  dataRowAlt: { flexDirection: "row", minHeight: 16, backgroundColor: "#f3f4f6" },
+  subheaderCell: { fontSize: 6, textAlign: "center" },
+  dataRow: { flexDirection: "row", minHeight: 12 },
+  dataRowAlt: { flexDirection: "row", minHeight: 12, backgroundColor: GRAY_F2F2F2 },
   notesRow: {
     marginTop: 4,
     paddingHorizontal: 4,
@@ -197,16 +200,16 @@ const HEADERS = [
   "Pipe Chainage",
   "Pipe No Stamp or Fitting ID",
   "Joint Type (WR, RRJ, WB, or CWB)",
-  "Pipe Installed to Witness Mark (Y/N)",
-  "Internal Rubber Seal Check (Y/N)",
-  "Alignment & Deflection Check — Hor ±100mm / Vert ±50mm — Joint Deflection: see note below",
-  "CP Lugs Installed @ 12 O'clock (RRJ ONLY)",
-  "Ovality Check **",
-  "Joint Air Test RRJ-WR ONLY (80kPa hold for 2 min)",
-  "Internal Cement Liner (OK/Patch)",
+  "Witness Mark (Y/N)",
+  "Internal Seal (Y/N)",
+  "Alignment & Deflection Hor ±100mm / Vert ±50mm",
+  "CP Lugs @ 12 O'clock (RRJ ONLY)",
+  "Ovality Check",
+  "Joint Air Test (WR only)",
+  "Cement Liner (OK/Patch)",
   "Spark Testing (OK/Patched)",
-  "APA Signoff — NAME",
-  "APA Signoff — SIGNATURE",
+  "NAME",
+  "SIGNATURE",
 ];
 
 const SUBHEADER_NOTES: Record<number, string> = {
@@ -233,6 +236,13 @@ function formatDate(d: string | null) {
   }
 }
 
+function formatChainage(n: number): string {
+  return n.toLocaleString("en-AU", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
+}
+
 function formatAlignment(r: RecordRow) {
   const vSign = r.deflection_v_sign ?? "+";
   const vMm = r.deflection_v_mm ?? 0;
@@ -256,8 +266,10 @@ function jointAirTestVal(r: RecordRow) {
   const jt = (r.joint_type ?? "").toString().toUpperCase().trim();
   // WB, CWB, Transition: N/A (no air test required)
   if (["WB", "CWB", "TRANSITION"].includes(jt)) return "N/A";
-  // RRJ and WR: show Y when checked, else empty
-  if (jt === "RRJ" || jt === "WR") return yn(r.joint_air_test);
+  // RRJ: does NOT require air test per reference template — always blank
+  if (jt === "RRJ") return "";
+  // WR: show Y only when checked
+  if (jt === "WR") return yn(r.joint_air_test);
   return "N/A";
 }
 
@@ -300,17 +312,21 @@ export async function generateITRPla001Pdf(
   section: SectionInfo,
   records: RecordRow[],
   pageNumber: number,
-  totalPages: number
+  totalPages: number,
+  options?: { isOpenITR?: boolean }
 ) {
   const pageRecords = records.slice(0, ITR_PAGE_SIZE);
-  const emptyRows = ITR_PAGE_SIZE - pageRecords.length;
+  const emptyToFill = ITR_PAGE_SIZE - pageRecords.length;
+  const emptyAfterComplete = pageRecords.length === ITR_PAGE_SIZE ? 3 : 0;
+  const totalEmptyRows = emptyToFill + emptyAfterComplete;
   const logoDataUrl = await fetchLogoDataUrl();
+  const pageNoLabel = options?.isOpenITR ? "In Progress" : `${pageNumber} of ${totalPages}`;
 
   const doc = (
     <Document>
       <Page size="A4" orientation="landscape" style={styles.page}>
-        {/* HEADER: 2-row grid + title + logo */}
-        <View style={styles.headerGrid}>
+        {/* HEADER: single bordered container, 3 columns */}
+        <View style={styles.headerOuter}>
           <View style={styles.headerLeft}>
             <View style={styles.headerLeftCell}>
               <Text style={styles.headerLeftLabel}>Doc No:</Text>
@@ -326,7 +342,7 @@ export async function generateITRPla001Pdf(
             </View>
             <View style={styles.headerLeftCellLast}>
               <Text style={styles.headerLeftLabel}>Page No:</Text>
-              <Text style={styles.headerLeftValue}>{pageNumber} of {totalPages}</Text>
+              <Text style={styles.headerLeftValue}>{pageNoLabel}</Text>
             </View>
           </View>
           <View style={styles.headerCenter}>
@@ -347,20 +363,20 @@ export async function generateITRPla001Pdf(
           <View style={styles.projectTitleRow}>
             <Text style={styles.projectTitle}>PROJECT INFORMATION</Text>
           </View>
-          <View style={styles.projectRow}>
-            <View style={styles.projectCell}>
-              <Text style={styles.projectCellText}>PROJECT NAME: {section.project_name ?? "—"}</Text>
+          <View style={styles.projectDataRow}>
+            <View style={styles.projectDataCell}>
+              <Text style={styles.projectDataCellText}>PROJECT NAME: {section.project_name ?? "—"}</Text>
             </View>
-            <View style={[styles.projectCell, { borderLeftWidth: 0.5, borderColor: "rgba(255,255,255,0.3)" }]}>
-              <Text style={styles.projectCellText}>PROJECT NUMBER: {section.project_number ?? "—"}</Text>
+            <View style={[styles.projectDataCell, { borderRightWidth: 0 }]}>
+              <Text style={styles.projectDataCellText}>PROJECT NUMBER: {section.project_number ?? "—"}</Text>
             </View>
           </View>
-          <View style={styles.projectRow}>
-            <View style={styles.projectCell}>
-              <Text style={styles.projectCellText}>SECTION-SUBLOT: {section.name}</Text>
+          <View style={styles.projectDataRow}>
+            <View style={styles.projectDataCell}>
+              <Text style={styles.projectDataCellText}>SECTION-SUBLOT: {section.name}</Text>
             </View>
-            <View style={[styles.projectCell, { borderLeftWidth: 0.5, borderColor: "rgba(255,255,255,0.3)" }]}>
-              <Text style={styles.projectCellText}>ITP: {section.itp_number ?? "—"}</Text>
+            <View style={[styles.projectDataCell, { borderRightWidth: 0 }]}>
+              <Text style={styles.projectDataCellText}>ITP: {section.itp_number ?? "—"}</Text>
             </View>
           </View>
         </View>
@@ -373,7 +389,7 @@ export async function generateITRPla001Pdf(
           {/* Group headers */}
           <View style={styles.groupHeaderRow}>
             <View style={[styles.groupHeaderCell, { flex: 4.8 }]}>
-              <Text style={styles.groupHeaderText}>Pipe/Fitting Details</Text>
+              <Text style={styles.groupHeaderText}>Pipe/ Fitting Details</Text>
             </View>
             <View style={[styles.groupHeaderCell, { flex: 1.55 }]}>
               <Text style={styles.groupHeaderText}>PIPE SPECIFICS</Text>
@@ -393,7 +409,7 @@ export async function generateITRPla001Pdf(
                 style={[
                   styles.cell,
                   styles.headerCell,
-                  { width: COL_WIDTHS[idx], minHeight: 24 },
+                  { width: COL_WIDTHS[idx], minHeight: 14 },
                 ]}
               >
                 {label}
@@ -419,7 +435,7 @@ export async function generateITRPla001Pdf(
           {pageRecords.map((r, idx) => (
             <View key={idx} style={idx % 2 === 0 ? styles.dataRow : styles.dataRowAlt}>
               <Text style={[styles.cell, { width: COL_WIDTHS[0] }]}>{formatDate(r.date_installed)}</Text>
-              <Text style={[styles.cell, { width: COL_WIDTHS[1] }]}>{String(r.chainage)}</Text>
+              <Text style={[styles.cell, { width: COL_WIDTHS[1] }]}>{formatChainage(r.chainage)}</Text>
               <Text style={[styles.cell, { width: COL_WIDTHS[2] }]}>{r.pipe_fitting_id ?? ""}</Text>
               <Text style={[styles.cell, { width: COL_WIDTHS[3] }]}>{r.joint_type ?? ""}</Text>
               <Text style={[styles.cell, { width: COL_WIDTHS[4] }]}>{yn(r.witness_mark)}</Text>
@@ -434,7 +450,7 @@ export async function generateITRPla001Pdf(
               <Text style={[styles.cell, { width: COL_WIDTHS[13] }]} />
             </View>
           ))}
-          {Array.from({ length: emptyRows }).map((_, i) => (
+          {Array.from({ length: totalEmptyRows }).map((_, i) => (
             <View key={`e-${i}`} style={(pageRecords.length + i) % 2 === 0 ? styles.dataRow : styles.dataRowAlt}>
               {HEADERS.map((_, j) => (
                 <Text key={j} style={[styles.cell, { width: COL_WIDTHS[j] }]} />
@@ -446,8 +462,6 @@ export async function generateITRPla001Pdf(
         {/* Notes */}
         <View style={styles.notesRow}>
           <Text>NOTE: * Has photo requirements.</Text>
-          <Text>NOTE:** Measurements for Ovality check are to be done at evenly spaced intervals approximately 2Pi/3 around the inside of the pipe</Text>
-          <Text>NOTE: *** Max deviation and deflection in WR joint is 1.1deg. Max Deflection in RRJ is 0.6deg. Max Deflection with Site Weld Band is 6 deg. No reverse grade permitted - Any exceedance in alignment to be RFI'd.</Text>
         </View>
       </Page>
     </Document>

@@ -3,8 +3,7 @@ import nodemailer from "nodemailer";
 import { getUserFromRequest } from "@/lib/api-auth";
 import { isAdminEmail } from "@/lib/admin";
 import { getSupabaseServer } from "@/lib/supabase/server";
-import { generateITRPla001Pdf } from "@/lib/reporting/itr-pla-001-pdf";
-import { ITR_PAGE_SIZE } from "@/lib/drainer";
+import { generateAuditReportPdf } from "@/lib/reporting/audit-report-pdf";
 
 export const runtime = "nodejs";
 
@@ -18,11 +17,11 @@ export async function POST(request: NextRequest) {
   }
 
   const body = await request.json();
-  const { sectionId, itrIndex, recipientEmail } = body;
+  const { sectionId, recipientEmail } = body;
 
-  if (!sectionId || !itrIndex || typeof itrIndex !== "number") {
+  if (!sectionId) {
     return NextResponse.json(
-      { error: "Missing sectionId or itrIndex" },
+      { error: "Missing sectionId" },
       { status: 400 }
     );
   }
@@ -42,7 +41,7 @@ export async function POST(request: NextRequest) {
 
   const { data: section, error: sectionError } = await supabase
     .from("drainer_sections")
-    .select("id,name,project_name,project_number,itp_number")
+    .select("id,name,project_name,project_number")
     .eq("id", sectionId)
     .single();
 
@@ -50,35 +49,20 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Section not found" }, { status: 404 });
   }
 
-  const { data: allRecords, error: recordsError } = await supabase
+  const { data: records, error: recordsError } = await supabase
     .from("drainer_pipe_records")
     .select("*")
     .eq("section_id", sectionId)
-    .order("chainage", { ascending: false });
+    .order("date_installed", { ascending: true })
+    .order("chainage", { ascending: true });
 
   if (recordsError) {
     return NextResponse.json({ error: recordsError.message }, { status: 500 });
   }
 
-  const records = allRecords ?? [];
-  const startIdx = (itrIndex - 1) * ITR_PAGE_SIZE;
-  const pageRecords = records.slice(startIdx, startIdx + ITR_PAGE_SIZE);
-
-  if (pageRecords.length === 0) {
-    return NextResponse.json(
-      { error: `ITR-${itrIndex} has no records` },
-      { status: 400 }
-    );
-  }
-
-  const totalPages = Math.ceil(records.length / ITR_PAGE_SIZE);
-  const isOpenITR = pageRecords.length < ITR_PAGE_SIZE;
-  const { buffer, fileName } = await generateITRPla001Pdf(
+  const { buffer, fileName } = await generateAuditReportPdf(
     section,
-    pageRecords,
-    itrIndex,
-    totalPages,
-    { isOpenITR }
+    records ?? []
   );
 
   const smtpHost = process.env.SMTP_HOST;
@@ -94,14 +78,6 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  const safeName = (section.name ?? "section").replace(/\s+/g, "-");
-  const subject = isOpenITR
-    ? `ITR-PLA-001 — ${section.name} — Open ITR (${pageRecords.length} records)`
-    : `ITR-PLA-001 ${safeName} — ITR-${itrIndex}`;
-  const text = isOpenITR
-    ? `Please find attached the current open ITR report for ${section.name}. This ITR is in progress (${pageRecords.length} of 9 records complete).`
-    : `Drainer ITR Report: ${section.name}\nITR-${itrIndex}\n\nPlease find the attached PDF.`;
-
   try {
     const transporter = nodemailer.createTransport({
       host: smtpHost,
@@ -113,8 +89,8 @@ export async function POST(request: NextRequest) {
     await transporter.sendMail({
       from: smtpFrom,
       to: recipient,
-      subject,
-      text,
+      subject: `Audit Report — ${section.name}`,
+      text: `Please find attached the full audit report for ${section.name}.`,
       attachments: [
         {
           filename: fileName,
@@ -126,7 +102,7 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({ ok: true, message: "Email sent" });
   } catch (err) {
-    console.error("ITR email failed", err);
+    console.error("Audit email failed", err);
     return NextResponse.json(
       { error: err instanceof Error ? err.message : "Email failed" },
       { status: 500 }

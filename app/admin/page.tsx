@@ -73,8 +73,18 @@ export default function AdminPage() {
   const [projectNumber, setProjectNumber] = useState("");
   const [itpNumber, setItpNumber] = useState("");
   const [loading, setLoading] = useState(false);
-  const [auditLoading, setAuditLoading] = useState(false);
   const [printingItrIndex, setPrintingItrIndex] = useState<number | null>(null);
+  const [printingAudit, setPrintingAudit] = useState(false);
+  const [reportModalOpen, setReportModalOpen] = useState(false);
+  const [reportModalType, setReportModalType] = useState<
+    "itr-complete" | "itr-open" | "audit" | null
+  >(null);
+  const [reportModalPayload, setReportModalPayload] = useState<{
+    itrIndex?: number;
+    recordCount?: number;
+  } | null>(null);
+  const [reportEmail, setReportEmail] = useState("");
+  const [reportDefaultEmail, setReportDefaultEmail] = useState("");
 
   const getAccessToken = useCallback(async () => {
     const { data } = await supabase.auth.getSession();
@@ -132,6 +142,8 @@ export default function AdminPage() {
       });
       const json = await res.json();
       setIsAdmin(json.isAdmin ?? false);
+      if (json.reportDefaultEmail ?? json.email)
+        setReportDefaultEmail(json.reportDefaultEmail || json.email || "");
       if (json.isAdmin) loadSections();
     };
     check();
@@ -251,30 +263,71 @@ export default function AdminPage() {
     }
   };
 
-  const handlePrintITR = async (itrIndex: number) => {
-    if (!sectionId) return;
+  const openReportModal = (
+    type: "itr-complete" | "itr-open" | "audit",
+    payload: { itrIndex?: number; recordCount?: number }
+  ) => {
+    setReportModalType(type);
+    setReportModalPayload(payload);
+    setReportEmail(reportDefaultEmail || authEmail || "");
+    setReportModalOpen(true);
+  };
+
+  const handleSendReport = async () => {
+    if (!sectionId || !reportModalType || !reportEmail.trim()) return;
     const token = await getAccessToken();
     if (!token) {
       pushToast({ type: "error", title: "Sign in required" });
       return;
     }
-    setPrintingItrIndex(itrIndex);
+    if (reportModalType === "itr-complete" || reportModalType === "itr-open") {
+      setPrintingItrIndex(reportModalPayload?.itrIndex ?? null);
+    } else {
+      setPrintingAudit(true);
+    }
     try {
-      const res = await fetch("/api/drainer/report/itr-pla-001/email", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({ sectionId, itrIndex }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error ?? "Send failed");
-      pushToast({
-        type: "success",
-        title: "Email sent",
-        message: "The PDF was emailed to your admin account.",
-      });
+      const email = reportEmail.trim();
+      if (reportModalType === "audit") {
+        const res = await fetch("/api/drainer/sections/audit/email", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({ sectionId, recipientEmail: email }),
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error ?? "Send failed");
+        pushToast({
+          type: "success",
+          title: "Audit report sent",
+          message: `Report sent to ${email}`,
+        });
+      } else {
+        const res = await fetch("/api/drainer/report/itr-pla-001/email", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({
+            sectionId,
+            itrIndex: reportModalPayload?.itrIndex,
+            recipientEmail: email,
+          }),
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error ?? "Send failed");
+        const isOpen = reportModalType === "itr-open";
+        pushToast({
+          type: "success",
+          title: isOpen ? "Open ITR report sent" : "Email sent",
+          message: isOpen
+            ? `Open ITR report sent to ${email}`
+            : "The PDF was emailed to your admin account.",
+        });
+      }
+      setReportModalOpen(false);
     } catch (err) {
       pushToast({
         type: "error",
@@ -283,34 +336,7 @@ export default function AdminPage() {
       });
     } finally {
       setPrintingItrIndex(null);
-    }
-  };
-
-  const handleAuditReport = async () => {
-    if (!sectionId) {
-      pushToast({ type: "error", title: "Select a section first" });
-      return;
-    }
-    const token = await getAccessToken();
-    if (!token) {
-      pushToast({ type: "error", title: "Sign in required" });
-      return;
-    }
-    setAuditLoading(true);
-    try {
-      const res = await fetch(
-        `/api/drainer/sections/audit?sectionId=${sectionId}`,
-        { headers: { Authorization: `Bearer ${token}` } }
-      );
-      if (!res.ok) throw new Error("Audit failed");
-      const blob = await res.blob();
-      const url = URL.createObjectURL(blob);
-      window.open(url, "_blank");
-      URL.revokeObjectURL(url);
-    } catch {
-      pushToast({ type: "error", title: "Audit report failed" });
-    } finally {
-      setAuditLoading(false);
+      setPrintingAudit(false);
     }
   };
 
@@ -399,7 +425,7 @@ export default function AdminPage() {
                   ⋮
                 </Button>
               </DropdownMenuTrigger>
-              <DropdownMenuContent align="end">
+                <DropdownMenuContent align="end">
                 <DropdownMenuItem onClick={openCreate}>
                   Create Section
                 </DropdownMenuItem>
@@ -408,12 +434,6 @@ export default function AdminPage() {
                   disabled={!sectionId}
                 >
                   Edit Section
-                </DropdownMenuItem>
-                <DropdownMenuItem
-                  onClick={handleAuditReport}
-                  disabled={!sectionId || auditLoading}
-                >
-                  {auditLoading ? "Generating…" : "Audit Report"}
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
@@ -426,13 +446,29 @@ export default function AdminPage() {
               <CardTitle className="text-sm">
                 {selectedSection.name} — ITR Reports
               </CardTitle>
-              <div className="flex items-center gap-2 mt-2">
+              <div className="flex items-center gap-2 mt-2 flex-wrap">
                 <Badge className="rounded-full bg-[#16a34a] px-2 py-0.5 text-[10px] font-semibold text-white">
                   Ready {progress.completeITRs}
                 </Badge>
                 <Badge className="rounded-full bg-[#f59e0b] px-2 py-0.5 text-[10px] font-semibold text-white">
                   Open {progress.currentOpenCount > 0 ? 1 : 0}
                 </Badge>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-7 px-3 text-xs"
+                  onClick={() => openReportModal("audit", {})}
+                  disabled={!sectionId || printingAudit}
+                >
+                  {printingAudit ? (
+                    <>
+                      <Loader2 className="h-3 w-3 animate-spin shrink-0 mr-1" />
+                      Sending…
+                    </>
+                  ) : (
+                    "Print Audit"
+                  )}
+                </Button>
                 <Button
                   variant="outline"
                   size="sm"
@@ -504,7 +540,11 @@ export default function AdminPage() {
                           variant="outline"
                           size="sm"
                           className="h-9 px-4 text-xs border-0 text-white shadow-[0_4px_14px_rgba(22,163,74,0.35)] disabled:opacity-80 bg-[#16a34a]"
-                          onClick={() => handlePrintITR(block.index)}
+                          onClick={() =>
+                            openReportModal("itr-complete", {
+                              itrIndex: block.index,
+                            })
+                          }
                           disabled={printingItrIndex !== null}
                         >
                           {printingItrIndex === block.index ? (
@@ -514,6 +554,28 @@ export default function AdminPage() {
                             </>
                           ) : (
                             `Print ITR-${block.index}`
+                          )}
+                        </Button>
+                      ) : block.status === "OPEN" ? (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="h-9 px-4 text-xs border-0 text-white shadow-[0_4px_14px_rgba(245,158,11,0.35)] disabled:opacity-80 bg-[#f59e0b]"
+                          onClick={() =>
+                            openReportModal("itr-open", {
+                              itrIndex: block.index,
+                              recordCount: block.recordCount,
+                            })
+                          }
+                          disabled={printingItrIndex !== null}
+                        >
+                          {printingItrIndex === block.index ? (
+                            <>
+                              <Loader2 className="h-4 w-4 animate-spin shrink-0" />
+                              Sending…
+                            </>
+                          ) : (
+                            `Print Open ITR (${block.recordCount} records)`
                           )}
                         </Button>
                       ) : null}
@@ -610,6 +672,49 @@ export default function AdminPage() {
             </Button>
             <Button onClick={handleSave} disabled={loading}>
               {loading ? "Saving…" : "Save"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={reportModalOpen}
+        onOpenChange={(open) => {
+          setReportModalOpen(open);
+          if (!open) setReportModalType(null);
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Send report to</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            <Input
+              type="email"
+              placeholder="Email address"
+              value={reportEmail}
+              onChange={(e) => setReportEmail(e.target.value)}
+              className="drainer-input"
+            />
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setReportModalOpen(false)}
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={handleSendReport}
+              disabled={
+                !reportEmail.trim() ||
+                printingItrIndex !== null ||
+                printingAudit
+              }
+            >
+              {(printingItrIndex !== null || printingAudit)
+                ? "Sending…"
+                : "Send"}
             </Button>
           </DialogFooter>
         </DialogContent>
