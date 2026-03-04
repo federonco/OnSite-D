@@ -17,6 +17,7 @@ export function AuthPanel({ onAuthChange }: AuthPanelProps) {
   const [password, setPassword] = useState("");
   const [currentEmail, setCurrentEmail] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [recoveryLoading, setRecoveryLoading] = useState(false);
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => {
@@ -57,6 +58,36 @@ export function AuthPanel({ onAuthChange }: AuthPanelProps) {
   const handleSignOut = async () => {
     await supabase.auth.signOut();
     pushToast({ type: "info", title: "Signed out" });
+  };
+
+  const handleForgotPassword = async () => {
+    if (!email.trim()) {
+      pushToast({
+        type: "error",
+        title: "Email required",
+        message: "Enter your email to receive a recovery link.",
+      });
+      return;
+    }
+    setRecoveryLoading(true);
+    const redirectTo = `${typeof window !== "undefined" ? window.location.origin : ""}/auth/callback?next=/auth/reset-password`;
+    const { error } = await supabase.auth.resetPasswordForEmail(email, {
+      redirectTo,
+    });
+    setRecoveryLoading(false);
+    if (error) {
+      pushToast({
+        type: "error",
+        title: "Recovery failed",
+        message: error.message,
+      });
+      return;
+    }
+    pushToast({
+      type: "success",
+      title: "Check your email",
+      message: "We sent a recovery link to " + email,
+    });
   };
 
   if (currentEmail) {
@@ -103,6 +134,14 @@ export function AuthPanel({ onAuthChange }: AuthPanelProps) {
       >
         {loading ? "Signing in..." : "Sign in"}
       </Button>
+      <button
+        type="button"
+        onClick={handleForgotPassword}
+        disabled={recoveryLoading || !email}
+        className="text-xs text-[var(--muted-foreground)] underline hover:no-underline disabled:opacity-50"
+      >
+        Forgot password?
+      </button>
     </div>
   );
 }
