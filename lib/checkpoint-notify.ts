@@ -58,12 +58,12 @@ export async function processCheckpointAlerts(
       await transporter.sendMail({
         from: alertFrom,
         to,
-        subject: `⚠️ Checkpoint próximo: ${cp.name}`,
+        subject: `⚠️ Checkpoint approaching: ${cp.name}`,
         text: [
           `Checkpoint: ${cp.name}`,
-          `CH del checkpoint: ${ch} m`,
-          `CH actual registrado: ${chActual} m`,
-          `Distancia restante: ${dist} m`,
+          `Checkpoint CH: ${ch} m`,
+          `Recorded CH: ${chActual} m`,
+          `Remaining distance: ${dist} m`,
         ].join("\n\n"),
       });
 

@@ -48,12 +48,12 @@ type Checkpoint = {
 function getStatus(
   cp: Checkpoint,
   maxCh: number | null
-): "pendiente" | "proximo" | "superado" {
-  if (maxCh == null) return "pendiente";
-  if (maxCh >= cp.ch) return "superado";
+): "pending" | "upcoming" | "exceeded" {
+  if (maxCh == null) return "pending";
+  if (maxCh >= cp.ch) return "exceeded";
   const dist = cp.ch - maxCh;
-  if (dist <= PROXIMITY_M && cp.active && !cp.notified) return "proximo";
-  return "pendiente";
+  if (dist <= PROXIMITY_M && cp.active && !cp.notified) return "upcoming";
+  return "pending";
 }
 
 export default function CheckpointsPage() {
@@ -140,12 +140,12 @@ export default function CheckpointsPage() {
 
   const handleSave = async () => {
     if (!name.trim()) {
-      pushToast({ type: "error", title: "Nombre requerido" });
+      pushToast({ type: "error", title: "Name required" });
       return;
     }
     const chNum = parseFloat(ch);
     if (Number.isNaN(chNum)) {
-      pushToast({ type: "error", title: "CH debe ser un número" });
+      pushToast({ type: "error", title: "CH must be a number" });
       return;
     }
     setLoading(true);
@@ -168,7 +168,7 @@ export default function CheckpointsPage() {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "Error");
-      pushToast({ type: "success", title: "Checkpoint guardado" });
+      pushToast({ type: "success", title: "Checkpoint saved" });
       setModalOpen(false);
       loadCheckpoints();
     } catch (err) {
@@ -183,7 +183,7 @@ export default function CheckpointsPage() {
   };
 
   const handleDelete = async (id: string) => {
-    if (!confirm("¿Eliminar checkpoint?")) return;
+    if (!confirm("Delete checkpoint?")) return;
     try {
       const token = await getAccessToken();
       if (!token) throw new Error("Sign in required");
@@ -192,10 +192,10 @@ export default function CheckpointsPage() {
         headers: { Authorization: `Bearer ${token}` },
       });
       if (!res.ok) throw new Error("Error");
-      pushToast({ type: "success", title: "Checkpoint eliminado" });
+      pushToast({ type: "success", title: "Checkpoint deleted" });
       loadCheckpoints();
     } catch {
-      pushToast({ type: "error", title: "Error al eliminar" });
+      pushToast({ type: "error", title: "Error deleting" });
     }
   };
 
@@ -214,7 +214,7 @@ export default function CheckpointsPage() {
       if (!res.ok) throw new Error("Error");
       loadCheckpoints();
     } catch {
-      pushToast({ type: "error", title: "Error al actualizar" });
+      pushToast({ type: "error", title: "Error updating" });
     }
   };
 
@@ -261,26 +261,26 @@ export default function CheckpointsPage() {
 
         <Card className="drainer-card">
           <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm">Checkpoints del trazado</CardTitle>
+            <CardTitle className="text-sm">Route checkpoints</CardTitle>
             <Button size="sm" onClick={openCreate} className="drainer-button drainer-button-primary">
-              Agregar
+              Add
             </Button>
           </CardHeader>
           <CardContent>
             <p className="text-xs text-[var(--muted-foreground)] mb-3">
-              CH actual máximo: {maxCh != null ? maxCh.toLocaleString("en-AU", { minimumFractionDigits: 2 }) : "—"}
+              Current max CH: {maxCh != null ? maxCh.toLocaleString("en-AU", { minimumFractionDigits: 2 }) : "—"}
             </p>
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b border-[var(--border)]">
-                    <th className="text-left py-2 px-2">Nombre</th>
+                    <th className="text-left py-2 px-2">Name</th>
                     <th className="text-left py-2 px-2">CH</th>
-                    <th className="text-left py-2 px-2">Tipo</th>
-                    <th className="text-left py-2 px-2">Estado</th>
-                    <th className="text-left py-2 px-2">Alerta a</th>
-                    <th className="text-left py-2 px-2">Activo</th>
-                    <th className="text-right py-2 px-2">Acciones</th>
+                    <th className="text-left py-2 px-2">Type</th>
+                    <th className="text-left py-2 px-2">Status</th>
+                    <th className="text-left py-2 px-2">Alert to</th>
+                    <th className="text-left py-2 px-2">Active</th>
+                    <th className="text-right py-2 px-2">Actions</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -298,9 +298,9 @@ export default function CheckpointsPage() {
                           </Badge>
                         </td>
                         <td className="py-2 px-2">
-                          {status === "superado" && <span>✅ Superado</span>}
-                          {status === "proximo" && <span>🟡 Próximo</span>}
-                          {status === "pendiente" && <span>⚪ Pendiente</span>}
+                          {status === "exceeded" && <span>✅ Exceeded</span>}
+                          {status === "upcoming" && <span>🟡 Upcoming</span>}
+                          {status === "pending" && <span>⚪ Pending</span>}
                         </td>
                         <td className="py-2 px-2 text-xs">
                           {cp.alert_email ? cp.alert_email : <span className="text-[var(--muted-foreground)]">Global</span>}
@@ -311,7 +311,7 @@ export default function CheckpointsPage() {
                             onClick={() => handleToggleActive(cp)}
                             className={`text-xs px-2 py-1 rounded ${cp.active ? "bg-green-100 text-green-800" : "bg-gray-100 text-gray-600"}`}
                           >
-                            {cp.active ? "Sí" : "No"}
+                            {cp.active ? "Yes" : "No"}
                           </button>
                         </td>
                         <td className="py-2 px-2 text-right">
@@ -339,7 +339,7 @@ export default function CheckpointsPage() {
             </div>
             {checkpoints.length === 0 && (
               <p className="text-sm text-[var(--muted-foreground)] py-6 text-center">
-                No hay checkpoints. Agregá uno para recibir alertas cuando la instalación se aproxime.
+                No checkpoints. Add one to receive alerts when the installation approaches.
               </p>
             )}
           </CardContent>
@@ -349,15 +349,15 @@ export default function CheckpointsPage() {
       <Dialog open={modalOpen} onOpenChange={setModalOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>{modalMode === "create" ? "Agregar checkpoint" : "Editar checkpoint"}</DialogTitle>
+            <DialogTitle>{modalMode === "create" ? "Add checkpoint" : "Edit checkpoint"}</DialogTitle>
           </DialogHeader>
           <div className="space-y-3">
             <div>
-              <label className="drainer-label block mb-1">Nombre</label>
+              <label className="drainer-label block mb-1">Name</label>
               <Input
                 value={name}
                 onChange={(e) => setName(e.target.value)}
-                placeholder="Ej: Cruce con gas"
+                placeholder="e.g. Gas crossing"
                 className="drainer-input"
               />
             </div>
@@ -368,12 +368,12 @@ export default function CheckpointsPage() {
                 step="0.01"
                 value={ch}
                 onChange={(e) => setCh(e.target.value)}
-                placeholder="Ej: 2841.86"
+                placeholder="e.g. 2841.86"
                 className="drainer-input"
               />
             </div>
             <div>
-              <label className="drainer-label block mb-1">Tipo</label>
+              <label className="drainer-label block mb-1">Type</label>
               <Select value={type} onValueChange={setType}>
                 <SelectTrigger className="drainer-input">
                   <SelectValue />
@@ -387,16 +387,16 @@ export default function CheckpointsPage() {
               </Select>
             </div>
             <div>
-              <label className="drainer-label block mb-1">Email de alerta</label>
+              <label className="drainer-label block mb-1">Alert email</label>
               <Input
                 type="email"
                 value={alertEmail}
                 onChange={(e) => setAlertEmail(e.target.value)}
-                placeholder="tu@email.com"
+                placeholder="you@example.com"
                 className="drainer-input"
               />
               <p className="text-[11px] text-[var(--muted-foreground)] mt-1">
-                Si no se completa, se usará el mail global configurado en el servidor
+                If left empty, the global email configured on the server will be used
               </p>
             </div>
             <div className="flex items-center gap-2">
@@ -407,15 +407,15 @@ export default function CheckpointsPage() {
                 onChange={(e) => setActive(e.target.checked)}
                 className="rounded"
               />
-              <label htmlFor="active" className="text-sm">Activo</label>
+              <label htmlFor="active" className="text-sm">Active</label>
             </div>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setModalOpen(false)}>
-              Cancelar
+              Cancel
             </Button>
             <Button onClick={handleSave} disabled={loading}>
-              {loading ? "Guardando…" : "Guardar"}
+              {loading ? "Saving…" : "Save"}
             </Button>
           </DialogFooter>
         </DialogContent>

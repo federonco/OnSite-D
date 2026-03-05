@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getUserFromRequest } from "@/lib/api-auth";
 import { getSupabaseServer } from "@/lib/supabase/server";
 import { processCheckpointAlerts } from "@/lib/checkpoint-notify";
+import { detectRecordInconsistencies } from "@/lib/record-inconsistencies";
 
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
@@ -118,6 +119,9 @@ export async function POST(request: NextRequest) {
   const supabaseAdmin = getSupabaseServer({ useServiceRole: true });
   processCheckpointAlerts(supabaseAdmin).catch((err) =>
     console.error("Checkpoint alerts:", err)
+  );
+  detectRecordInconsistencies(supabaseAdmin).catch((err) =>
+    console.error("Record inconsistencies:", err)
   );
 
   return NextResponse.json({ record: data });
