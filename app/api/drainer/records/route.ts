@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getUserFromRequest } from "@/lib/api-auth";
 import { getSupabaseServer } from "@/lib/supabase/server";
+import { processCheckpointAlerts } from "@/lib/checkpoint-notify";
 
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
@@ -113,6 +114,11 @@ export async function POST(request: NextRequest) {
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
+
+  const supabaseAdmin = getSupabaseServer({ useServiceRole: true });
+  processCheckpointAlerts(supabaseAdmin).catch((err) =>
+    console.error("Checkpoint alerts:", err)
+  );
 
   return NextResponse.json({ record: data });
 }

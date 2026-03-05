@@ -3,6 +3,7 @@
 import { RefreshCw } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import { AdminNav } from "@/components/admin-nav";
 import { AuthPanel } from "@/components/auth-panel";
 import { useToast } from "@/components/toast";
 import { getSupabaseBrowser } from "@/lib/supabase/browser";
@@ -398,6 +399,8 @@ export default function AdminPage() {
           </div>
           <AuthPanel onAuthChange={setAuthEmail} />
         </div>
+
+        <AdminNav />
 
         <Card className="drainer-card h-[90px] gap-2 py-2">
           <CardHeader className="pb-0">
