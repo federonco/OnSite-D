@@ -2,7 +2,6 @@
 
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
-import { AuthPanel } from "@/components/auth-panel";
 import { LodgeForm } from "@/components/lodge-form";
 import { Button } from "@/components/ui/button";
 
@@ -50,7 +49,6 @@ export default function Home() {
               </Button>
             </Link>
           </div>
-          <AuthPanel />
         </div>
 
         {loading ? (
