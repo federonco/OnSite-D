@@ -452,7 +452,7 @@ export default function AdminPage() {
               <div className="flex items-center gap-2 mt-2 flex-wrap">
                 <Link href={`/admin/records/${sectionId}`}>
                   <Button variant="outline" size="sm" className="h-7 px-3 text-xs">
-                    Ver registros
+                    View records
                   </Button>
                 </Link>
                 <Badge className="rounded-full bg-[#16a34a] px-2 py-0.5 text-[10px] font-semibold text-white">

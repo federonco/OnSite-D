@@ -17,6 +17,8 @@ export default function AdminRecordsPage() {
   const sectionId = params.sectionId as string;
   const chMinParam = searchParams.get("chMin");
   const chMaxParam = searchParams.get("chMax");
+  const recordFromId = searchParams.get("recordFromId");
+  const recordToId = searchParams.get("recordToId");
 
   const supabase = getSupabaseBrowser();
   const [authEmail, setAuthEmail] = useState<string | null>(null);
@@ -48,13 +50,17 @@ export default function AdminRecordsPage() {
   const loadRecords = useCallback(async () => {
     if (!sectionId) return;
     const token = await getAccessToken();
-    const res = await fetch(`/api/drainer/records?sectionId=${sectionId}`, {
+    let url = `/api/drainer/records?sectionId=${sectionId}`;
+    if (recordFromId && recordToId) {
+      url += `&recordFromId=${encodeURIComponent(recordFromId)}&recordToId=${encodeURIComponent(recordToId)}&context=2`;
+    }
+    const res = await fetch(url, {
       headers: token ? { Authorization: `Bearer ${token}` } : {},
     });
     const data = await res.json();
     const recs: PipeRecord[] = data.records ?? [];
     setRecords(recs);
-  }, [sectionId, getAccessToken]);
+  }, [sectionId, getAccessToken, recordFromId, recordToId]);
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => {
@@ -82,6 +88,7 @@ export default function AdminRecordsPage() {
   }, [sectionId, isAdmin, loadRecords]);
 
   const filteredRecords = useMemo(() => {
+    if (recordFromId && recordToId) return records;
     if (chMin == null && chMax == null) return records;
     return records.filter((r) => {
       const ch = Number(r.chainage);
@@ -89,7 +96,7 @@ export default function AdminRecordsPage() {
       if (chMax != null && ch > chMax) return false;
       return true;
     });
-  }, [records, chMin, chMax]);
+  }, [records, chMin, chMax, recordFromId, recordToId]);
 
   const selectedSection = sections.find((s) => s.id === sectionId);
   const sectionName = selectedSection?.name ?? sectionId ?? "Records";
@@ -166,10 +173,14 @@ export default function AdminRecordsPage() {
 
         <AdminNav />
 
-        {(chMin != null || chMax != null) && (
+        {(recordFromId && recordToId) && (
           <p className="text-xs text-[var(--muted-foreground)] mb-2">
-            Filtered: CH {chMin ?? "—"} to {chMax ?? "—"} (
-            {filteredRecords.length} records)
+            Context: 2 records before and 2 after the inconsistency pair ({filteredRecords.length} records)
+          </p>
+        )}
+        {(chMin != null || chMax != null) && !recordFromId && (
+          <p className="text-xs text-[var(--muted-foreground)] mb-2">
+            Filtered: CH {chMin ?? "—"} to {chMax ?? "—"} ({filteredRecords.length} records)
           </p>
         )}
 

@@ -11,22 +11,43 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: "Missing sectionId" }, { status: 400 });
   }
 
+  const recordFromId = searchParams.get("recordFromId");
+  const recordToId = searchParams.get("recordToId");
+  const context = Math.min(10, Math.max(0, parseInt(searchParams.get("context") ?? "2", 10)));
+
   const { token } = await getUserFromRequest(request);
   const supabase = token
     ? getSupabaseServer({ accessToken: token })
     : getSupabaseServer({ useServiceRole: true });
 
-  const { data, error } = await supabase
+  const useContext = !!(recordFromId && recordToId);
+
+  const { data: records, error } = await supabase
     .from("drainer_pipe_records")
     .select("*")
     .eq("section_id", sectionId)
-    .order("chainage", { ascending: false });
+    .order("chainage", { ascending: useContext });
 
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
-  return NextResponse.json({ records: data ?? [] });
+  const list = records ?? [];
+
+  if (useContext) {
+    const idxFrom = list.findIndex((r) => r.id === recordFromId);
+    const idxTo = list.findIndex((r) => r.id === recordToId);
+    if (idxFrom >= 0 && idxTo >= 0) {
+      const i = Math.min(idxFrom, idxTo);
+      const j = Math.max(idxFrom, idxTo);
+      const start = Math.max(0, i - context);
+      const end = Math.min(list.length, j + context + 1);
+      const slice = list.slice(start, end);
+      return NextResponse.json({ records: slice });
+    }
+  }
+
+  return NextResponse.json({ records: list });
 }
 
 export async function POST(request: NextRequest) {

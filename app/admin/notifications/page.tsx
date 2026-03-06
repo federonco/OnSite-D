@@ -24,13 +24,14 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { LoaderCircle } from "lucide-react";
 
 const JOINT_TYPES = [
-  { value: "RRJ", label: "RRJ" },
-  { value: "WR", label: "WR" },
+  { value: "RRJ", label: "RRJ (Rubber Ring Joint)" },
+  { value: "WR", label: "WR (Weld Restricted)" },
   { value: "WB", label: "WB" },
   { value: "CWB", label: "CWB" },
-];
+] as const;
 
 type MissedCheckpoint = {
   id: string;
@@ -85,6 +86,16 @@ export default function NotificationsPage() {
   const [addWitnessMark, setAddWitnessMark] = useState(false);
   const [addInternalSeal, setAddInternalSeal] = useState(false);
   const [addOvalityCheck, setAddOvalityCheck] = useState(false);
+  const [addCementLiner, setAddCementLiner] = useState(false);
+  const [addSparkTesting, setAddSparkTesting] = useState(false);
+  const [addCpLugs, setAddCpLugs] = useState(false);
+  const [addJointAirTest, setAddJointAirTest] = useState(false);
+  const [addDeflectionVSign, setAddDeflectionVSign] = useState<"+" | "-">("+");
+  const [addDeflectionVMm, setAddDeflectionVMm] = useState("");
+  const [addDeflectionHSide, setAddDeflectionHSide] = useState<"L" | "R">("L");
+  const [addDeflectionHMm, setAddDeflectionHMm] = useState("");
+  const [addChainageStatus, setAddChainageStatus] = useState<"idle" | "checking" | "exists" | "clear">("idle");
+  const [addIsDuplicate, setAddIsDuplicate] = useState(false);
   const [addInspectorName, setAddInspectorName] = useState("");
   const [addLoading, setAddLoading] = useState(false);
 
@@ -141,6 +152,44 @@ export default function NotificationsPage() {
     check();
   }, [authEmail, getAccessToken, loadMissed, loadInconsistencies]);
 
+  const checkDuplicateChainage = useCallback(
+    async (sectionId: string, ch: number) => {
+      setAddChainageStatus("checking");
+      try {
+        const token = await getAccessToken();
+        const res = await fetch(
+          `/api/drainer/records/check-duplicate?sectionId=${sectionId}&chainage=${ch}`,
+          { headers: token ? { Authorization: `Bearer ${token}` } : {} }
+        );
+        const data = await res.json();
+        const duplicate = !!data.duplicate;
+        setAddIsDuplicate(duplicate);
+        setAddChainageStatus(duplicate ? "exists" : "clear");
+      } catch {
+        setAddChainageStatus("idle");
+      }
+    },
+    [getAccessToken]
+  );
+
+  useEffect(() => {
+    if (!addModalOpen || !addPayload || !addChainage) {
+      setAddChainageStatus("idle");
+      setAddIsDuplicate(false);
+      return;
+    }
+    const ch = parseFloat(addChainage);
+    if (!Number.isFinite(ch)) {
+      setAddChainageStatus("idle");
+      return;
+    }
+    const t = setTimeout(
+      () => checkDuplicateChainage(addPayload.sectionId, ch),
+      400
+    );
+    return () => clearTimeout(t);
+  }, [addModalOpen, addPayload, addChainage, checkDuplicateChainage]);
+
   const openAddModal = (inc: InconsistencyItem, sec: SectionInconsistencies) => {
     const estimatedCh =
       inc.type === "gap"
@@ -159,17 +208,57 @@ export default function NotificationsPage() {
     setAddWitnessMark(false);
     setAddInternalSeal(false);
     setAddOvalityCheck(false);
+    setAddCementLiner(false);
+    setAddSparkTesting(false);
+    setAddCpLugs(false);
+    setAddJointAirTest(false);
+    setAddDeflectionVSign("+");
+    setAddDeflectionVMm("");
+    setAddDeflectionHSide("L");
+    setAddDeflectionHMm("");
+    setAddChainageStatus("idle");
+    setAddIsDuplicate(false);
     setAddInspectorName("");
     setAddModalOpen(true);
   };
 
+  const addShowCpLugs = addJointType === "RRJ";
+  const addShowJointAirTest = addJointType === "RRJ" || addJointType === "WR";
+
+  useEffect(() => {
+    if (!addShowCpLugs) setAddCpLugs(false);
+    if (!addShowJointAirTest) setAddJointAirTest(false);
+  }, [addShowCpLugs, addShowJointAirTest]);
+  const addVInvalid = Math.abs(Number(addDeflectionVMm) || 0) > 50;
+  const addHInvalid = Math.abs(Number(addDeflectionHMm) || 0) > 100;
+  const addAllChecklistChecked =
+    addWitnessMark &&
+    addInternalSeal &&
+    addOvalityCheck &&
+    addCementLiner &&
+    addSparkTesting &&
+    (addShowCpLugs ? addCpLugs : true) &&
+    (addShowJointAirTest ? addJointAirTest : true);
+  const addFormValid =
+    !!addPayload &&
+    !!addChainage &&
+    Number.isFinite(parseFloat(addChainage)) &&
+    !!addPipeFittingId.trim() &&
+    !!addJointType &&
+    !addVInvalid &&
+    !addHInvalid &&
+    !addIsDuplicate &&
+    addAllChecklistChecked;
+
   const handleAddRecord = async () => {
-    if (!addPayload) return;
+    if (!addPayload || !addFormValid) return;
     const ch = parseFloat(addChainage);
     if (!Number.isFinite(ch)) {
-      pushToast({ type: "error", title: "Chainage inválido" });
+      pushToast({ type: "error", title: "Invalid chainage" });
       return;
     }
+    const vMm = Math.abs(Number(addDeflectionVMm) || 0);
+    const hMm = Math.abs(Number(addDeflectionHMm) || 0);
     setAddLoading(true);
     try {
       const token = await getAccessToken();
@@ -189,12 +278,20 @@ export default function NotificationsPage() {
           witness_mark: addWitnessMark,
           internal_seal: addInternalSeal,
           ovality_check: addOvalityCheck,
+          cement_liner: addCementLiner,
+          spark_testing: addSparkTesting,
+          cp_lugs: addShowCpLugs ? addCpLugs : null,
+          joint_air_test: addShowJointAirTest ? addJointAirTest : null,
+          deflection_v_sign: addDeflectionVSign,
+          deflection_v_mm: vMm,
+          deflection_h_side: addDeflectionHSide,
+          deflection_h_mm: hMm,
           inspector_name: addInspectorName.trim() || null,
         }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "Error");
-      pushToast({ type: "success", title: "Registro agregado" });
+      pushToast({ type: "success", title: "Record added" });
       setAddModalOpen(false);
       setAddPayload(null);
       loadInconsistencies();
@@ -211,14 +308,15 @@ export default function NotificationsPage() {
 
   const navigateToRecords = (
     sectionId: string,
-    chFrom: number,
-    chTo: number
+    recordFromId: string,
+    recordToId: string
   ) => {
-    const chMin = Math.max(0, chFrom - 1);
-    const chMax = chTo + 1;
-    router.push(
-      `/admin/records/${sectionId}?chMin=${chMin}&chMax=${chMax}`
-    );
+    const params = new URLSearchParams({
+      recordFromId,
+      recordToId,
+      context: "2",
+    });
+    router.push(`/admin/records/${sectionId}?${params}`);
   };
 
   const allInconsistencies = sectionData.flatMap((sec) =>
@@ -240,7 +338,7 @@ export default function NotificationsPage() {
     return (
       <div className="drainer-page">
         <div className="drainer-shell">
-          <h1 className="drainer-title text-xl">Notificaciones</h1>
+          <h1 className="drainer-title text-xl">Notifications</h1>
           <AuthPanel onAuthChange={setAuthEmail} />
           <p className="text-sm text-[var(--muted-foreground)] mt-4">
             {!authEmail ? "Sign in to access." : "Access denied."}
@@ -255,7 +353,7 @@ export default function NotificationsPage() {
       <div className="drainer-shell max-w-5xl">
         <div className="drainer-header flex flex-col gap-3">
           <div className="flex items-center justify-between">
-            <h1 className="drainer-title text-xl">Notificaciones</h1>
+            <h1 className="drainer-title text-xl">Notifications</h1>
             <Link href="/admin">
               <Button variant="ghost" size="sm">
                 Back to Admin
@@ -270,7 +368,7 @@ export default function NotificationsPage() {
         <Card className="drainer-card">
           <CardHeader className="flex flex-row items-center justify-between pb-2">
             <CardTitle className="text-sm">
-              ⚠️ Inconsistencias de Registros
+              ⚠️ Record Inconsistencies
             </CardTitle>
             <Button
               variant="outline"
@@ -278,31 +376,31 @@ export default function NotificationsPage() {
               onClick={loadInconsistencies}
               disabled={inconsistenciesLoading}
             >
-              {inconsistenciesLoading ? "Cargando…" : "Actualizar"}
+              {inconsistenciesLoading ? "Loading…" : "Refresh"}
             </Button>
           </CardHeader>
           <CardContent>
             {inconsistenciesLoading ? (
               <p className="text-sm text-[var(--muted-foreground)] py-4">
-                Cargando…
+                Loading…
               </p>
             ) : !hasInconsistencies ? (
               <p className="text-sm text-green-600 py-4">
-                ✅ Sin inconsistencias detectadas
+                ✅ No inconsistencies detected
               </p>
             ) : (
               <div className="overflow-x-auto">
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="border-b border-[var(--border)]">
-                      <th className="text-left py-2 px-2">Sección</th>
-                      <th className="text-left py-2 px-2">CH anterior</th>
-                      <th className="text-left py-2 px-2">ID anterior</th>
-                      <th className="text-left py-2 px-2">CH siguiente</th>
-                      <th className="text-left py-2 px-2">ID siguiente</th>
-                      <th className="text-left py-2 px-2">Diferencia</th>
-                      <th className="text-left py-2 px-2">Tipo</th>
-                      <th className="text-left py-2 px-2">Acciones</th>
+                      <th className="text-left py-2 px-2">Section</th>
+                      <th className="text-left py-2 px-2">CH From</th>
+                      <th className="text-left py-2 px-2">ID From</th>
+                      <th className="text-left py-2 px-2">CH To</th>
+                      <th className="text-left py-2 px-2">ID To</th>
+                      <th className="text-left py-2 px-2">Difference</th>
+                      <th className="text-left py-2 px-2">Type</th>
+                      <th className="text-left py-2 px-2">Actions</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -344,12 +442,12 @@ export default function NotificationsPage() {
                           >
                             {inc.type === "gap"
                               ? "🔴 Gap >13m"
-                              : "🟡 Solapamiento <12m"}
+                              : "🟡 Overlap <12m"}
                           </span>
                           {(inc.inferred_type_from === "fitting" ||
                             inc.inferred_type_to === "fitting") && (
                             <span className="inline-flex rounded-full px-2 py-0.5 text-xs font-medium bg-gray-400 text-white">
-                              Puede ser fitting
+                              May be fitting
                             </span>
                           )}
                         </td>
@@ -359,10 +457,10 @@ export default function NotificationsPage() {
                             size="sm"
                             className="text-xs h-7"
                             onClick={() =>
-                              navigateToRecords(sec.section_id, inc.ch_from, inc.ch_to)
+                              navigateToRecords(sec.section_id, inc.record_from_id, inc.record_to_id)
                             }
                           >
-                            Ver registros
+                            View records
                           </Button>
                           <Button
                             variant="outline"
@@ -370,7 +468,7 @@ export default function NotificationsPage() {
                             className="text-xs h-7"
                             onClick={() => openAddModal(inc, sec)}
                           >
-                            Agregar registro
+                            Add record
                           </Button>
                         </td>
                       </tr>
@@ -433,33 +531,44 @@ export default function NotificationsPage() {
       </div>
 
       <Dialog open={addModalOpen} onOpenChange={setAddModalOpen}>
-        <DialogContent>
+        <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>Agregar registro faltante</DialogTitle>
+            <DialogTitle>Add missing record</DialogTitle>
           </DialogHeader>
           {addPayload && (
             <div className="space-y-3">
-              <input
-                type="hidden"
-                value={addPayload.sectionId}
-                readOnly
-              />
+              <input type="hidden" value={addPayload.sectionId} readOnly />
               <div>
-                <label className="drainer-label block mb-1">Chainage</label>
+                <label className="drainer-label block mb-1">Chainage (CH)</label>
                 <Input
                   type="number"
                   step="0.001"
                   value={addChainage}
                   onChange={(e) => setAddChainage(e.target.value)}
-                  className="drainer-input"
+                  placeholder="0.000"
+                  className={`drainer-input ${addIsDuplicate ? "border-red-500 bg-red-50" : ""}`}
                 />
+                <div className="mt-1 flex items-center gap-1.5 text-xs font-semibold min-h-[18px]">
+                  {addChainageStatus === "checking" && (
+                    <>
+                      <LoaderCircle className="size-3.5 animate-spin" />
+                      <span className="text-slate-500">Checking...</span>
+                    </>
+                  )}
+                  {addChainageStatus === "exists" && (
+                    <span className="text-red-500">EXISTS</span>
+                  )}
+                  {addChainageStatus === "clear" && !addIsDuplicate && (
+                    <span className="text-green-600">CLEAR</span>
+                  )}
+                </div>
               </div>
               <div>
                 <label className="drainer-label block mb-1">Pipe ID / Fitting</label>
                 <Input
                   value={addPipeFittingId}
                   onChange={(e) => setAddPipeFittingId(e.target.value)}
-                  placeholder="e.g. 000615-000550 o TEE DN1600"
+                  placeholder="e.g. 000615-000550 or TEE DN1600"
                   className="drainer-input"
                 />
               </div>
@@ -467,7 +576,7 @@ export default function NotificationsPage() {
                 <label className="drainer-label block mb-1">Joint Type</label>
                 <Select value={addJointType} onValueChange={setAddJointType}>
                   <SelectTrigger className="drainer-input">
-                    <SelectValue placeholder="Seleccionar" />
+                    <SelectValue placeholder="Select joint type" />
                   </SelectTrigger>
                   <SelectContent>
                     {JOINT_TYPES.map((j) => (
@@ -478,34 +587,136 @@ export default function NotificationsPage() {
                   </SelectContent>
                 </Select>
               </div>
-              <div className="flex flex-wrap gap-4">
-                <label className="flex items-center gap-2 text-sm">
-                  <input
-                    type="checkbox"
-                    checked={addWitnessMark}
-                    onChange={(e) => setAddWitnessMark(e.target.checked)}
+              <div>
+                <label className="drainer-label block mb-1">Vertical Deflection (mm)</label>
+                <div className="flex gap-2">
+                  <select
+                    value={addDeflectionVSign}
+                    onChange={(e) =>
+                      setAddDeflectionVSign(e.target.value as "+" | "-")
+                    }
+                    className="drainer-input w-20"
+                  >
+                    <option value="+">+</option>
+                    <option value="-">−</option>
+                  </select>
+                  <Input
+                    type="number"
+                    placeholder="0"
+                    value={addDeflectionVMm}
+                    onChange={(e) => setAddDeflectionVMm(e.target.value)}
+                    className="drainer-input flex-1"
                   />
-                  Witness Mark
-                </label>
-                <label className="flex items-center gap-2 text-sm">
-                  <input
-                    type="checkbox"
-                    checked={addInternalSeal}
-                    onChange={(e) => setAddInternalSeal(e.target.checked)}
-                  />
-                  Internal Seal
-                </label>
-                <label className="flex items-center gap-2 text-sm">
-                  <input
-                    type="checkbox"
-                    checked={addOvalityCheck}
-                    onChange={(e) => setAddOvalityCheck(e.target.checked)}
-                  />
-                  Ovality Check
-                </label>
+                </div>
+                {addVInvalid && (
+                  <p className="mt-1 text-xs font-bold text-red-500">
+                    Out of tolerance (Max. 50mm)
+                  </p>
+                )}
               </div>
               <div>
-                <label className="drainer-label block mb-1">Inspector</label>
+                <label className="drainer-label block mb-1">Horizontal Deflection (mm)</label>
+                <div className="flex gap-2">
+                  <select
+                    value={addDeflectionHSide}
+                    onChange={(e) =>
+                      setAddDeflectionHSide(e.target.value as "L" | "R")
+                    }
+                    className="drainer-input w-20"
+                  >
+                    <option value="L">Left</option>
+                    <option value="R">Right</option>
+                  </select>
+                  <Input
+                    type="number"
+                    placeholder="0"
+                    value={addDeflectionHMm}
+                    onChange={(e) => setAddDeflectionHMm(e.target.value)}
+                    className="drainer-input flex-1"
+                  />
+                </div>
+                {addHInvalid && (
+                  <p className="mt-1 text-xs font-bold text-red-500">
+                    Out of tolerance (Max. 100mm)
+                  </p>
+                )}
+              </div>
+              <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface-alt)] p-4">
+                <h3 className="text-xs font-bold text-[var(--muted-foreground)] uppercase tracking-wider mb-3">
+                  Pre-Lodge Checklist
+                </h3>
+                <div className="space-y-2">
+                  {[
+                    {
+                      id: "witness",
+                      checked: addWitnessMark,
+                      set: setAddWitnessMark,
+                      label: "Pipe installed up to Witness Mark",
+                    },
+                    {
+                      id: "seal",
+                      checked: addInternalSeal,
+                      set: setAddInternalSeal,
+                      label: "Internal Seal Visual Inspection",
+                    },
+                    {
+                      id: "ovality",
+                      checked: addOvalityCheck,
+                      set: setAddOvalityCheck,
+                      label: "Ovality Check Done",
+                    },
+                    {
+                      id: "liner",
+                      checked: addCementLiner,
+                      set: setAddCementLiner,
+                      label: "Cement Liner Visual Check",
+                    },
+                    {
+                      id: "spark",
+                      checked: addSparkTesting,
+                      set: setAddSparkTesting,
+                      label: "Spark Testing Done",
+                    },
+                    ...(addShowCpLugs
+                      ? [
+                          {
+                            id: "cp",
+                            checked: addCpLugs,
+                            set: setAddCpLugs,
+                            label: "CP lugs installed @12 O'clock & Lead Connected",
+                          },
+                        ]
+                      : []),
+                    ...(addShowJointAirTest
+                      ? [
+                          {
+                            id: "air",
+                            checked: addJointAirTest,
+                            set: setAddJointAirTest,
+                            label: "Joint Air Test (80kPa, 2 min)",
+                          },
+                        ]
+                      : []),
+                  ].map((item) => (
+                    <label
+                      key={item.id}
+                      className="flex items-start gap-3 p-3 bg-white rounded-xl border border-[var(--border)] cursor-pointer"
+                    >
+                      <input
+                        type="checkbox"
+                        checked={item.checked}
+                        onChange={(e) => item.set(e.target.checked)}
+                        className="mt-1 w-5 h-5"
+                      />
+                      <span className="text-sm text-slate-700 leading-tight">
+                        {item.label}
+                      </span>
+                    </label>
+                  ))}
+                </div>
+              </div>
+              <div>
+                <label className="drainer-label block mb-1">Inspector Name (optional)</label>
                 <Input
                   value={addInspectorName}
                   onChange={(e) => setAddInspectorName(e.target.value)}
@@ -516,10 +727,13 @@ export default function NotificationsPage() {
           )}
           <DialogFooter>
             <Button variant="outline" onClick={() => setAddModalOpen(false)}>
-              Cancelar
+              Cancel
             </Button>
-            <Button onClick={handleAddRecord} disabled={addLoading}>
-              {addLoading ? "Guardando…" : "Guardar"}
+            <Button
+              onClick={handleAddRecord}
+              disabled={addLoading || !addFormValid}
+            >
+              {addLoading ? "Saving…" : "Save"}
             </Button>
           </DialogFooter>
         </DialogContent>
