@@ -61,8 +61,6 @@ export async function PUT(
     "cement_liner",
     "spark_testing",
     "inspector_name",
-    "signature_data",
-    "ai_insight",
   ] as const;
 
   const updates: Record<string, unknown> = {};

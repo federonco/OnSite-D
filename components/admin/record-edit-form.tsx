@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { SignaturePad, SignaturePreview } from "@/components/signature-pad";
 import { useToast } from "@/components/toast";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -81,9 +80,6 @@ export function RecordEditForm({
   const [cementLiner, setCementLiner] = useState(false);
   const [sparkTesting, setSparkTesting] = useState(false);
   const [inspectorName, setInspectorName] = useState("");
-  const [signatureData, setSignatureData] = useState<string | null>(null);
-  const [aiInsight, setAiInsight] = useState("");
-  const [signatureOpen, setSignatureOpen] = useState(false);
 
   useEffect(() => {
     if (!open || !recordId) return;
@@ -117,12 +113,6 @@ export function RecordEditForm({
       setCementLiner(r.cement_liner ?? false);
       setSparkTesting(r.spark_testing ?? false);
       setInspectorName(r.inspector_name ?? "");
-      setAiInsight(r.ai_insight ?? "");
-      setSignatureData(
-        r.signature_data && r.signature_data.startsWith("data:")
-          ? r.signature_data
-          : null
-      );
     };
 
     load();
@@ -163,8 +153,6 @@ export function RecordEditForm({
           cement_liner: cementLiner,
           spark_testing: sparkTesting,
           inspector_name: inspectorName || null,
-          signature_data: signatureData || null,
-          ai_insight: aiInsight || null,
         }),
       });
 
@@ -361,42 +349,6 @@ export function RecordEditForm({
               className="drainer-input"
             />
           </div>
-
-          <div>
-            <label className="drainer-label block mb-1">Signature</label>
-{signatureData ? (
-                <div className="flex items-center gap-2">
-                <SignaturePreview dataUrl={signatureData} height={50} />
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => setSignatureOpen(true)}
-                >
-                  Change
-                </Button>
-              </div>
-            ) : (
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={() => setSignatureOpen(true)}
-              >
-                Add Signature
-              </Button>
-            )}
-          </div>
-
-          <div>
-            <label className="drainer-label block mb-1">AI Insight</label>
-            <Input
-              value={aiInsight}
-              onChange={(e) => setAiInsight(e.target.value)}
-              className="drainer-input"
-              placeholder="Optional"
-            />
-          </div>
         </div>
 
         <DialogFooter>
@@ -408,23 +360,6 @@ export function RecordEditForm({
           </Button>
         </DialogFooter>
       </DialogContent>
-
-      {signatureOpen && (
-        <Dialog open={signatureOpen} onOpenChange={setSignatureOpen}>
-          <DialogContent>
-            <DialogHeader>
-              <DialogTitle>Sign</DialogTitle>
-            </DialogHeader>
-            <SignaturePad
-              onSave={(base64DataUrl) => {
-                setSignatureData(base64DataUrl);
-                setSignatureOpen(false);
-              }}
-              onCancel={() => setSignatureOpen(false)}
-            />
-          </DialogContent>
-        </Dialog>
-      )}
     </Dialog>
   );
 }
