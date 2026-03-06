@@ -24,15 +24,17 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Pencil, Trash2 } from "lucide-react";
+import { Pencil, Printer, Trash2 } from "lucide-react";
+import { Loader2 } from "lucide-react";
 
-const PROXIMITY_M = 24;
 const TYPE_COLORS: Record<string, string> = {
   Fitting: "bg-blue-500 text-white",
   Structural: "bg-orange-500 text-white",
   Warning: "bg-red-500 text-white",
   Info: "bg-gray-500 text-white",
 };
+
+const EXPIRED_DAYS = 14;
 
 type Checkpoint = {
   id: string;
@@ -45,15 +47,16 @@ type Checkpoint = {
   alert_email: string | null;
 };
 
-function getStatus(
-  cp: Checkpoint,
-  maxCh: number | null
-): "pending" | "upcoming" | "exceeded" {
-  if (maxCh == null) return "pending";
-  if (maxCh >= cp.ch) return "exceeded";
-  const dist = cp.ch - maxCh;
-  if (dist <= PROXIMITY_M && cp.active && !cp.notified) return "upcoming";
-  return "pending";
+type Section = {
+  id: string;
+  name: string;
+};
+
+function isNotifiedOlderThanDays(notifiedAt: string | null, days: number): boolean {
+  if (!notifiedAt) return false;
+  const cutoff = new Date();
+  cutoff.setDate(cutoff.getDate() - days);
+  return new Date(notifiedAt) < cutoff;
 }
 
 export default function CheckpointsPage() {
@@ -62,6 +65,8 @@ export default function CheckpointsPage() {
   const [authEmail, setAuthEmail] = useState<string | null>(null);
   const [isAdmin, setIsAdmin] = useState<boolean | null>(null);
   const [checkpoints, setCheckpoints] = useState<Checkpoint[]>([]);
+  const [sections, setSections] = useState<Section[]>([]);
+  const [printSectionId, setPrintSectionId] = useState<string>("");
   const [maxCh, setMaxCh] = useState<number | null>(null);
   const [modalOpen, setModalOpen] = useState(false);
   const [modalMode, setModalMode] = useState<"create" | "edit">("create");
@@ -72,11 +77,26 @@ export default function CheckpointsPage() {
   const [active, setActive] = useState(true);
   const [alertEmail, setAlertEmail] = useState("");
   const [loading, setLoading] = useState(false);
+  const [printing, setPrinting] = useState(false);
 
   const getAccessToken = useCallback(async () => {
     const { data } = await supabase.auth.getSession();
     return data.session?.access_token ?? null;
   }, [supabase]);
+
+  const loadSections = useCallback(async () => {
+    const token = await getAccessToken();
+    const res = await fetch("/api/drainer/sections", {
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    });
+    const data = await res.json();
+    if (data.sections) {
+      setSections(data.sections);
+      setPrintSectionId((prev) =>
+        data.sections.find((s: Section) => s.id === prev)?.id ?? ""
+      );
+    }
+  }, [getAccessToken]);
 
   const loadCheckpoints = useCallback(async () => {
     const token = await getAccessToken();
@@ -84,8 +104,65 @@ export default function CheckpointsPage() {
       headers: token ? { Authorization: `Bearer ${token}` } : {},
     });
     const data = await res.json();
-    if (data.checkpoints) setCheckpoints(data.checkpoints);
-  }, [getAccessToken]);
+    let list: Checkpoint[] = data.checkpoints ?? [];
+    const expiredIds = new Set<string>();
+
+    for (const cp of list) {
+      if (
+        cp.notified &&
+        cp.notified_at &&
+        isNotifiedOlderThanDays(cp.notified_at, EXPIRED_DAYS)
+      ) {
+        try {
+          const archiveRes = await fetch("/api/drainer/checkpoints/archive", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${token}`,
+            },
+            body: JSON.stringify({
+              checkpoint_id: cp.id,
+              section_id: null,
+              name: cp.name,
+              ch: cp.ch,
+              type: cp.type,
+              alert_email: cp.alert_email,
+              notified_at: cp.notified_at,
+            }),
+          });
+          if (!archiveRes.ok) {
+            const err = await archiveRes.json();
+            console.error("checkpoint_history insert failed:", err);
+          }
+        } catch (e) {
+          console.error("checkpoint_history insert failed:", e);
+        }
+
+        const putRes = await fetch(`/api/drainer/checkpoints/${cp.id}`, {
+          method: "PUT",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({
+            active: false,
+            notified: false,
+            notified_at: null,
+          }),
+        });
+        if (putRes.ok) expiredIds.add(cp.id);
+      }
+    }
+
+    list = list.filter((cp: Checkpoint) => !expiredIds.has(cp.id));
+    setCheckpoints(list);
+    if (expiredIds.size > 0) {
+      pushToast({
+        type: "success",
+        title: `${expiredIds.size} checkpoint(s) auto-expired and archived.`,
+      });
+    }
+  }, [getAccessToken, pushToast]);
 
   const loadMaxCh = useCallback(async () => {
     const res = await fetch("/api/drainer/checkpoints/max-ch");
@@ -111,10 +188,11 @@ export default function CheckpointsPage() {
       if (json.isAdmin) {
         loadCheckpoints();
         loadMaxCh();
+        loadSections();
       }
     };
     check();
-  }, [authEmail, getAccessToken, loadCheckpoints, loadMaxCh]);
+  }, [authEmail, getAccessToken, loadCheckpoints, loadMaxCh, loadSections]);
 
   const openCreate = () => {
     setModalMode("create");
@@ -199,7 +277,36 @@ export default function CheckpointsPage() {
     }
   };
 
-  const handleToggleActive = async (cp: Checkpoint) => {
+  const handlePrintCheckpointRecord = async () => {
+    setPrinting(true);
+    try {
+      const token = await getAccessToken();
+      if (!token) throw new Error("Sign in required");
+      const res = await fetch("/api/drainer/checkpoints/print", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          section_id: printSectionId || null,
+        }),
+      });
+      if (!res.ok) throw new Error("Failed to generate PDF");
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const w = window.open(url, "_blank");
+      if (w) w.focus();
+      else window.location.href = url;
+      setTimeout(() => URL.revokeObjectURL(url), 5000);
+    } catch {
+      pushToast({ type: "error", title: "Error generating checkpoint record" });
+    } finally {
+      setPrinting(false);
+    }
+  };
+
+  const handleResetNotification = async (cp: Checkpoint) => {
     try {
       const token = await getAccessToken();
       if (!token) throw new Error("Sign in required");
@@ -209,12 +316,13 @@ export default function CheckpointsPage() {
           "Content-Type": "application/json",
           Authorization: `Bearer ${token}`,
         },
-        body: JSON.stringify({ active: !cp.active }),
+        body: JSON.stringify({ notified: false }),
       });
       if (!res.ok) throw new Error("Error");
+      pushToast({ type: "success", title: "Notification reset" });
       loadCheckpoints();
     } catch {
-      pushToast({ type: "error", title: "Error updating" });
+      pushToast({ type: "error", title: "Error resetting" });
     }
   };
 
@@ -260,87 +368,115 @@ export default function CheckpointsPage() {
         <AdminNav />
 
         <Card className="drainer-card">
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
+          <CardHeader className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 pb-2">
             <CardTitle className="text-sm">Route checkpoints</CardTitle>
-            <Button size="sm" onClick={openCreate} className="drainer-button drainer-button-primary">
-              Add
-            </Button>
+            <div className="flex flex-wrap items-center gap-2">
+              <Select
+                value={printSectionId}
+                onValueChange={setPrintSectionId}
+              >
+                <SelectTrigger className="w-[140px] h-9 text-xs">
+                  <SelectValue placeholder="Section" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="">All Sections</SelectItem>
+                  {sections.map((s) => (
+                    <SelectItem key={s.id} value={s.id}>
+                      {s.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <Button
+                variant="outline"
+                size="sm"
+                className="min-h-[44px] px-4"
+                onClick={handlePrintCheckpointRecord}
+                disabled={printing}
+              >
+                {printing ? (
+                  <Loader2 className="size-4 animate-spin" />
+                ) : (
+                  <>
+                    <Printer className="size-4 mr-1" />
+                    Print Record
+                  </>
+                )}
+              </Button>
+              <Button size="sm" onClick={openCreate} className="drainer-button drainer-button-primary min-h-[44px] px-4">
+                Add
+              </Button>
+            </div>
           </CardHeader>
           <CardContent>
-            <p className="text-xs text-[var(--muted-foreground)] mb-3">
+            <p className="text-sm text-[var(--muted-foreground)] mb-4">
               Current max CH: {maxCh != null ? maxCh.toLocaleString("en-AU", { minimumFractionDigits: 2 }) : "—"}
             </p>
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b border-[var(--border)]">
-                    <th className="text-left py-2 px-2">Name</th>
-                    <th className="text-left py-2 px-2">CH</th>
-                    <th className="text-left py-2 px-2">Type</th>
-                    <th className="text-left py-2 px-2">Status</th>
-                    <th className="text-left py-2 px-2">Alert to</th>
-                    <th className="text-left py-2 px-2">Active</th>
-                    <th className="text-right py-2 px-2">Actions</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {checkpoints.map((cp) => {
-                    const status = getStatus(cp, maxCh);
-                    return (
-                      <tr key={cp.id} className="border-b border-[var(--border)]/50">
-                        <td className="py-2 px-2 font-medium">{cp.name}</td>
-                        <td className="py-2 px-2">
-                          {Number(cp.ch).toLocaleString("en-AU", { minimumFractionDigits: 2 })}
-                        </td>
-                        <td className="py-2 px-2">
-                          <Badge className={TYPE_COLORS[cp.type] ?? "bg-gray-500 text-white"}>
-                            {cp.type}
-                          </Badge>
-                        </td>
-                        <td className="py-2 px-2">
-                          {status === "exceeded" && <span>✅ Exceeded</span>}
-                          {status === "upcoming" && <span>🟡 Upcoming</span>}
-                          {status === "pending" && <span>⚪ Pending</span>}
-                        </td>
-                        <td className="py-2 px-2 text-xs">
-                          {cp.alert_email ? cp.alert_email : <span className="text-[var(--muted-foreground)]">Global</span>}
-                        </td>
-                        <td className="py-2 px-2">
-                          <button
-                            type="button"
-                            onClick={() => handleToggleActive(cp)}
-                            className={`text-xs px-2 py-1 rounded ${cp.active ? "bg-green-100 text-green-800" : "bg-gray-100 text-gray-600"}`}
-                          >
-                            {cp.active ? "Yes" : "No"}
-                          </button>
-                        </td>
-                        <td className="py-2 px-2 text-right">
-                          <Button
-                            variant="ghost"
-                            size="icon-xs"
-                            onClick={() => openEdit(cp)}
-                          >
-                            <Pencil className="size-3" />
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="icon-xs"
-                            onClick={() => handleDelete(cp.id)}
-                            className="text-destructive"
-                          >
-                            <Trash2 className="size-3" />
-                          </Button>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-            {checkpoints.length === 0 && (
+            {checkpoints.length === 0 ? (
               <p className="text-sm text-[var(--muted-foreground)] py-6 text-center">
                 No checkpoints. Add one to receive alerts when the installation approaches.
               </p>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {checkpoints.map((cp) => {
+                  const statusBadge =
+                    cp.active === false
+                      ? <Badge variant="secondary" className="shrink-0">Inactive</Badge>
+                      : cp.active && cp.notified
+                        ? <Badge className="bg-blue-500 text-white shrink-0">Notified ✓</Badge>
+                        : <Badge className="bg-green-500 text-white shrink-0">Active</Badge>;
+                  return (
+                    <div
+                      key={cp.id}
+                      className="rounded-xl border border-[var(--border)] bg-white p-4 shadow-sm"
+                    >
+                      <div className="flex items-start justify-between gap-2 mb-3">
+                        <span className="font-bold text-base">{cp.name}</span>
+                        {statusBadge}
+                      </div>
+                      <div className="flex items-center gap-2 mb-3">
+                        <span className="text-lg font-semibold">CH {Number(cp.ch).toLocaleString("en-AU", { minimumFractionDigits: 2 })}</span>
+                        <Badge className={`text-xs ${TYPE_COLORS[cp.type] ?? "bg-gray-500 text-white"}`}>
+                          {cp.type}
+                        </Badge>
+                      </div>
+                      {cp.alert_email && (
+                        <p className="text-sm text-[var(--muted-foreground)] mb-3">Alert to: {cp.alert_email}</p>
+                      )}
+                      <div className="flex flex-wrap gap-2">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="min-h-[44px] min-w-[44px] px-4"
+                          onClick={() => openEdit(cp)}
+                        >
+                          <Pencil className="size-4 mr-1" />
+                          Edit
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="min-h-[44px] min-w-[44px] px-4 text-destructive hover:bg-destructive/10"
+                          onClick={() => handleDelete(cp.id)}
+                        >
+                          <Trash2 className="size-4 mr-1" />
+                          Delete
+                        </Button>
+                        {cp.notified && (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="min-h-[44px] min-w-[44px] px-4"
+                            onClick={() => handleResetNotification(cp)}
+                          >
+                            Reset notification
+                          </Button>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
             )}
           </CardContent>
         </Card>
@@ -399,22 +535,22 @@ export default function CheckpointsPage() {
                 If left empty, the global email configured on the server will be used
               </p>
             </div>
-            <div className="flex items-center gap-2">
+            <label className="flex items-center gap-3 min-h-[44px] cursor-pointer">
               <input
                 type="checkbox"
                 id="active"
                 checked={active}
                 onChange={(e) => setActive(e.target.checked)}
-                className="rounded"
+                className="rounded w-5 h-5"
               />
-              <label htmlFor="active" className="text-sm">Active</label>
-            </div>
+              <span className="text-sm">Active</span>
+            </label>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setModalOpen(false)}>
+            <Button variant="outline" onClick={() => setModalOpen(false)} className="min-h-[44px]">
               Cancel
             </Button>
-            <Button onClick={handleSave} disabled={loading}>
+            <Button onClick={handleSave} disabled={loading} className="min-h-[44px]">
               {loading ? "Saving…" : "Save"}
             </Button>
           </DialogFooter>

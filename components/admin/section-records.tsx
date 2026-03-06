@@ -71,15 +71,15 @@ export function SectionRecords({
 
         <div className="border border-[var(--border)] rounded-lg overflow-hidden">
           <div className="overflow-x-auto max-h-64 overflow-y-auto">
-            <table className="w-full text-sm">
+            <table className="w-full text-sm min-w-[400px]">
               <thead className="bg-[var(--surface-alt)] sticky top-0">
                 <tr>
-                  <th className="text-left px-3 py-2 font-semibold">Date</th>
-                  <th className="text-left px-3 py-2 font-semibold">CH</th>
-                  <th className="text-left px-3 py-2 font-semibold">Pipe ID</th>
-                  <th className="text-left px-3 py-2 font-semibold">Joint</th>
-                  <th className="text-left px-3 py-2 font-semibold">Inspector</th>
-                  <th className="text-left px-3 py-2 font-semibold w-16">Action</th>
+                  <th className="text-left px-3 py-2 font-semibold whitespace-nowrap">Date</th>
+                  <th className="text-left px-3 py-2 font-semibold whitespace-nowrap">CH</th>
+                  <th className="text-left px-3 py-2 font-semibold whitespace-nowrap">Pipe ID</th>
+                  <th className="text-left px-3 py-2 font-semibold whitespace-nowrap">Joint</th>
+                  <th className="text-left px-3 py-2 font-semibold whitespace-nowrap">Inspector</th>
+                  <th className="text-left px-3 py-2 font-semibold whitespace-nowrap">Action</th>
                 </tr>
               </thead>
               <tbody>
@@ -95,15 +95,16 @@ export function SectionRecords({
                       key={r.id}
                       className="border-t border-[var(--border)] hover:bg-[var(--surface-alt)]/50"
                     >
-                      <td className="px-3 py-2">{formatDate(r.date_installed)}</td>
-                      <td className="px-3 py-2">{r.chainage}</td>
-                      <td className="px-3 py-2">{r.pipe_fitting_id ?? "—"}</td>
-                      <td className="px-3 py-2">{r.joint_type ?? "—"}</td>
-                      <td className="px-3 py-2">{r.inspector_name ?? "—"}</td>
+                      <td className="px-3 py-2 whitespace-nowrap">{formatDate(r.date_installed)}</td>
+                      <td className="px-3 py-2 whitespace-nowrap">{r.chainage}</td>
+                      <td className="px-3 py-2 font-mono text-xs whitespace-nowrap">{r.pipe_fitting_id ?? "—"}</td>
+                      <td className="px-3 py-2 whitespace-nowrap">{r.joint_type ?? "—"}</td>
+                      <td className="px-3 py-2 whitespace-nowrap">{r.inspector_name ?? "—"}</td>
                       <td className="px-3 py-2">
                         <Button
                           variant="ghost"
-                          size="xs"
+                          size="sm"
+                          className="min-h-[44px] min-w-[44px]"
                           onClick={() => onEditRecord(r.id)}
                         >
                           Edit

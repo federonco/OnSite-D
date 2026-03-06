@@ -23,6 +23,7 @@ export type RecordInconsistencyItem = {
   type: "gap" | "overlap";
   record_from_id: string;
   record_to_id: string;
+  record_from_counter: number | null;
   record_from_fitting_id: string;
   record_to_fitting_id: string;
   inferred_type_from: "pipe" | "fitting";
@@ -87,7 +88,7 @@ async function getSectionInconsistencies(
 
   const { data: records, error } = await supabase
     .from("drainer_pipe_records")
-    .select("id,chainage,pipe_fitting_id")
+    .select("id,chainage,pipe_fitting_id,counter")
     .eq("section_id", sectionId)
     .order("chainage", { ascending: !isBackwards });
 
@@ -108,6 +109,7 @@ async function getSectionInconsistencies(
     id: r.id,
     chainage: Number(r.chainage),
     pipe_fitting_id: r.pipe_fitting_id ?? "",
+    counter: r.counter ?? null,
   }));
 
   const inconsistencies: RecordInconsistencyItem[] = [];
@@ -125,6 +127,7 @@ async function getSectionInconsistencies(
         type: "gap",
         record_from_id: a.id,
         record_to_id: b.id,
+        record_from_counter: a.counter,
         record_from_fitting_id: a.pipe_fitting_id,
         record_to_fitting_id: b.pipe_fitting_id,
         inferred_type_from: inferType(a.pipe_fitting_id),
@@ -138,6 +141,7 @@ async function getSectionInconsistencies(
         type: "overlap",
         record_from_id: a.id,
         record_to_id: b.id,
+        record_from_counter: a.counter,
         record_from_fitting_id: a.pipe_fitting_id,
         record_to_fitting_id: b.pipe_fitting_id,
         inferred_type_from: inferType(a.pipe_fitting_id),

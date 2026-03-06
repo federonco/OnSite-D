@@ -199,13 +199,13 @@ const HEADERS = [
   "Date Installed",
   "Pipe Chainage",
   "Pipe No Stamp or Fitting ID",
-  "Joint Type (WR, RRJ, WB, or CWB)",
+  "Joint Type (RRJ, WR, or Transition)",
   "Witness Mark (Y/N)",
   "Internal Seal (Y/N)",
   "Alignment & Deflection Hor ±100mm / Vert ±50mm",
   "CP Lugs @ 12 O'clock (RRJ ONLY)",
   "Ovality Check",
-  "Joint Air Test (WR only)",
+  "Joint Air Test (80kPa, 2 min)",
   "Cement Liner (OK/Patch)",
   "Spark Testing (OK/Patched)",
   "NAME",
@@ -264,8 +264,8 @@ function cpLugsVal(r: RecordRow) {
 
 function jointAirTestVal(r: RecordRow) {
   const jt = (r.joint_type ?? "").toString().toUpperCase().trim();
-  // WB, CWB, Transition: N/A (no air test required)
-  if (["WB", "CWB", "TRANSITION"].includes(jt)) return "N/A";
+  // Transition: N/A (no air test required)
+  if (jt === "TRANSITION") return "N/A";
   // RRJ: does NOT require air test per reference template — always blank
   if (jt === "RRJ") return "";
   // WR: show Y only when checked

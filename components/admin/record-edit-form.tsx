@@ -19,7 +19,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 
-const JOINT_TYPES = ["RRJ", "WR", "WB", "CWB"] as const;
+const JOINT_TYPES = ["RRJ", "WR", "Transition"] as const;
 
 export type PipeRecord = {
   id: string;
@@ -51,6 +51,8 @@ type RecordEditFormProps = {
   onClose: () => void;
   onSaved: () => void;
   getAccessToken: () => Promise<string | null>;
+  /** Optional note shown above the form (e.g. Data Validation context) */
+  contextualNote?: string | null;
 };
 
 export function RecordEditForm({
@@ -59,6 +61,7 @@ export function RecordEditForm({
   onClose,
   onSaved,
   getAccessToken,
+  contextualNote,
 }: RecordEditFormProps) {
   const { pushToast } = useToast();
   const [loading, setLoading] = useState(false);
@@ -179,6 +182,12 @@ export function RecordEditForm({
         <DialogHeader>
           <DialogTitle>Edit Pipe Record</DialogTitle>
         </DialogHeader>
+
+        {contextualNote && (
+          <p className="text-sm text-[var(--muted-foreground)] bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded-lg px-3 py-2">
+            {contextualNote}
+          </p>
+        )}
 
         <div className="space-y-3">
           <div className="grid grid-cols-2 gap-3">
@@ -352,10 +361,10 @@ export function RecordEditForm({
         </div>
 
         <DialogFooter>
-          <Button variant="outline" onClick={onClose}>
+          <Button variant="outline" onClick={onClose} className="min-h-[44px]">
             Cancel
           </Button>
-          <Button onClick={handleSave} disabled={loading}>
+          <Button onClick={handleSave} disabled={loading} className="min-h-[44px]">
             {loading ? "Saving..." : "Save"}
           </Button>
         </DialogFooter>

@@ -17,7 +17,7 @@ export async function PUT(
   }
 
   const body = await request.json();
-  const { name, ch, type, active, alert_email } = body;
+  const { name, ch, type, active, alert_email, notified, notified_at } = body;
 
   const updates: Record<string, unknown> = {};
   if (name !== undefined) updates.name = String(name).trim();
@@ -28,6 +28,11 @@ export async function PUT(
   }
   if (active !== undefined) updates.active = Boolean(active);
   if (alert_email !== undefined) updates.alert_email = alert_email?.trim() || null;
+  if (notified !== undefined) {
+    updates.notified = Boolean(notified);
+    if (!notified) updates.notified_at = null;
+  }
+  if (notified_at !== undefined) updates.notified_at = notified_at;
 
   if (Object.keys(updates).length === 0) {
     return NextResponse.json({ error: "No updates" }, { status: 400 });

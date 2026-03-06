@@ -424,7 +424,7 @@ export default function AdminPage() {
             </Select>
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button variant="outline" size="sm" className="h-9 w-9 px-0">
+                <Button variant="outline" size="sm" className="min-h-[44px] min-w-[44px] px-0">
                   ⋮
                 </Button>
               </DropdownMenuTrigger>
@@ -451,7 +451,7 @@ export default function AdminPage() {
               </CardTitle>
               <div className="flex items-center gap-2 mt-2 flex-wrap">
                 <Link href={`/admin/records/${sectionId}`}>
-                  <Button variant="outline" size="sm" className="h-7 px-3 text-xs">
+                  <Button variant="outline" size="sm" className="min-h-[44px] px-4 text-sm">
                     View records
                   </Button>
                 </Link>
@@ -464,7 +464,7 @@ export default function AdminPage() {
                 <Button
                   variant="outline"
                   size="sm"
-                  className="h-7 px-3 text-xs"
+                  className="min-h-[44px] px-4 text-sm"
                   onClick={() => openReportModal("audit", {})}
                   disabled={!sectionId || printingAudit}
                 >
@@ -480,7 +480,7 @@ export default function AdminPage() {
                 <Button
                   variant="outline"
                   size="sm"
-                  className="h-7 w-7 shrink-0 rounded-full"
+                  className="min-h-[44px] min-w-[44px] shrink-0 rounded-full"
                   onClick={loadRecords}
                   title="Refresh"
                 >
@@ -547,7 +547,7 @@ export default function AdminPage() {
                         <Button
                           variant="outline"
                           size="sm"
-                          className="h-9 px-4 text-xs border-0 text-white shadow-[0_4px_14px_rgba(22,163,74,0.35)] disabled:opacity-80 bg-[#16a34a]"
+                          className="min-h-[44px] px-4 text-sm border-0 text-white shadow-[0_4px_14px_rgba(22,163,74,0.35)] disabled:opacity-80 bg-[#16a34a]"
                           onClick={() =>
                             openReportModal("itr-complete", {
                               itrIndex: block.index,
@@ -568,7 +568,7 @@ export default function AdminPage() {
                         <Button
                           variant="outline"
                           size="sm"
-                          className="h-9 px-4 text-xs border-0 text-white shadow-[0_4px_14px_rgba(245,158,11,0.35)] disabled:opacity-80 bg-[#f59e0b]"
+                          className="min-h-[44px] px-4 text-sm border-0 text-white shadow-[0_4px_14px_rgba(245,158,11,0.35)] disabled:opacity-80 bg-[#f59e0b]"
                           onClick={() =>
                             openReportModal("itr-open", {
                               itrIndex: block.index,
