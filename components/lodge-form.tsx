@@ -42,6 +42,16 @@ type LodgeFormProps = {
 
 type ChainageStatus = "idle" | "checking" | "exists" | "clear";
 
+/** Validates CH: numeric with up to 2 decimal places. Returns error message or null. */
+function validateChainage(value: string): string | null {
+  if (!value.trim()) return null;
+  const n = Number(value);
+  if (!Number.isFinite(n) || n < 0) return "Must be a positive number";
+  const match = value.trim().match(/^\d+(\.\d{0,2})?$/);
+  if (!match) return "Up to 2 decimal places allowed";
+  return null;
+}
+
 export function LodgeForm({
   sections,
   sectionId,
@@ -61,6 +71,7 @@ export function LodgeForm({
   );
   const [chainage, setChainage] = useState("");
   const [chainageStatus, setChainageStatus] = useState<ChainageStatus>("idle");
+  const [chainageError, setChainageError] = useState<string | null>(null);
   const [isDuplicate, setIsDuplicate] = useState(false);
   const [pipeFittingId, setPipeFittingId] = useState("");
   const [jointType, setJointType] = useState<string>("");
@@ -122,7 +133,13 @@ export function LodgeForm({
   }, [chainage, sectionId, checkDuplicate]);
 
   const handleChainageBlur = () => {
+    setChainageError(validateChainage(chainage));
     if (chainage) checkDuplicate();
+  };
+
+  const handleChainageChange = (value: string) => {
+    setChainage(value);
+    setChainageError(null);
   };
 
   const vMm = Math.abs(Number(deflectionVMm) || 0);
@@ -150,6 +167,7 @@ export function LodgeForm({
   const isFormValid =
     !!sectionId &&
     !!chainage &&
+    !chainageError &&
     Number.isFinite(Number(chainage)) &&
     !!pipeFittingId.trim() &&
     !!jointType &&
@@ -161,6 +179,7 @@ export function LodgeForm({
   const resetForm = useCallback(() => {
     setChainage("");
     setChainageStatus("idle");
+    setChainageError(null);
     setIsDuplicate(false);
     setPipeFittingId("");
     setJointType("");
@@ -178,6 +197,12 @@ export function LodgeForm({
   }, []);
 
   const handleSubmit = async () => {
+    const submitError = validateChainage(chainage);
+    if (submitError) {
+      setChainageError(submitError);
+      pushToast({ type: "error", title: "Invalid chainage", message: submitError });
+      return;
+    }
     if (!isFormValid) return;
 
     setLoading(true);
@@ -283,19 +308,19 @@ export function LodgeForm({
             Current chainage (ch)
           </div>
           <div className="relative mt-2 mb-0 w-full">
-            <div
-              className={`drainer-chainage-display ${
-                isDuplicate ? "!border-red-500 !bg-red-50" : ""
-              }`}
-            >
-              <span
-                className={`tabular-nums drainer-chainage-value ${
-                  isDuplicate ? "text-red-500" : "text-[var(--ink)]"
-                }`}
-              >
-                {chainage ? Number(chainage).toFixed(2) : "0.00"}
-              </span>
-            </div>
+            <Input
+              type="text"
+              inputMode="decimal"
+              placeholder="0.00"
+              value={chainage}
+              onChange={(e) => handleChainageChange(e.target.value)}
+              onBlur={handleChainageBlur}
+              className={`drainer-input tabular-nums pr-14 pl-14 text-center ${
+                isDuplicate || chainageError ? "!border-red-500 !bg-red-50" : ""
+              } ${isDuplicate ? "text-red-500" : ""}`}
+              aria-invalid={!!chainageError || !!isDuplicate}
+              aria-describedby={chainageError ? "chainage-error" : undefined}
+            />
             <Button
               type="button"
               variant="outline"
@@ -303,8 +328,9 @@ export function LodgeForm({
               className="drainer-stepper-btn absolute left-[-2px] top-1/2 z-10 size-9 min-w-9 min-h-9 -translate-y-1/2 rounded-full shrink-0"
               onClick={() => {
                 const n = parseFloat(chainage) || 0;
-                const next = Math.max(0, n - 0.01);
-                setChainage(next.toFixed(2));
+                const next = Math.max(0, n - 1);
+                handleChainageChange(next.toFixed(2));
+                setChainageError(null);
               }}
             >
               −
@@ -316,12 +342,19 @@ export function LodgeForm({
               className="drainer-stepper-btn absolute right-[-2px] top-1/2 z-10 size-9 min-w-9 min-h-9 -translate-y-1/2 rounded-full shrink-0"
               onClick={() => {
                 const n = parseFloat(chainage) || 0;
-                setChainage((n + 0.01).toFixed(2));
+                const next = n + 1;
+                handleChainageChange(next.toFixed(2));
+                setChainageError(null);
               }}
             >
               +
             </Button>
           </div>
+          {chainageError && (
+            <p id="chainage-error" className="mt-1 text-xs font-bold text-red-500">
+              {chainageError}
+            </p>
+          )}
         </CardContent>
       </Card>
 

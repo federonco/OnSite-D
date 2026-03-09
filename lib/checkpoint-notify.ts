@@ -8,13 +8,21 @@ const FALLBACK_ALERT_EMAIL = process.env.ALERT_EMAIL?.trim();
 export async function processCheckpointAlerts(
   supabase: SupabaseClient
 ): Promise<void> {
-  const alertFrom = process.env.ALERT_FROM_EMAIL?.trim();
-  const resendKey = process.env.RESEND_API_KEY?.trim();
-
-  if (!alertFrom || !resendKey) {
-    console.warn("Checkpoint alerts: ALERT_FROM_EMAIL or RESEND_API_KEY not set, skipping");
+  const pass =
+    process.env.SMTP_PASS?.trim() || process.env.RESEND_API_KEY?.trim();
+  if (!pass) {
+    console.warn(
+      "Checkpoint alerts: SMTP_PASS or RESEND_API_KEY not set, skipping"
+    );
     return;
   }
+  const smtpHost = process.env.SMTP_HOST || "smtp.resend.com";
+  const smtpPort = Number(process.env.SMTP_PORT) || 465;
+  const smtpUser = process.env.SMTP_USER || "resend";
+  const smtpFrom =
+    process.env.SMTP_FROM ||
+    process.env.ALERT_FROM_EMAIL?.trim() ||
+    "Water Cart <info@readx.com.au>";
 
   const { data: maxRow } = await supabase
     .from("drainer_pipe_records")
@@ -37,11 +45,13 @@ export async function processCheckpointAlerts(
   if (!candidates?.length) return;
 
   const transporter = nodemailer.createTransport({
-    host: "smtp.resend.com",
-    port: 465,
+    host: smtpHost,
+    port: smtpPort,
     secure: true,
-    auth: { user: "resend", pass: resendKey },
+    auth: { user: smtpUser, pass },
   });
+
+  const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://onsite-d.vercel.app";
 
   for (const cp of candidates) {
     const ch = Number(cp.ch);
@@ -54,17 +64,48 @@ export async function processCheckpointAlerts(
       continue;
     }
 
+    const textBody = [
+      `Checkpoint: ${cp.name}`,
+      `Checkpoint CH: ${ch} m`,
+      `Recorded CH: ${chActual} m`,
+      `Remaining distance: ${dist} m`,
+    ].join("\n\n");
+
+    const htmlBody = `
+<div style="font-family: Arial, sans-serif; color: #333; padding: 24px;">
+  <h2 style="color: #1a5276;">⚠️ Checkpoint Approaching</h2>
+  <p><strong>${cp.name}</strong></p>
+  <p>Checkpoint CH: ${ch} m<br />Recorded CH: ${chActual} m<br />Remaining distance: ${dist} m</p>
+
+  <hr style="border: none; border-top: 1px solid #e0e0e0; margin: 32px 0;" />
+
+  <table cellpadding="0" cellspacing="0" style="font-family: Arial, sans-serif;">
+    <tr>
+      <td style="padding-right: 16px; vertical-align: middle;">
+        <a href="https://www.readx.com.au" target="_blank" style="display:block;">
+          <img src="${siteUrl}/readx-logo.png" alt="readX" width="80" style="display:block;" />
+        </a>
+      </td>
+      <td style="vertical-align: middle; border-left: 2px solid #1a5276; padding-left: 16px;">
+        <p style="margin:0; font-size: 15px; font-weight: bold; color: #1a5276;">readX Team</p>
+        <p style="margin:4px 0 0; font-size: 13px; color: #555;">Drainer - OnSite-D</p>
+        <p style="margin:4px 0 0; font-size: 12px;">
+          <a href="https://www.readx.com.au" target="_blank"
+             style="color: #1a5276; text-decoration: none;">www.readX.com.au</a>
+        </p>
+      </td>
+    </tr>
+  </table>
+</div>
+`;
+
     try {
       await transporter.sendMail({
-        from: alertFrom,
+        from: smtpFrom,
         to,
         subject: `⚠️ Checkpoint approaching: ${cp.name}`,
-        text: [
-          `Checkpoint: ${cp.name}`,
-          `Checkpoint CH: ${ch} m`,
-          `Recorded CH: ${chActual} m`,
-          `Remaining distance: ${dist} m`,
-        ].join("\n\n"),
+        text: textBody,
+        html: htmlBody,
       });
 
       await supabase
