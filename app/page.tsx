@@ -42,10 +42,13 @@ export default function Home() {
       <div className="drainer-shell">
         <div className="drainer-header flex flex-col gap-3">
           <div className="flex items-center justify-between">
-            <h1 className="drainer-title text-xl">Drainer Lodge</h1>
+            <h1 className="drainer-title text-xl">Pipe Records</h1>
             <Link href="/admin">
-              <Button variant="ghost" size="sm">
-                Admin
+              <Button
+                variant="ghost"
+                className="shrink-0 h-8 min-h-8 border-0 px-3 text-xs font-semibold text-[var(--text-secondary)]"
+              >
+                ⚙ Admin
               </Button>
             </Link>
           </div>

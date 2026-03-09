@@ -7,7 +7,7 @@ import { useToast } from "@/components/toast";
 import { getSupabaseBrowser } from "@/lib/supabase/browser";
 import { AdminNav } from "@/components/admin-nav";
 import { RecordEditForm } from "@/components/admin/record-edit-form";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -17,6 +17,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { RefreshCw } from "lucide-react";
 
 type MissedCheckpoint = {
   id: string;
@@ -323,21 +324,25 @@ export default function NotificationsPage() {
         <AdminNav />
 
         <Card className="drainer-card">
-          <CardHeader className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 pb-2">
-            <CardTitle className="text-sm">
-              Data Validation
-            </CardTitle>
-            <Button
-              variant="outline"
-              size="sm"
-              className="min-h-[44px]"
-              onClick={loadAllValidation}
-              disabled={inconsistenciesLoading || duplicatesLoading || nearToleranceLoading || deflectionTrendLoading}
-            >
-              {inconsistenciesLoading || duplicatesLoading || nearToleranceLoading || deflectionTrendLoading ? "Loading…" : "Refresh"}
-            </Button>
-          </CardHeader>
-          <CardContent>
+          <CardContent className="pt-0">
+            <div className="flex items-start justify-between gap-4">
+              <div className="drainer-title">Data validation</div>
+              <Button
+                variant="outline"
+                size="sm"
+                className="min-h-[44px] min-w-[44px] shrink-0 rounded-full bg-[var(--card-bg)] border-0 hover:bg-[var(--surface)]"
+                onClick={loadAllValidation}
+                disabled={inconsistenciesLoading || duplicatesLoading || nearToleranceLoading || deflectionTrendLoading}
+                title="Refresh"
+              >
+                {inconsistenciesLoading || duplicatesLoading || nearToleranceLoading || deflectionTrendLoading ? (
+                  <RefreshCw className="size-4 animate-spin" />
+                ) : (
+                  <RefreshCw className="size-4" />
+                )}
+              </Button>
+            </div>
+            <div className="mt-4">
             {inconsistenciesLoading ? (
               <p className="text-sm text-[var(--muted-foreground)] py-4">
                 Loading…
@@ -354,11 +359,11 @@ export default function NotificationsPage() {
                     className="rounded-xl border border-[var(--border)] bg-white p-4 shadow-sm"
                   >
                     <div className="flex items-center justify-between gap-2 mb-2">
-                      <span>{inc.type === "gap" ? "🔴 Gap" : "🟡 Overlap"}</span>
+                      <span className={inc.type === "gap" ? "text-[var(--danger)] font-medium" : "text-[var(--warning)] font-medium"}>{inc.type === "gap" ? "Gap" : "Overlap"}</span>
                       <span className="text-sm font-medium">Record #{inc.record_from_counter ?? "—"}</span>
                     </div>
                     <p className="text-sm mb-2">
-                      CH {inc.ch_from.toLocaleString("en-AU", { minimumFractionDigits: 2 })} → {inc.ch_to.toLocaleString("en-AU", { minimumFractionDigits: 2 })} · <span className={inc.type === "gap" ? "text-red-600 font-medium" : "text-amber-600 font-medium"}>{inc.diff.toLocaleString("en-AU", { minimumFractionDigits: 1 })}m</span>
+                      CH {inc.ch_from.toLocaleString("en-AU", { minimumFractionDigits: 2 })} → {inc.ch_to.toLocaleString("en-AU", { minimumFractionDigits: 2 })} · <span className={inc.type === "gap" ? "text-[var(--danger)] font-medium" : "text-[var(--warning)] font-medium"}>{inc.diff.toLocaleString("en-AU", { minimumFractionDigits: 1 })}m</span>
                     </p>
                     <p className="text-xs text-[var(--muted-foreground)] mb-3">
                       {inc.type === "gap" ? "Possible missing record between these chainages." : "Possible duplicate or incorrect chainage entry."}
@@ -367,7 +372,7 @@ export default function NotificationsPage() {
                       <Button variant="outline" size="sm" className="min-h-[44px] flex-1 md:flex-initial" onClick={() => openViewRecord(inc)}>
                         View Record
                       </Button>
-                      <Button variant="outline" size="sm" className="min-h-[44px] text-red-600 hover:bg-red-50 flex-1 md:flex-initial" onClick={() => openDeleteConfirm(inc)}>
+                      <Button variant="outline" size="sm" className="min-h-[44px] flex-1 md:flex-initial" onClick={() => openDeleteConfirm(inc)}>
                         Delete
                       </Button>
                     </div>
@@ -383,7 +388,7 @@ export default function NotificationsPage() {
                 onClick={() => setDupOpen((o) => !o)}
               >
                 <span>{dupOpen ? "▼" : "▶"}</span>
-                <span>⚠️ Duplicate Pipe IDs</span>
+                <span>Duplicated pipe IDs</span>
                 {!duplicatesLoading && (
                   <Badge variant="secondary" className="text-xs">
                     {duplicatesData.reduce((s, sec) => s + (sec.duplicates?.length ?? 0), 0)}
@@ -435,7 +440,7 @@ export default function NotificationsPage() {
                 onClick={() => setNearOpen((o) => !o)}
               >
                 <span>{nearOpen ? "▼" : "▶"}</span>
-                <span>📐 Near-Tolerance Deflections</span>
+                <span>Near-tolerance deflections</span>
                 {!nearToleranceLoading && (
                   <Badge variant="secondary" className="text-xs">
                     {nearToleranceData.reduce((s, sec) => s + (sec.records?.length ?? 0), 0)}
@@ -454,8 +459,8 @@ export default function NotificationsPage() {
                         (sec.records ?? []).map((r) => (
                           <div key={r.id} className="rounded-xl border border-[var(--border)] bg-white p-4 shadow-sm">
                             <div className="flex items-center justify-between gap-2 mb-2">
-                              <span className={r.level === "critical" ? "text-red-600 font-medium" : "text-amber-600 font-medium"}>
-                                {r.level === "critical" ? "🔴 Critical" : "🟡 Warning"}
+                              <span className={r.level === "critical" ? "text-[var(--danger)] font-medium" : "text-[var(--warning)] font-medium"}>
+                                {r.level === "critical" ? "Critical" : "Warning"}
                               </span>
                               <span className="text-sm font-medium">Record #{r.counter ?? "—"}</span>
                             </div>
@@ -486,7 +491,7 @@ export default function NotificationsPage() {
                 onClick={() => setTrendOpen((o) => !o)}
               >
                 <span>{trendOpen ? "▼" : "▶"}</span>
-                <span>📈 Deflection Trends</span>
+                <span>Deflection trends</span>
                 {!deflectionTrendLoading && (
                   <Badge variant="secondary" className="text-xs">
                     {deflectionTrendData.reduce((s, sec) => s + (sec.trends?.length ?? 0), 0)}
@@ -547,17 +552,25 @@ export default function NotificationsPage() {
                 </div>
               )}
             </div>
+            </div>
           </CardContent>
         </Card>
 
         <Card className="drainer-card">
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm">Missed Checkpoint Alerts</CardTitle>
-            <Button variant="outline" size="sm" onClick={loadMissed}>
-              Refresh
-            </Button>
-          </CardHeader>
-          <CardContent>
+          <CardContent className="pt-0">
+            <div className="flex items-start justify-between gap-4">
+              <div className="drainer-title">Missed checkpoint alerts</div>
+              <Button
+                variant="outline"
+                size="sm"
+                className="min-h-[44px] min-w-[44px] shrink-0 rounded-full bg-[var(--card-bg)] border-0 hover:bg-[var(--surface)]"
+                onClick={loadMissed}
+                title="Refresh"
+              >
+                <RefreshCw className="size-4" />
+              </Button>
+            </div>
+            <div className="mt-4">
             <p className="text-xs text-[var(--muted-foreground)] mb-3">
               Active checkpoints that did not trigger an alert because the
               current CH already passed the point.
@@ -579,7 +592,7 @@ export default function NotificationsPage() {
                   <tbody>
                     {missed.map((m) => (
                       <tr key={m.id} className="border-b border-[var(--border)]/50">
-                        <td className="py-2 px-2 font-medium whitespace-nowrap">{m.name}</td>
+                        <td className="py-2 px-2 font-medium whitespace-nowrap">{m.name ? m.name.charAt(0).toUpperCase() + m.name.slice(1).toLowerCase() : ""}</td>
                         <td className="py-2 px-2 whitespace-nowrap">{m.ch.toLocaleString("en-AU", { minimumFractionDigits: 2 })}</td>
                         <td className="py-2 px-2 whitespace-nowrap">{m.detected_at_ch.toLocaleString("en-AU", { minimumFractionDigits: 2 })}</td>
                       </tr>
@@ -588,6 +601,7 @@ export default function NotificationsPage() {
                 </table>
               </div>
             )}
+            </div>
           </CardContent>
         </Card>
       </div>

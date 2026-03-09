@@ -96,7 +96,7 @@ export function AuthPanel({ onAuthChange }: AuthPanelProps) {
 
   if (currentEmail) {
     return (
-      <div className="flex items-center justify-between gap-3 rounded-[12px] bg-[var(--surface-2)] px-3 py-2 text-xs text-[var(--muted-foreground)]">
+      <div className="flex items-center justify-between gap-3 text-xs text-[var(--muted-foreground)]">
         <span>Signed in as {currentEmail}</span>
         <Button
           type="button"
@@ -112,10 +112,7 @@ export function AuthPanel({ onAuthChange }: AuthPanelProps) {
   }
 
   return (
-    <div className="grid gap-2 rounded-[12px] bg-[var(--surface-2)] p-3">
-      <p className="text-xs font-semibold uppercase text-[var(--muted-foreground)]">
-        Sign in
-      </p>
+    <div className="mt-2 grid gap-2">
       <Input
         className="drainer-input h-9 text-[16px] md:text-xs"
         value={email}
@@ -123,11 +120,6 @@ export function AuthPanel({ onAuthChange }: AuthPanelProps) {
         placeholder="Email"
         type="email"
       />
-      {!email.trim() && (
-        <p className="text-[11px] text-[var(--muted-foreground)]">
-          Enter your email above then click Forgot password?
-        </p>
-      )}
       <Input
         className="drainer-input h-9 text-[16px] md:text-xs"
         value={password}
@@ -137,7 +129,7 @@ export function AuthPanel({ onAuthChange }: AuthPanelProps) {
       />
       <Button
         type="button"
-        className="drainer-button drainer-button-primary h-9 text-xs"
+        className="drainer-button drainer-button-primary drainer-button-lodge h-9 text-xs"
         onClick={handleSignIn}
         disabled={loading || !email || !password}
       >
@@ -147,7 +139,7 @@ export function AuthPanel({ onAuthChange }: AuthPanelProps) {
         type="button"
         onClick={handleForgotPassword}
         disabled={recoveryLoading || !email}
-        className="text-xs text-[var(--muted-foreground)] underline hover:no-underline disabled:opacity-50"
+        className="text-xs text-[#B8682A] underline hover:no-underline disabled:opacity-50"
       >
         Forgot password?
       </button>

@@ -58,9 +58,9 @@ export default function RootLayout({
                   className="inline-flex items-center gap-1 align-middle -translate-y-[2px]"
                 >
                   <img
-                    src="https://raw.githubusercontent.com/federonco/readx-assets/main/readX%20blue.png"
+                    src="/readX_orange.png"
                     alt="readX"
-                    className="h-[14px]"
+                    className="h-[10px]"
                   />
                 </a>{" "}
                 — APA Quality Management Systems — All Rights Reserved
