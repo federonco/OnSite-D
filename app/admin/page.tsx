@@ -12,7 +12,6 @@ import {
   getITRProgress,
   groupRecordsIntoITRs,
 } from "@/lib/drainer";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
@@ -358,12 +357,9 @@ export default function AdminPage() {
       <div className="drainer-page">
         <div className="drainer-shell">
           <div className="drainer-header">
-            <h1 className="drainer-title text-xl">Drainer Admin</h1>
+            <h1 className="drainer-title text-xl">Admin sign in</h1>
             <AuthPanel onAuthChange={setAuthEmail} />
           </div>
-          <p className="text-sm text-[var(--muted-foreground)] mt-4">
-            Sign in to access admin.
-          </p>
         </div>
       </div>
     );
@@ -374,7 +370,7 @@ export default function AdminPage() {
       <div className="drainer-page">
         <div className="drainer-shell">
           <div className="drainer-header">
-            <h1 className="drainer-title text-xl">Drainer Admin</h1>
+            <h1 className="drainer-title text-xl">Admin sign in</h1>
             <AuthPanel onAuthChange={setAuthEmail} />
           </div>
           <p className="text-sm text-[var(--muted-foreground)] mt-4">
@@ -392,7 +388,7 @@ export default function AdminPage() {
           <div className="flex items-center justify-between">
             <h1 className="drainer-title text-xl">Drainer Admin Center</h1>
             <Link href="/">
-              <Button variant="ghost" size="sm">
+              <Button variant="ghost" size="sm" className="h-9 text-xs">
                 Back to Lodge
               </Button>
             </Link>
@@ -402,11 +398,10 @@ export default function AdminPage() {
 
         <AdminNav />
 
-        <Card className="drainer-card h-[90px] gap-2 py-2">
-          <CardHeader className="pb-0">
-            <CardTitle className="text-sm">Section</CardTitle>
-          </CardHeader>
-          <CardContent className="flex flex-1 items-center gap-2 pt-0">
+        <Card className="drainer-card">
+          <CardContent className="pt-0">
+            <div className="drainer-title">Section</div>
+            <div className="mt-2 flex items-center gap-2">
             <Select
               value={sectionId || undefined}
               onValueChange={setSectionId}
@@ -424,7 +419,7 @@ export default function AdminPage() {
             </Select>
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button variant="outline" size="sm" className="min-h-[44px] min-w-[44px] px-0">
+                <Button variant="outline" size="sm" className="min-h-[44px] min-w-[44px] px-0 bg-[var(--card-bg)] border-0 hover:bg-[var(--surface)]">
                   ⋮
                 </Button>
               </DropdownMenuTrigger>
@@ -440,47 +435,46 @@ export default function AdminPage() {
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
+            </div>
           </CardContent>
         </Card>
 
         {selectedSection && (
           <Card className="drainer-card">
             <CardHeader className="pb-2">
-              <CardTitle className="text-sm">
-                {selectedSection.name} — ITR Reports
-              </CardTitle>
-              <div className="flex items-center gap-2 mt-2 flex-wrap">
-                <Link href={`/admin/records/${sectionId}`}>
-                  <Button variant="outline" size="sm" className="min-h-[44px] px-4 text-sm">
-                    View records
-                  </Button>
-                </Link>
-                <Badge className="rounded-full bg-[#16a34a] px-2 py-0.5 text-[10px] font-semibold text-white">
-                  Ready {progress.completeITRs}
-                </Badge>
-                <Badge className="rounded-full bg-[#f59e0b] px-2 py-0.5 text-[10px] font-semibold text-white">
-                  Open {progress.currentOpenCount > 0 ? 1 : 0}
-                </Badge>
+              <div className="flex items-start justify-between gap-4">
+                <div className="min-w-0 flex-1">
+                  <CardTitle className="text-sm">
+                    {selectedSection.name} — ITR Reports
+                  </CardTitle>
+                  <div className="flex items-center gap-2 mt-4 flex-wrap">
+                    <Link href={`/admin/records/${sectionId}`}>
+                      <Button variant="outline" size="sm" className="min-h-[44px] px-4 text-sm">
+                        View records
+                      </Button>
+                    </Link>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="min-h-[44px] px-4 text-sm border-0 drainer-button-accent"
+                      onClick={() => openReportModal("audit", {})}
+                      disabled={!sectionId || printingAudit}
+                    >
+                      {printingAudit ? (
+                        <>
+                          <Loader2 className="h-3 w-3 animate-spin shrink-0 mr-1" />
+                          Sending…
+                        </>
+                      ) : (
+                        "Print audit"
+                      )}
+                    </Button>
+                  </div>
+                </div>
                 <Button
                   variant="outline"
                   size="sm"
-                  className="min-h-[44px] px-4 text-sm"
-                  onClick={() => openReportModal("audit", {})}
-                  disabled={!sectionId || printingAudit}
-                >
-                  {printingAudit ? (
-                    <>
-                      <Loader2 className="h-3 w-3 animate-spin shrink-0 mr-1" />
-                      Sending…
-                    </>
-                  ) : (
-                    "Print Audit"
-                  )}
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  className="min-h-[44px] min-w-[44px] shrink-0 rounded-full"
+                  className="min-h-[44px] min-w-[44px] shrink-0 rounded-full bg-[var(--card-bg)] border-0 hover:bg-[var(--surface)]"
                   onClick={loadRecords}
                   title="Refresh"
                 >
@@ -489,9 +483,17 @@ export default function AdminPage() {
               </div>
             </CardHeader>
             <CardContent className="space-y-3">
-              <p className="text-xs text-[var(--muted-foreground)]">
-                Records: {records.length}
-              </p>
+              <div className="flex items-center gap-2">
+                <p className="text-xs font-bold text-[var(--muted-foreground)]">
+                  Records: {records.length}
+                </p>
+                <span className="drainer-badge-orange">
+                  Ready {progress.completeITRs}
+                </span>
+                <span className="drainer-badge-orange">
+                  Open {progress.currentOpenCount > 0 ? 1 : 0}
+                </span>
+              </div>
               <div className="flex justify-between text-xs text-[var(--muted-foreground)] mb-1">
                 <span>ITR progress</span>
                 <span>{progress.percent}%</span>
@@ -507,7 +509,7 @@ export default function AdminPage() {
                   {itrBlocks.map((block) => (
                     <div
                       key={block.index}
-                      className="flex items-center justify-between rounded-[20px] bg-[var(--surface)] px-4 py-3 shadow-[0_1px_4px_rgba(0,0,0,0.06)]"
+                      className="drainer-admin-report-card"
                     >
                       <div>
                         <p className="text-xs text-[var(--muted-foreground)]">
@@ -517,10 +519,10 @@ export default function AdminPage() {
                         <p className="mt-1 text-xs text-[var(--muted-foreground)]">
                           Status:{" "}
                           <span
-                            className={`inline-flex rounded-full px-2 py-0.5 text-[10px] font-semibold text-white ${
+                            className={`inline-flex rounded-[var(--radius)] px-2 py-0.5 text-xs font-semibold ${
                               block.status === "READY"
-                                ? "bg-[#16a34a]"
-                                : "bg-[#f59e0b]"
+                                ? "drainer-badge-orange"
+                                : "drainer-badge-orange"
                             }`}
                           >
                             {block.status === "READY"
@@ -536,7 +538,7 @@ export default function AdminPage() {
                             </div>
                             <div className="h-2 w-full overflow-hidden rounded-full bg-[var(--surface-alt)]">
                               <div
-                                className="h-full rounded-full bg-[#f59e0b]"
+                                className="h-full rounded-full bg-[#8B6A53]"
                                 style={{ width: `${block.progressPercent}%` }}
                               />
                             </div>
@@ -547,7 +549,7 @@ export default function AdminPage() {
                         <Button
                           variant="outline"
                           size="sm"
-                          className="min-h-[44px] px-4 text-sm border-0 text-white shadow-[0_4px_14px_rgba(22,163,74,0.35)] disabled:opacity-80 bg-[#16a34a]"
+                          className="min-h-[44px] px-4 text-sm border-0 drainer-button-accent"
                           onClick={() =>
                             openReportModal("itr-complete", {
                               itrIndex: block.index,
@@ -568,7 +570,7 @@ export default function AdminPage() {
                         <Button
                           variant="outline"
                           size="sm"
-                          className="min-h-[44px] px-4 text-sm border-0 text-white shadow-[0_4px_14px_rgba(245,158,11,0.35)] disabled:opacity-80 bg-[#f59e0b]"
+                          className="min-h-[44px] px-4 text-sm border-0 drainer-button-accent"
                           onClick={() =>
                             openReportModal("itr-open", {
                               itrIndex: block.index,

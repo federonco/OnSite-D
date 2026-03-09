@@ -25,7 +25,7 @@ export function AdminNav() {
             href={href}
             className={`text-sm font-medium px-4 py-3 min-h-[44px] flex items-center rounded-md ${
               isActive
-                ? "bg-[var(--primary)] text-white"
+                ? "bg-[#B8682A] text-white"
                 : "text-[var(--muted-foreground)] hover:bg-[var(--surface-alt)]"
             }`}
           >

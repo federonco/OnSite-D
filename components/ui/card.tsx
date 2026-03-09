@@ -3,11 +3,13 @@ import * as React from "react";
 import { cn } from "@/lib/utils";
 
 function Card({ className, ...props }: React.ComponentProps<"div">) {
+  const isDrainerCard = className?.includes?.("drainer-card");
   return (
     <div
       data-slot="card"
       className={cn(
-        "bg-card text-card-foreground flex flex-col gap-6 rounded-[28px] py-6 shadow-[var(--shadow)]",
+        "bg-card text-card-foreground flex flex-col gap-[var(--card-title-gap)] rounded-[var(--radius)] shadow-[var(--shadow)]",
+        !isDrainerCard && "py-[var(--card-padding)]",
         className
       )}
       {...props}

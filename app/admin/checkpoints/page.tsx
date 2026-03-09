@@ -6,9 +6,8 @@ import { AuthPanel } from "@/components/auth-panel";
 import { useToast } from "@/components/toast";
 import { getSupabaseBrowser } from "@/lib/supabase/browser";
 import { AdminNav } from "@/components/admin-nav";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import {
   Dialog,
   DialogContent,
@@ -24,15 +23,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Pencil, Printer, Trash2 } from "lucide-react";
 import { Loader2 } from "lucide-react";
-
-const TYPE_COLORS: Record<string, string> = {
-  Fitting: "bg-blue-500 text-white",
-  Structural: "bg-orange-500 text-white",
-  Warning: "bg-red-500 text-white",
-  Info: "bg-gray-500 text-white",
-};
 
 const EXPIRED_DAYS = 14;
 
@@ -66,7 +57,7 @@ export default function CheckpointsPage() {
   const [isAdmin, setIsAdmin] = useState<boolean | null>(null);
   const [checkpoints, setCheckpoints] = useState<Checkpoint[]>([]);
   const [sections, setSections] = useState<Section[]>([]);
-  const [printSectionId, setPrintSectionId] = useState<string>("");
+  const [printSectionId, setPrintSectionId] = useState<string>("all");
   const [maxCh, setMaxCh] = useState<number | null>(null);
   const [modalOpen, setModalOpen] = useState(false);
   const [modalMode, setModalMode] = useState<"create" | "edit">("create");
@@ -289,7 +280,7 @@ export default function CheckpointsPage() {
           Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify({
-          section_id: printSectionId || null,
+          section_id: (printSectionId && printSectionId !== "all") ? printSectionId : null,
         }),
       });
       if (!res.ok) throw new Error("Failed to generate PDF");
@@ -368,18 +359,18 @@ export default function CheckpointsPage() {
         <AdminNav />
 
         <Card className="drainer-card">
-          <CardHeader className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 pb-2">
-            <CardTitle className="text-sm">Route checkpoints</CardTitle>
-            <div className="flex flex-wrap items-center gap-2">
+          <CardContent className="pt-0">
+            <div className="drainer-title">Route checkpoints</div>
+            <div className="mt-2 flex flex-wrap items-center gap-2">
               <Select
                 value={printSectionId}
                 onValueChange={setPrintSectionId}
               >
-                <SelectTrigger className="w-[140px] h-9 text-xs">
+                <SelectTrigger className="w-[180px] h-9 text-xs">
                   <SelectValue placeholder="Section" />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">All Sections</SelectItem>
+                  <SelectItem value="all">All Sections</SelectItem>
                   {sections.map((s) => (
                     <SelectItem key={s.id} value={s.id}>
                       {s.name}
@@ -387,29 +378,24 @@ export default function CheckpointsPage() {
                   ))}
                 </SelectContent>
               </Select>
+              <Button size="sm" onClick={openCreate} className="min-h-[44px] px-4 border-0 bg-[#E8D2BF] text-[var(--ink)] hover:bg-[#DDC7B0]">
+                Add
+              </Button>
               <Button
                 variant="outline"
                 size="sm"
-                className="min-h-[44px] px-4"
+                className="min-h-[44px] px-4 border-0 drainer-button-accent"
                 onClick={handlePrintCheckpointRecord}
                 disabled={printing}
               >
                 {printing ? (
                   <Loader2 className="size-4 animate-spin" />
                 ) : (
-                  <>
-                    <Printer className="size-4 mr-1" />
-                    Print Record
-                  </>
+                  "Print Record"
                 )}
               </Button>
-              <Button size="sm" onClick={openCreate} className="drainer-button drainer-button-primary min-h-[44px] px-4">
-                Add
-              </Button>
             </div>
-          </CardHeader>
-          <CardContent>
-            <p className="text-sm text-[var(--muted-foreground)] mb-4">
+            <p className="text-xs text-[var(--muted-foreground)] mt-6 mb-4">
               Current max CH: {maxCh != null ? maxCh.toLocaleString("en-AU", { minimumFractionDigits: 2 }) : "—"}
             </p>
             {checkpoints.length === 0 ? (
@@ -421,45 +407,43 @@ export default function CheckpointsPage() {
                 {checkpoints.map((cp) => {
                   const statusBadge =
                     cp.active === false
-                      ? <Badge variant="secondary" className="shrink-0">Inactive</Badge>
+                      ? <span className="drainer-badge-orange shrink-0">Inactive</span>
                       : cp.active && cp.notified
-                        ? <Badge className="bg-blue-500 text-white shrink-0">Notified ✓</Badge>
-                        : <Badge className="bg-green-500 text-white shrink-0">Active</Badge>;
+                        ? <span className="drainer-badge-orange shrink-0">Notified ✓</span>
+                        : <span className="drainer-badge-orange shrink-0">Active</span>;
                   return (
                     <div
                       key={cp.id}
                       className="rounded-xl border border-[var(--border)] bg-white p-4 shadow-sm"
                     >
                       <div className="flex items-start justify-between gap-2 mb-3">
-                        <span className="font-bold text-base">{cp.name}</span>
+                        <span className="font-bold text-sm">{cp.name}</span>
                         {statusBadge}
                       </div>
                       <div className="flex items-center gap-2 mb-3">
-                        <span className="text-lg font-semibold">CH {Number(cp.ch).toLocaleString("en-AU", { minimumFractionDigits: 2 })}</span>
-                        <Badge className={`text-xs ${TYPE_COLORS[cp.type] ?? "bg-gray-500 text-white"}`}>
+                        <span className="text-sm font-semibold">CH {Number(cp.ch).toLocaleString("en-AU", { minimumFractionDigits: 2 })}</span>
+                        <span className="drainer-badge-orange">
                           {cp.type}
-                        </Badge>
+                        </span>
                       </div>
                       {cp.alert_email && (
-                        <p className="text-sm text-[var(--muted-foreground)] mb-3">Alert to: {cp.alert_email}</p>
+                        <p className="text-xs text-[var(--muted-foreground)] mb-3">Alert to: {cp.alert_email}</p>
                       )}
                       <div className="flex flex-wrap gap-2">
                         <Button
                           variant="outline"
                           size="sm"
-                          className="min-h-[44px] min-w-[44px] px-4"
+                          className="min-h-[44px] px-4"
                           onClick={() => openEdit(cp)}
                         >
-                          <Pencil className="size-4 mr-1" />
                           Edit
                         </Button>
                         <Button
                           variant="outline"
                           size="sm"
-                          className="min-h-[44px] min-w-[44px] px-4 text-destructive hover:bg-destructive/10"
+                          className="min-h-[44px] px-4"
                           onClick={() => handleDelete(cp.id)}
                         >
-                          <Trash2 className="size-4 mr-1" />
                           Delete
                         </Button>
                         {cp.notified && (
