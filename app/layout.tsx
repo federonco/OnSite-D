@@ -58,7 +58,7 @@ export default function RootLayout({
                   className="inline-flex items-center gap-1 align-middle -translate-y-[2px]"
                 >
                   <img
-                    src="/readX_orange.png"
+                    src="/readx-logo.png"
                     alt="readX"
                     className="h-[10px]"
                   />
