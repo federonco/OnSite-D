@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useToast } from "@/components/toast";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -65,7 +65,9 @@ export function RecordEditForm({
 }: RecordEditFormProps) {
   const { pushToast } = useToast();
   const [loading, setLoading] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   const [record, setRecord] = useState<PipeRecord | null>(null);
+  const [isDuplicateChainage, setIsDuplicateChainage] = useState(false);
   const [dateInstalled, setDateInstalled] = useState("");
   const [timeInstalled, setTimeInstalled] = useState("");
   const [chainage, setChainage] = useState("");
@@ -121,8 +123,41 @@ export function RecordEditForm({
     load();
   }, [open, recordId, getAccessToken, pushToast]);
 
+  const checkDuplicateChainage = useCallback(async () => {
+    const sectionId = record?.section_id;
+    if (!sectionId || !chainage || !recordId) {
+      setIsDuplicateChainage(false);
+      return;
+    }
+    const ch = Number(chainage);
+    if (!Number.isFinite(ch)) {
+      setIsDuplicateChainage(false);
+      return;
+    }
+    try {
+      const token = await getAccessToken();
+      const res = await fetch(
+        `/api/drainer/records/check-duplicate?sectionId=${sectionId}&chainage=${ch}&excludeRecordId=${recordId}`,
+        { headers: token ? { Authorization: `Bearer ${token}` } : {} }
+      );
+      const data = await res.json();
+      setIsDuplicateChainage(!!data.duplicate);
+    } catch {
+      setIsDuplicateChainage(false);
+    }
+  }, [record?.section_id, chainage, recordId, getAccessToken]);
+
+  useEffect(() => {
+    if (!record?.section_id || !chainage) {
+      setIsDuplicateChainage(false);
+      return;
+    }
+    const timer = setTimeout(checkDuplicateChainage, 400);
+    return () => clearTimeout(timer);
+  }, [record?.section_id, chainage, checkDuplicateChainage]);
+
   const handleSave = async () => {
-    if (!recordId) return;
+    if (!recordId || isDuplicateChainage) return;
     setLoading(true);
     try {
       const token = await getAccessToken();
@@ -176,6 +211,42 @@ export function RecordEditForm({
     }
   };
 
+  const handleDelete = async () => {
+    if (
+      !recordId ||
+      !window.confirm(
+        "Are you sure you want to delete this record? This action cannot be undone."
+      )
+    )
+      return;
+    setDeleting(true);
+    try {
+      const token = await getAccessToken();
+      if (!token) {
+        pushToast({ type: "error", title: "Sign in required" });
+        setDeleting(false);
+        return;
+      }
+      const res = await fetch(`/api/drainer/records/${recordId}`, {
+        method: "DELETE",
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? "Delete failed");
+      pushToast({ type: "success", title: "Record deleted" });
+      onSaved();
+      onClose();
+    } catch (err) {
+      pushToast({
+        type: "error",
+        title: "Delete failed",
+        message: err instanceof Error ? err.message : "Unknown error",
+      });
+    } finally {
+      setDeleting(false);
+    }
+  };
+
   return (
     <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
       <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
@@ -217,8 +288,14 @@ export function RecordEditForm({
                 type="number"
                 value={chainage}
                 onChange={(e) => setChainage(e.target.value)}
-                className="drainer-input"
+                className={`drainer-input ${isDuplicateChainage ? "!border-red-500 !bg-red-50" : ""}`}
+                aria-invalid={!!isDuplicateChainage}
               />
+              {isDuplicateChainage && (
+                <p className="mt-1 text-xs font-bold text-red-500">
+                  A record at Ch {chainage} already exists for this location.
+                </p>
+              )}
             </div>
             <div>
               <label className="drainer-label block mb-1">Pipe No / Fitting ID</label>
@@ -360,13 +437,27 @@ export function RecordEditForm({
           </div>
         </div>
 
-        <DialogFooter>
-          <Button variant="outline" onClick={onClose} className="min-h-[44px]">
-            Cancel
+        <DialogFooter className="flex-col-reverse sm:flex-row sm:justify-between">
+          <Button
+            variant="destructive"
+            onClick={handleDelete}
+            disabled={loading || deleting || !recordId}
+            className="min-h-[44px] mr-auto"
+          >
+            {deleting ? "Deleting..." : "Delete"}
           </Button>
-          <Button onClick={handleSave} disabled={loading} className="min-h-[44px]">
-            {loading ? "Saving..." : "Save"}
-          </Button>
+          <div className="flex gap-2">
+            <Button variant="outline" onClick={onClose} className="min-h-[44px]">
+              Cancel
+            </Button>
+            <Button
+              onClick={handleSave}
+              disabled={loading || isDuplicateChainage}
+              className="min-h-[44px]"
+            >
+              {loading ? "Saving..." : "Save"}
+            </Button>
+          </div>
         </DialogFooter>
       </DialogContent>
     </Dialog>

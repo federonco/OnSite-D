@@ -355,6 +355,11 @@ export function LodgeForm({
               {chainageError}
             </p>
           )}
+          {isDuplicate && !chainageError && (
+            <p className="mt-1 text-xs font-bold text-red-500">
+              A record at Ch {chainage} already exists for this location.
+            </p>
+          )}
         </CardContent>
       </Card>
 
