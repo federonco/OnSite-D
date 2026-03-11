@@ -59,7 +59,7 @@ export function LastPipesView({
                 key={r.id}
                 className="flex justify-between items-center text-sm py-1 border-b border-[var(--border)] last:border-0"
               >
-                <span className="font-mono text-xs">
+                <span className="font-mono text-xs drainer-nums-plain-zero">
                   Ch {r.chainage.toLocaleString("en-AU", { minimumFractionDigits: 2 })}
                 </span>
                 <span className="font-mono text-xs truncate max-w-[140px]" title={r.pipe_fitting_id ?? ""}>

@@ -334,6 +334,12 @@ body {
     background: var(--inner-bg);
     border-color: var(--input-border);
   }
+
+  /* Numeric display: tabular nums, plain zero (no diagonal slash) */
+  .drainer-nums-plain-zero {
+    font-variant-numeric: tabular-nums;
+    font-feature-settings: "tnum" 1, "zero" 0;
+  }
 }
 
 /* Lodge button - outside layer for higher specificity over Tailwind */

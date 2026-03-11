@@ -14,6 +14,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Loader2, CheckCircle2, XCircle } from "lucide-react";
 import { getSupabaseBrowser } from "@/lib/supabase/browser";
 
 const JOINT_TYPES = [
@@ -155,7 +156,7 @@ export function LodgeForm({
   const vInvalid = vMm > 50;
   const hInvalid = hMm > 100;
 
-  const showCpLugs = jointType === "RRJ";
+  const showCpLugs = jointType === "RRJ" || jointType === "Transition";
 
   useEffect(() => {
     if (!showCpLugs) setCpLugs(false);
@@ -314,7 +315,7 @@ export function LodgeForm({
               value={chainage}
               onChange={(e) => handleChainageChange(e.target.value)}
               onBlur={handleChainageBlur}
-              className={`drainer-input tabular-nums pr-14 pl-14 text-center ${
+              className={`drainer-input drainer-nums-plain-zero pr-14 pl-14 text-center ${
                 isDuplicate || chainageError ? "!border-red-500 !bg-red-50" : ""
               } ${isDuplicate ? "text-red-500" : ""}`}
               aria-invalid={!!chainageError || !!isDuplicate}
@@ -349,14 +350,31 @@ export function LodgeForm({
               +
             </Button>
           </div>
+          <div className="mt-1.5 flex items-center gap-1.5 text-xs">
+            {chainageStatus === "checking" && (
+              <>
+                <Loader2 className="size-3.5 shrink-0 animate-spin text-[var(--muted-foreground)]" />
+                <span className="text-[var(--muted-foreground)]">Checking</span>
+              </>
+            )}
+            {chainageStatus === "clear" && chainage && (
+              <>
+                <CheckCircle2 className="size-3.5 shrink-0 text-green-600" />
+                <span className="text-green-600">OK</span>
+              </>
+            )}
+            {chainageStatus === "exists" && (
+              <>
+                <XCircle className="size-3.5 shrink-0 text-red-500" />
+                <span className="font-bold text-red-500 drainer-nums-plain-zero">
+                  A record at Ch {chainage} already exists for this location.
+                </span>
+              </>
+            )}
+          </div>
           {chainageError && (
             <p id="chainage-error" className="mt-1 text-xs font-bold text-red-500">
               {chainageError}
-            </p>
-          )}
-          {isDuplicate && !chainageError && (
-            <p className="mt-1 text-xs font-bold text-red-500">
-              A record at Ch {chainage} already exists for this location.
             </p>
           )}
         </CardContent>
@@ -417,7 +435,7 @@ export function LodgeForm({
                 placeholder="0"
                 value={deflectionVMm}
                 onChange={(e) => setDeflectionVMm(e.target.value)}
-                className="drainer-input flex-1"
+                className="drainer-input drainer-nums-plain-zero flex-1"
               />
             </div>
             {vInvalid && (
@@ -448,7 +466,7 @@ export function LodgeForm({
                 placeholder="0"
                 value={deflectionHMm}
                 onChange={(e) => setDeflectionHMm(e.target.value)}
-                className="drainer-input flex-1"
+                className="drainer-input drainer-nums-plain-zero flex-1"
               />
             </div>
             {hInvalid && (
