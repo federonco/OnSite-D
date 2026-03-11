@@ -32,6 +32,8 @@ type LodgeFormProps = {
   sectionId: string;
   onSectionChange: (id: string) => void;
   onSuccess?: () => void;
+  /** Initial chainage from QR/deep-link (triggers validation on load) */
+  initialCh?: string | null;
   /** Show kebab menu (Create/Edit/Audit/Print) - admin only */
   showKebabMenu?: boolean;
   onCreateSection?: () => void;
@@ -57,6 +59,7 @@ export function LodgeForm({
   sectionId,
   onSectionChange,
   onSuccess,
+  initialCh,
   showKebabMenu = false,
   onCreateSection,
   onEditSection,
@@ -85,7 +88,6 @@ export function LodgeForm({
   const [cementLiner, setCementLiner] = useState(false);
   const [sparkTesting, setSparkTesting] = useState(false);
   const [cpLugs, setCpLugs] = useState(false);
-  const [jointAirTest, setJointAirTest] = useState(false);
 
   const getAccessToken = useCallback(async () => {
     const { data } = await supabase.auth.getSession();
@@ -123,6 +125,12 @@ export function LodgeForm({
   }, [sectionId, chainage, getAccessToken]);
 
   useEffect(() => {
+    if (initialCh != null && initialCh !== "" && sectionId) {
+      setChainage(initialCh);
+    }
+  }, [initialCh, sectionId]);
+
+  useEffect(() => {
     if (!chainage) {
       setChainageStatus("idle");
       setIsDuplicate(false);
@@ -148,12 +156,10 @@ export function LodgeForm({
   const hInvalid = hMm > 100;
 
   const showCpLugs = jointType === "RRJ";
-  const showJointAirTest = jointType === "RRJ" || jointType === "WR";
 
   useEffect(() => {
     if (!showCpLugs) setCpLugs(false);
-    if (!showJointAirTest) setJointAirTest(false);
-  }, [showCpLugs, showJointAirTest]);
+  }, [showCpLugs]);
 
   const allChecklistChecked =
     witnessMark &&
@@ -161,8 +167,7 @@ export function LodgeForm({
     ovalityCheck &&
     cementLiner &&
     sparkTesting &&
-    (showCpLugs ? cpLugs : true) &&
-    (showJointAirTest ? jointAirTest : true);
+    (showCpLugs ? cpLugs : true);
 
   const isFormValid =
     !!sectionId &&
@@ -173,6 +178,7 @@ export function LodgeForm({
     !!jointType &&
     !vInvalid &&
     !hInvalid &&
+    chainageStatus !== "checking" &&
     !isDuplicate &&
     allChecklistChecked;
 
@@ -193,7 +199,6 @@ export function LodgeForm({
     setCementLiner(false);
     setSparkTesting(false);
     setCpLugs(false);
-    setJointAirTest(false);
   }, []);
 
   const handleSubmit = async () => {
@@ -208,18 +213,12 @@ export function LodgeForm({
     setLoading(true);
     try {
       const token = await getAccessToken();
-      if (!token) {
-        pushToast({ type: "error", title: "Sign in required" });
-        setLoading(false);
-        return;
-      }
-
       const ch = Number(chainage);
       const res = await fetch("/api/drainer/records", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
         },
         body: JSON.stringify({
           section_id: sectionId,
@@ -235,7 +234,7 @@ export function LodgeForm({
           deflection_h_mm: hMm,
           cp_lugs: showCpLugs ? cpLugs : null,
           ovality_check: ovalityCheck,
-          joint_air_test: showJointAirTest ? jointAirTest : null,
+          joint_air_test: null,
           cement_liner: cementLiner,
           spark_testing: sparkTesting,
         }),
@@ -505,16 +504,6 @@ export function LodgeForm({
                         set: setCpLugs,
                         label:
                           "CP lugs installed @12 O'clock & Lead Connected",
-                      },
-                    ]
-                  : []),
-                ...(showJointAirTest
-                  ? [
-                      {
-                        id: "air",
-                        checked: jointAirTest,
-                        set: setJointAirTest,
-                        label: "Joint Air Test (80kPa, 2 min)",
                       },
                     ]
                   : []),

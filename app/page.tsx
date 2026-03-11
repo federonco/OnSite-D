@@ -2,7 +2,9 @@
 
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { LodgeForm } from "@/components/lodge-form";
+import { LastPipesView } from "@/components/last-pipes-view";
 import { Button } from "@/components/ui/button";
 
 type Section = {
@@ -11,9 +13,14 @@ type Section = {
 };
 
 export default function Home() {
+  const searchParams = useSearchParams();
   const [sections, setSections] = useState<Section[]>([]);
   const [sectionId, setSectionId] = useState("");
   const [loading, setLoading] = useState(true);
+  const [lastPipesRefresh, setLastPipesRefresh] = useState(0);
+
+  const urlSection = searchParams.get("section");
+  const urlCh = searchParams.get("ch");
 
   const loadSections = useCallback(async () => {
     const res = await fetch("/api/drainer/sections");
@@ -21,15 +28,16 @@ export default function Home() {
     if (data.sections) {
       setSections(data.sections);
       setSectionId((prev) => {
-        const next = data.sections.find((s: Section) => s.id === prev)?.id;
+        const fromUrl = urlSection && data.sections.find((s: Section) => s.id === urlSection)?.id;
+        const next = fromUrl ?? data.sections.find((s: Section) => s.id === prev)?.id;
         return next ?? (data.sections[0]?.id ?? "");
       });
     }
-  }, []);
+  }, [urlSection]);
 
   useEffect(() => {
     loadSections().finally(() => setLoading(false));
-  }, [loadSections]);
+  }, [loadSections, urlSection]);
 
   useEffect(() => {
     const onFocus = () => loadSections();
@@ -61,11 +69,16 @@ export default function Home() {
             No sections yet. Create one in Admin.
           </p>
         ) : (
-          <LodgeForm
-            sections={sections}
-            sectionId={sectionId}
-            onSectionChange={setSectionId}
-          />
+          <>
+            <LodgeForm
+              sections={sections}
+              sectionId={sectionId}
+              onSectionChange={setSectionId}
+              initialCh={urlCh}
+              onSuccess={() => setLastPipesRefresh((k) => k + 1)}
+            />
+            <LastPipesView sectionId={sectionId} refreshTrigger={lastPipesRefresh} />
+          </>
         )}
       </div>
     </div>

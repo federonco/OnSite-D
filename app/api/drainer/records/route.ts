@@ -14,6 +14,8 @@ export async function GET(request: NextRequest) {
   const recordFromId = searchParams.get("recordFromId");
   const recordToId = searchParams.get("recordToId");
   const context = Math.min(10, Math.max(0, parseInt(searchParams.get("context") ?? "2", 10)));
+  const limitParam = searchParams.get("limit");
+  const limit = limitParam ? Math.min(100, Math.max(1, parseInt(limitParam, 10))) : null;
 
   const { token } = await getUserFromRequest(request);
   const supabase = token
@@ -22,11 +24,21 @@ export async function GET(request: NextRequest) {
 
   const useContext = !!(recordFromId && recordToId);
 
-  const { data: records, error } = await supabase
+  let query = supabase
     .from("drainer_pipe_records")
     .select("*")
-    .eq("section_id", sectionId)
-    .order("chainage", { ascending: useContext });
+    .eq("section_id", sectionId);
+
+  if (limit) {
+    query = query
+      .order("date_installed", { ascending: false })
+      .order("chainage", { ascending: false })
+      .limit(limit);
+  } else {
+    query = query.order("chainage", { ascending: useContext });
+  }
+
+  const { data: records, error } = await query;
 
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 });
@@ -51,10 +63,10 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
-  const { user, token } = await getUserFromRequest(request);
-  if (!user || !token) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
+  const { token } = await getUserFromRequest(request);
+  const supabaseForInsert = token
+    ? getSupabaseServer({ accessToken: token })
+    : getSupabaseServer({ useServiceRole: true });
 
   const body = await request.json();
   const {
@@ -102,8 +114,6 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  const supabase = getSupabaseServer({ accessToken: token });
-
   const record = {
     section_id,
     date_installed: date_installed || null,
@@ -127,7 +137,7 @@ export async function POST(request: NextRequest) {
     ai_insight: ai_insight || null,
   };
 
-  const { data, error } = await supabase
+  const { data, error } = await supabaseForInsert
     .from("drainer_pipe_records")
     .insert(record)
     .select("id,chainage,pipe_fitting_id,joint_type,date_installed")

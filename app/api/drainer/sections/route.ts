@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getUserFromRequest } from "@/lib/api-auth";
 import { getSupabaseServer } from "@/lib/supabase/server";
+import { sendSectionQREmail } from "@/lib/section-qr-email";
 
 export async function GET(request: NextRequest) {
   const { token } = await getUserFromRequest(request);
@@ -50,6 +51,15 @@ export async function POST(request: NextRequest) {
 
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 });
+  }
+
+  const adminEmail = user.email?.trim();
+  if (adminEmail && data) {
+    sendSectionQREmail({
+      sectionId: data.id,
+      sectionName: data.name,
+      recipientEmail: adminEmail,
+    }).catch((err) => console.error("Section QR email failed:", err));
   }
 
   return NextResponse.json({ section: data });

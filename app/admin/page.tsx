@@ -85,6 +85,9 @@ export default function AdminPage() {
   } | null>(null);
   const [reportEmail, setReportEmail] = useState("");
   const [reportDefaultEmail, setReportDefaultEmail] = useState("");
+  const [sendQROpen, setSendQROpen] = useState(false);
+  const [sendQREmail, setSendQREmail] = useState("");
+  const [sendingQR, setSendingQR] = useState(false);
 
   const getAccessToken = useCallback(async () => {
     const { data } = await supabase.auth.getSession();
@@ -260,6 +263,42 @@ export default function AdminPage() {
       });
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleSendQR = async () => {
+    if (!sectionId || !sendQREmail.trim()) return;
+    setSendingQR(true);
+    try {
+      const token = await getAccessToken();
+      if (!token) throw new Error("Sign in required");
+      const res = await fetch("/api/drainer/sections/send-qr", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          sectionId,
+          recipientEmail: sendQREmail.trim(),
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? "Send failed");
+      pushToast({
+        type: "success",
+        title: "QR sent",
+        message: `PDF sent to ${sendQREmail.trim()}`,
+      });
+      setSendQROpen(false);
+    } catch (err) {
+      pushToast({
+        type: "error",
+        title: "Send failed",
+        message: err instanceof Error ? err.message : "Unknown error",
+      });
+    } finally {
+      setSendingQR(false);
     }
   };
 
@@ -468,6 +507,18 @@ export default function AdminPage() {
                       ) : (
                         "Print audit"
                       )}
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="min-h-[44px] px-4 text-sm"
+                      onClick={() => {
+                        setSendQREmail(reportDefaultEmail || authEmail || "");
+                        setSendQROpen(true);
+                      }}
+                      disabled={!sectionId}
+                    >
+                      Send QR
                     </Button>
                   </div>
                 </div>
@@ -682,6 +733,34 @@ export default function AdminPage() {
             </Button>
             <Button onClick={handleSave} disabled={loading}>
               {loading ? "Saving…" : "Save"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={sendQROpen} onOpenChange={setSendQROpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Send QR to</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            <Input
+              type="email"
+              placeholder="Email address"
+              value={sendQREmail}
+              onChange={(e) => setSendQREmail(e.target.value)}
+              className="drainer-input"
+            />
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setSendQROpen(false)}>
+              Cancel
+            </Button>
+            <Button
+              onClick={handleSendQR}
+              disabled={!sendQREmail.trim() || sendingQR}
+            >
+              {sendingQR ? "Sending…" : "Send"}
             </Button>
           </DialogFooter>
         </DialogContent>
