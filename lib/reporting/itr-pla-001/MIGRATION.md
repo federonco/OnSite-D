@@ -79,8 +79,20 @@ Page No shows **"1 of 1"** for completed ITRs and **"In Progress"** for open ITR
 - **Notes:** `page-break-before: avoid` keeps them attached; with 9 rows they stay on page 1.
 - **Table breaks:** `page-break-inside: avoid` on `.table-wrap` discourages mid-table breaks; `thead` repeats if break occurs.
 
-## Known limitations
+## Serverless PDF generation (puppeteer-core + @sparticuz/chromium)
 
-- **Puppeteer in serverless**: Full `puppeteer` may fail on Vercel/lambda. For serverless, use `puppeteer-core` + `@sparticuz/chromium` and `executablePath`.
+**Why standard Puppeteer fails in production:** Full `puppeteer` bundles and expects a local Chrome installation. In Vercel/serverless, there is no filesystem Chrome; the API fails with "Could not find Chrome (ver. X)".
+
+**Why puppeteer-core + @sparticuz/chromium is required:**
+- `puppeteer-core` does not download Chromium; you supply `executablePath`
+- `@sparticuz/chromium` provides a Chromium binary optimized for serverless (Vercel, AWS Lambda)
+- In production, `chromium.executablePath()` returns the path to the bundled binary
+- In local dev, set `CHROME_EXECUTABLE_PATH` in `.env.local` to use system Chrome, or let `@sparticuz/chromium` download on first run
+
+**Environment notes:**
+- **Vercel:** Works out of the box with `puppeteer-core` + `@sparticuz/chromium`
+- **Local dev:** Optional `CHROME_EXECUTABLE_PATH` (e.g. `C:\Program Files\Google\Chrome\Application\chrome.exe`) for faster startup
+
+## Known limitations
 - **Fonts**: Uses system Arial; for exact target match, add `@font-face` with Arimo/Arial.
 - **Multi-page**: API enforces 9 rows per PDF; multi-page output is not generated.

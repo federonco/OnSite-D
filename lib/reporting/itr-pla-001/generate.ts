@@ -2,17 +2,32 @@
  * ITR-PLA-001 PDF generation via Puppeteer (HTML/CSS → PDF).
  * Replaces React-PDF for print-first technical report fidelity.
  * Max 9 rows per page — see config.ITR_MAX_ROWS.
+ *
+ * Uses puppeteer-core + @sparticuz/chromium for serverless (Vercel) compatibility.
+ * Local dev: set CHROME_EXECUTABLE_PATH to use system Chrome, or let @sparticuz/chromium
+ * download Chromium on first run.
  */
 
 import path from "path";
 import fs from "fs";
-import puppeteer from "puppeteer";
+import puppeteer from "puppeteer-core";
+import chromium from "@sparticuz/chromium";
 import { buildHtml } from "./template";
 import { ITR_MAX_ROWS } from "./config";
 import type { SectionInfo } from "./types";
 import type { RecordRow } from "./mapper";
 
 const LOGO_URL = "https://raw.githubusercontent.com/federonco/readx-assets/main/Alkimos_logo.png";
+
+/** Disable WebGL for serverless (saves memory; PDF generation does not need it) */
+chromium.setGraphicsMode = false;
+
+/** Resolve Chromium executable path: local override or serverless bundle */
+async function getChromiumExecutablePath(): Promise<string> {
+  const override = process.env.CHROME_EXECUTABLE_PATH?.trim();
+  if (override) return override;
+  return chromium.executablePath();
+}
 
 async function fetchLogoDataUrl(): Promise<string | null> {
   try {
@@ -69,12 +84,15 @@ export async function generateITRPla001Pdf(
     logoDataUrl,
   });
 
-  const browser = await puppeteer.launch({
-    headless: true,
-    args: ["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage"],
-  });
-
+  let browser;
   try {
+    const executablePath = await getChromiumExecutablePath();
+    browser = await puppeteer.launch({
+      args: chromium.args,
+      executablePath,
+      headless: true,
+    });
+
     const page = await browser.newPage();
     await page.setContent(html, { waitUntil: "networkidle0" });
     const pdfBuffer = await page.pdf({
@@ -85,7 +103,6 @@ export async function generateITRPla001Pdf(
       preferCSSPageSize: false,
       scale: 0.98,
     });
-    await browser.close();
 
     const safeName = (section.name ?? "section").replace(/\s+/g, "-");
     return {
@@ -93,8 +110,7 @@ export async function generateITRPla001Pdf(
       contentType: "application/pdf",
       fileName: `ITR-PLA-001_${safeName}_ITR-${pageNumber}_${Date.now()}.pdf`,
     };
-  } catch (err) {
-    await browser.close();
-    throw err;
+  } finally {
+    if (browser) await browser.close();
   }
 }

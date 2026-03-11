@@ -41,7 +41,7 @@ export async function POST(request: NextRequest) {
 
   const { data: section, error: sectionError } = await supabase
     .from("drainer_sections")
-    .select("id,name,project_name,project_number")
+    .select("id,name,project_name,project_number,direction,start_ch,end_ch")
     .eq("id", sectionId)
     .single();
 
@@ -60,10 +60,11 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: recordsError.message }, { status: 500 });
   }
 
-  const { buffer, fileName } = await generateAuditReportPdf(
+  const { buffer, fileName } = await generateAuditReportPdf({
     section,
-    records ?? []
-  );
+    records: records ?? [],
+    generatedBy: user?.email ?? undefined,
+  });
 
   if (!hasEmailConfig()) {
     return NextResponse.json(

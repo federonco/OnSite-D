@@ -8,39 +8,254 @@ import {
   Image,
   renderToBuffer,
 } from "@react-pdf/renderer";
-
-const styles = StyleSheet.create({
-  page: { padding: 20, fontSize: 7 },
-  header: { marginBottom: 12 },
-  title: { fontSize: 12, fontWeight: "bold" },
-  meta: { fontSize: 8, marginTop: 4 },
-  table: { display: "flex", width: "auto", borderStyle: "solid", borderWidth: 1 },
-  row: { flexDirection: "row" },
-  headerRow: { flexDirection: "row", minHeight: 18 },
-  dataRow: { flexDirection: "row", minHeight: 14 },
-  cell: { borderStyle: "solid", borderWidth: 0.5, padding: 2, flexGrow: 1 },
-  headerCell: { backgroundColor: "#e5e7eb", fontWeight: "bold" },
-  footer: {
-    position: "absolute",
-    bottom: 16,
-    left: 20,
-    right: 20,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 4,
-  },
-  footerText: { fontSize: 6, color: "#666" },
-  logo: { height: 14 },
-});
+import { computeAuditSummary, type AuditSummary } from "./audit-summary";
 
 const LOGO_URL =
   "https://raw.githubusercontent.com/federonco/readx-assets/main/readX%20blue.png";
+
+/* Neutral QA/audit style: restrained, professional */
+const palette = {
+  black: "#1a1a1a",
+  greyDark: "#374151",
+  grey: "#6b7280",
+  greyLight: "#9ca3af",
+  greyBg: "#f3f4f6",
+  greyBorder: "#e5e7eb",
+  white: "#ffffff",
+};
+
+const styles = StyleSheet.create({
+  page: {
+    padding: 24,
+    fontSize: 8,
+    fontFamily: "Helvetica",
+  },
+
+  /* Title block */
+  titleBlock: {
+    marginBottom: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: palette.greyBorder,
+    paddingBottom: 10,
+  },
+  titleMain: {
+    fontSize: 14,
+    fontWeight: "bold",
+    color: palette.black,
+    letterSpacing: 0.5,
+  },
+  titleSub: {
+    fontSize: 9,
+    color: palette.grey,
+    marginTop: 2,
+  },
+
+  /* Metadata block */
+  metaBlock: {
+    backgroundColor: palette.greyBg,
+    borderWidth: 0.5,
+    borderColor: palette.greyBorder,
+    padding: 10,
+    marginBottom: 12,
+  },
+  metaGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+  },
+  metaItem: {
+    width: "33.33%",
+    marginBottom: 4,
+    flexDirection: "row",
+  },
+  metaLabel: {
+    fontSize: 7,
+    color: palette.grey,
+    width: 70,
+    flexShrink: 0,
+  },
+  metaValue: {
+    fontSize: 8,
+    color: palette.black,
+    fontWeight: "normal",
+  },
+
+  /* Audit summary block */
+  summaryBlock: {
+    marginBottom: 12,
+    borderWidth: 0.5,
+    borderColor: palette.greyBorder,
+  },
+  summaryHeader: {
+    backgroundColor: palette.greyBg,
+    padding: 6,
+    borderBottomWidth: 0.5,
+    borderBottomColor: palette.greyBorder,
+  },
+  summaryHeaderText: {
+    fontSize: 9,
+    fontWeight: "bold",
+    color: palette.black,
+  },
+  summaryGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+  },
+  summaryCard: {
+    width: "25%",
+    padding: 8,
+    borderRightWidth: 0.5,
+    borderBottomWidth: 0.5,
+    borderColor: palette.greyBorder,
+  },
+  summaryCardLast: {
+    borderRightWidth: 0,
+  },
+  summaryCardLabel: {
+    fontSize: 7,
+    color: palette.grey,
+    marginBottom: 2,
+  },
+  summaryCardValue: {
+    fontSize: 10,
+    fontWeight: "bold",
+    color: palette.black,
+  },
+  summaryBreakdown: {
+    width: "100%",
+    padding: 8,
+    borderTopWidth: 0.5,
+    borderColor: palette.greyBorder,
+    flexDirection: "row",
+  },
+  breakdownItem: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+  },
+  breakdownLabel: {
+    fontSize: 7,
+    color: palette.grey,
+  },
+  breakdownValue: {
+    fontSize: 8,
+    fontWeight: "bold",
+    color: palette.black,
+  },
+  breakdownZero: {
+    fontSize: 8,
+    color: palette.greyLight,
+  },
+
+  /* Table */
+  table: {
+    borderWidth: 0.5,
+    borderColor: palette.greyBorder,
+    marginBottom: 16,
+  },
+  tableGroupHeader: {
+    flexDirection: "row",
+    backgroundColor: palette.greyDark,
+  },
+  tableGroupHeaderCell: {
+    padding: 4,
+    fontSize: 7,
+    fontWeight: "bold",
+    color: palette.white,
+    borderRightWidth: 0.5,
+    borderColor: "rgba(255,255,255,0.3)",
+  },
+  tableHeaderRow: {
+    flexDirection: "row",
+    backgroundColor: palette.greyBg,
+    borderBottomWidth: 0.5,
+    borderColor: palette.greyBorder,
+  },
+  tableHeaderCell: {
+    padding: 5,
+    fontSize: 7,
+    fontWeight: "bold",
+    color: palette.black,
+    borderRightWidth: 0.5,
+    borderColor: palette.greyBorder,
+  },
+  tableHeaderCellLast: {
+    borderRightWidth: 0,
+  },
+  tableHeaderPipeChecks: {
+    padding: 5,
+    fontSize: 7,
+    fontWeight: "bold",
+    color: palette.black,
+    backgroundColor: "#eaeaea",
+    borderRightWidth: 0.5,
+    borderColor: palette.greyBorder,
+    textAlign: "center",
+  },
+  tableDataRow: {
+    flexDirection: "row",
+    borderBottomWidth: 0.5,
+    borderColor: palette.greyBorder,
+  },
+  tableDataRowZebra: {
+    backgroundColor: palette.greyBg,
+  },
+  tableDataCell: {
+    padding: 4,
+    fontSize: 7,
+    color: palette.black,
+    borderRightWidth: 0.5,
+    borderColor: palette.greyBorder,
+  },
+  tableDataCellLast: {
+    borderRightWidth: 0,
+  },
+  tableDataCellCenter: {
+    textAlign: "center",
+  },
+  tableDataCellFail: {
+    fontWeight: "bold",
+    color: palette.black,
+  },
+  tableDataCellAlign: {
+    fontSize: 6.5,
+  },
+
+  /* Footer */
+  footer: {
+    position: "absolute",
+    bottom: 16,
+    left: 24,
+    right: 24,
+    flexDirection: "column",
+    alignItems: "center",
+    justifyContent: "center",
+    borderTopWidth: 0.5,
+    borderTopColor: palette.greyBorder,
+    paddingTop: 8,
+  },
+  footerLine1: {
+    fontSize: 7,
+    color: palette.grey,
+    marginBottom: 2,
+  },
+  footerLine2: {
+    fontSize: 6,
+    color: palette.greyLight,
+  },
+  logo: {
+    height: 12,
+    marginBottom: 4,
+  },
+});
 
 type SectionInfo = {
   name: string;
   project_name: string | null;
   project_number: string | null;
+  direction?: string | null;
+  start_ch?: number | null;
+  end_ch?: number | null;
 };
 
 type RecordRow = {
@@ -62,22 +277,22 @@ type RecordRow = {
   inspector_name: string | null;
 };
 
-const HEADERS = [
-  "Date",
-  "Ch",
-  "Pipe ID",
-  "Joint",
-  "Witness",
-  "Seal",
-  "Alignment",
-  "CP",
-  "Ovality",
-  "Air",
-  "Cement",
-  "Spark",
-  "Inspector",
+/* Column config: [label, width, alignCenter, isPipeCheck] */
+const COLUMNS: Array<[string, number, boolean, boolean]> = [
+  ["Date", 32, false, false],
+  ["Ch", 28, false, false],
+  ["Pipe ID", 52, false, false],
+  ["Joint", 28, false, false],
+  ["Witness", 24, true, false],
+  ["Seal", 24, true, false],
+  ["Alignment", 58, false, false],
+  ["CP", 18, true, true],
+  ["Ovality", 22, true, true],
+  ["Air", 18, true, true],
+  ["Cement", 24, true, true],
+  ["Spark", 22, true, true],
+  ["Inspector", 56, false, false],
 ];
-const COL_WIDTHS = [36, 28, 40, 24, 24, 24, 56, 20, 24, 20, 24, 24, 48];
 
 function formatDate(d: string | null) {
   if (!d) return "";
@@ -85,7 +300,7 @@ function formatDate(d: string | null) {
     return new Date(d).toLocaleDateString("en-AU", {
       day: "2-digit",
       month: "2-digit",
-      year: "2-digit",
+      year: "numeric",
     });
   } catch {
     return d;
@@ -97,165 +312,173 @@ function formatAlignment(r: RecordRow) {
   const vMm = r.deflection_v_mm ?? 0;
   const hSide = r.deflection_h_side ?? "L";
   const hMm = r.deflection_h_mm ?? 0;
-  return `V: ${vSign}${vMm} / H: ${hSide}${hMm}`;
+  return `V: ${vSign}${vMm}  H: ${hSide}${hMm}`;
 }
 
-function yn(val: boolean | null | undefined) {
+function yn(val: boolean | null | undefined): "Y" | "N" | "" {
   if (val == null) return "";
   return val ? "Y" : "N";
 }
 
+function getChainageRange(records: RecordRow[]): string {
+  if (records.length === 0) return "—";
+  const min = Math.min(...records.map((r) => r.chainage));
+  const max = Math.max(...records.map((r) => r.chainage));
+  return `${min.toLocaleString("en-AU", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} → ${max.toLocaleString("en-AU", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+}
+
 const Footer = () => (
   <View style={styles.footer} fixed>
-    <Text style={styles.footerText}>Created by</Text>
     <Image src={LOGO_URL} style={styles.logo} />
-    <Text style={styles.footerText}>
-      — APA Quality Management Systems — All Rights Reserved
-    </Text>
+    <Text style={styles.footerLine1}>Generated by OnSite QA System</Text>
+    <Text style={styles.footerLine2}>Audit report — Raw Pipe Records</Text>
+    <Text style={styles.footerLine2}>APA Quality Management Systems</Text>
   </View>
 );
 
-export async function generateAuditReportPdf(
-  section: SectionInfo,
-  records: RecordRow[]
-) {
+export type AuditReportParams = {
+  section: SectionInfo;
+  records: RecordRow[];
+  generatedBy?: string | null;
+};
+
+export async function generateAuditReportPdf(params: AuditReportParams) {
+  const { section, records, generatedBy } = params;
+  const summary = computeAuditSummary(records);
+  const chainageRange = getChainageRange(records);
+  const generatedDate = new Date().toLocaleDateString("en-AU", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+
   const doc = (
     <Document>
       <Page size="A4" orientation="landscape" style={styles.page}>
-        <View style={styles.header}>
-          <Text style={styles.title}>Section Audit — Raw Records</Text>
-          <View style={styles.meta}>
-            <Text>Section: {section.name}</Text>
-            <Text>Project: {section.project_name ?? ""} ({section.project_number ?? ""})</Text>
-            <Text>Total records: {records.length}</Text>
+        {/* 1. Title block */}
+        <View style={styles.titleBlock}>
+          <Text style={styles.titleMain}>SECTION AUDIT REPORT</Text>
+          <Text style={styles.titleSub}>Raw Pipe Installation Records</Text>
+        </View>
+
+        {/* 2. Metadata block */}
+        <View style={styles.metaBlock}>
+          <View style={styles.metaGrid}>
+            <View style={styles.metaItem}>
+              <Text style={styles.metaLabel}>Project</Text>
+              <Text style={styles.metaValue}>
+                {section.project_name ?? "—"}
+                {section.project_number ? ` (${section.project_number})` : ""}
+              </Text>
+            </View>
+            <View style={styles.metaItem}>
+              <Text style={styles.metaLabel}>Section</Text>
+              <Text style={styles.metaValue}>{section.name}</Text>
+            </View>
+            <View style={styles.metaItem}>
+              <Text style={styles.metaLabel}>Direction</Text>
+              <Text style={styles.metaValue}>
+                {section.direction ? String(section.direction) : "—"}
+              </Text>
+            </View>
+            <View style={styles.metaItem}>
+              <Text style={styles.metaLabel}>Chainage range</Text>
+              <Text style={styles.metaValue}>{chainageRange}</Text>
+            </View>
+            <View style={styles.metaItem}>
+              <Text style={styles.metaLabel}>Total records</Text>
+              <Text style={styles.metaValue}>{records.length}</Text>
+            </View>
+            <View style={styles.metaItem}>
+              <Text style={styles.metaLabel}>Generated</Text>
+              <Text style={styles.metaValue}>{generatedDate}</Text>
+            </View>
+            <View style={styles.metaItem}>
+              <Text style={styles.metaLabel}>Generated by</Text>
+              <Text style={styles.metaValue}>{generatedBy ?? "—"}</Text>
+            </View>
           </View>
         </View>
 
+        {/* 3. Audit summary block */}
+        <View style={styles.summaryBlock}>
+          <View style={styles.summaryHeader}>
+            <Text style={styles.summaryHeaderText}>Audit Summary</Text>
+          </View>
+          <View style={styles.summaryGrid}>
+            <View style={styles.summaryCard}>
+              <Text style={styles.summaryCardLabel}>Total records</Text>
+              <Text style={styles.summaryCardValue}>{summary.total}</Text>
+            </View>
+            <View style={[styles.summaryCard, styles.summaryCardLast]}>
+              <Text style={styles.summaryCardLabel}>All checks passed</Text>
+              <Text style={styles.summaryCardValue}>{summary.allPassed}</Text>
+            </View>
+            <View style={styles.summaryCard}>
+              <Text style={styles.summaryCardLabel}>With issues</Text>
+              <Text style={styles.summaryCardValue}>{summary.withIssues}</Text>
+            </View>
+            <View style={[styles.summaryCard, styles.summaryCardLast]}>
+              <Text style={styles.summaryCardLabel}>Pass rate</Text>
+              <Text style={styles.summaryCardValue}>{summary.passRatePct}%</Text>
+            </View>
+          </View>
+          <View style={styles.summaryBreakdown}>
+            <FailureBreakdown summary={summary} />
+          </View>
+        </View>
+
+        {/* 4. Raw records table */}
         <View style={styles.table}>
-          <View style={styles.headerRow}>
-            {HEADERS.map((label, idx) => (
-              <Text
-                key={label}
-                style={[
-                  styles.cell,
-                  styles.headerCell,
-                  {
-                    width: COL_WIDTHS[idx],
-                    flexGrow: idx === 6 ? 1 : 0,
-                    flexShrink: 0,
-                  },
-                ]}
-              >
-                {label}
-              </Text>
-            ))}
+          {/* Grouped header: Pipe Checks spans 5 columns */}
+          <View style={styles.tableGroupHeader}>
+            <Text
+              style={[styles.tableGroupHeaderCell, { width: 246 }]}
+            >
+              Pipe Details
+            </Text>
+            <Text
+              style={[styles.tableGroupHeaderCell, { width: 104 }]}
+            >
+              Pipe Checks
+            </Text>
+            <Text
+              style={[styles.tableGroupHeaderCell, { width: 56, borderRightWidth: 0 }]}
+            >
+              Inspector
+            </Text>
+          </View>
+          <View style={styles.tableHeaderRow}>
+            {COLUMNS.map(([label, width], i) => {
+              const isPipeCheck = COLUMNS[i][3];
+              const center = COLUMNS[i][2];
+              const last = i === COLUMNS.length - 1;
+              return (
+                <Text
+                  key={label}
+                  style={[
+                    isPipeCheck ? styles.tableHeaderPipeChecks : styles.tableHeaderCell,
+                    { width },
+                    ...(center ? [styles.tableDataCellCenter] : []),
+                    ...(last ? [styles.tableHeaderCellLast] : []),
+                  ]}
+                >
+                  {label}
+                </Text>
+              );
+            })}
           </View>
           {records.map((r, idx) => (
-            <View key={idx} style={styles.dataRow}>
-              <Text
-                style={[
-                  styles.cell,
-                  { width: COL_WIDTHS[0], flexGrow: 0, flexShrink: 0 },
-                ]}
-              >
-                {formatDate(r.date_installed)}
-              </Text>
-              <Text
-                style={[
-                  styles.cell,
-                  { width: COL_WIDTHS[1], flexGrow: 0, flexShrink: 0 },
-                ]}
-              >
-                {String(r.chainage)}
-              </Text>
-              <Text
-                style={[
-                  styles.cell,
-                  { width: COL_WIDTHS[2], flexGrow: 0, flexShrink: 0 },
-                ]}
-              >
-                {r.pipe_fitting_id ?? ""}
-              </Text>
-              <Text
-                style={[
-                  styles.cell,
-                  { width: COL_WIDTHS[3], flexGrow: 0, flexShrink: 0 },
-                ]}
-              >
-                {r.joint_type ?? ""}
-              </Text>
-              <Text
-                style={[
-                  styles.cell,
-                  { width: COL_WIDTHS[4], flexGrow: 0, flexShrink: 0 },
-                ]}
-              >
-                {yn(r.witness_mark)}
-              </Text>
-              <Text
-                style={[
-                  styles.cell,
-                  { width: COL_WIDTHS[5], flexGrow: 0, flexShrink: 0 },
-                ]}
-              >
-                {yn(r.internal_seal)}
-              </Text>
-              <Text
-                style={[
-                  styles.cell,
-                  { width: COL_WIDTHS[6], flexGrow: 1, flexShrink: 0 },
-                ]}
-              >
-                {formatAlignment(r)}
-              </Text>
-              <Text
-                style={[
-                  styles.cell,
-                  { width: COL_WIDTHS[7], flexGrow: 0, flexShrink: 0 },
-                ]}
-              >
-                {yn(r.cp_lugs)}
-              </Text>
-              <Text
-                style={[
-                  styles.cell,
-                  { width: COL_WIDTHS[8], flexGrow: 0, flexShrink: 0 },
-                ]}
-              >
-                {yn(r.ovality_check)}
-              </Text>
-              <Text
-                style={[
-                  styles.cell,
-                  { width: COL_WIDTHS[9], flexGrow: 0, flexShrink: 0 },
-                ]}
-              >
-                {yn(r.joint_air_test)}
-              </Text>
-              <Text
-                style={[
-                  styles.cell,
-                  { width: COL_WIDTHS[10], flexGrow: 0, flexShrink: 0 },
-                ]}
-              >
-                {yn(r.cement_liner)}
-              </Text>
-              <Text
-                style={[
-                  styles.cell,
-                  { width: COL_WIDTHS[11], flexGrow: 0, flexShrink: 0 },
-                ]}
-              >
-                {yn(r.spark_testing)}
-              </Text>
-              <Text
-                style={[
-                  styles.cell,
-                  { width: COL_WIDTHS[12], flexGrow: 0, flexShrink: 0 },
-                ]}
-              >
-                {r.inspector_name ?? ""}
-              </Text>
+            <View
+              key={idx}
+              style={[
+                styles.tableDataRow,
+                ...(idx % 2 === 1 ? [styles.tableDataRowZebra] : []),
+              ]}
+            >
+              <TableDataCells record={r} columns={COLUMNS} />
             </View>
           ))}
         </View>
@@ -272,4 +495,94 @@ export async function generateAuditReportPdf(
     contentType: "application/pdf",
     fileName: `audit_${safeName}_${Date.now()}.pdf`,
   };
+}
+
+function FailureBreakdown({ summary }: { summary: AuditSummary }) {
+  const items: Array<{ label: string; value: number }> = [
+    { label: "CP", value: summary.failures.cp },
+    { label: "Ovality", value: summary.failures.ovality },
+    { label: "Air", value: summary.failures.air },
+    { label: "Cement", value: summary.failures.cement },
+    { label: "Spark", value: summary.failures.spark },
+  ];
+  return (
+    <>
+      {items.map(({ label, value }) => (
+        <View key={label} style={styles.breakdownItem}>
+          <Text style={styles.breakdownLabel}>{label}:</Text>
+          <Text
+            style={
+              value > 0 ? styles.breakdownValue : styles.breakdownZero
+            }
+          >
+            {value}
+          </Text>
+        </View>
+      ))}
+    </>
+  );
+}
+
+function TableDataCells({
+  record: r,
+  columns,
+}: {
+  record: RecordRow;
+  columns: Array<[string, number, boolean, boolean]>;
+}) {
+  const values: (string | number)[] = [
+    formatDate(r.date_installed),
+    r.chainage,
+    r.pipe_fitting_id ?? "",
+    r.joint_type ?? "",
+    yn(r.witness_mark),
+    yn(r.internal_seal),
+    formatAlignment(r),
+    yn(r.cp_lugs),
+    yn(r.ovality_check),
+    yn(r.joint_air_test),
+    yn(r.cement_liner),
+    yn(r.spark_testing),
+    r.inspector_name ?? "",
+  ];
+
+  const isFail = (val: string | number, colIdx: number): boolean => {
+    if (val !== "N") return false;
+    const [label] = columns[colIdx];
+    if (label === "CP") return (r.joint_type ?? "").toString().toUpperCase() === "RRJ";
+    if (label === "Ovality" || label === "Cement" || label === "Spark")
+      return true;
+    if (label === "Air") {
+      const jt = (r.joint_type ?? "").toString().toUpperCase();
+      return jt === "RRJ" || jt === "WR";
+    }
+    if (label === "Witness" || label === "Seal") return true;
+    return false;
+  };
+
+  return (
+    <>
+      {columns.map(([, width, alignCenter, _], i) => {
+        const val = values[i];
+        const fail = isFail(val, i);
+        const isAlign = columns[i][0] === "Alignment";
+        const last = i === columns.length - 1;
+        return (
+          <Text
+            key={i}
+            style={[
+              styles.tableDataCell,
+              { width },
+              ...(alignCenter ? [styles.tableDataCellCenter] : []),
+              ...(last ? [styles.tableDataCellLast] : []),
+              ...(fail ? [styles.tableDataCellFail] : []),
+              ...(isAlign ? [styles.tableDataCellAlign] : []),
+            ]}
+          >
+            {String(val)}
+          </Text>
+        );
+      })}
+    </>
+  );
 }

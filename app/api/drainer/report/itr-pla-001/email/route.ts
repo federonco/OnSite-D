@@ -92,11 +92,14 @@ export async function POST(request: NextRequest) {
     buffer = result.buffer;
     fileName = result.fileName;
   } catch (pdfErr) {
-    console.error("ITR PDF generation failed", pdfErr);
     const msg = pdfErr instanceof Error ? pdfErr.message : "PDF generation failed";
+    console.error("[ITR-PLA-001] PDF generation failed:", msg, pdfErr);
     const isValidation = msg.includes("maximum of") && msg.includes("rows");
+    const userMessage = isValidation
+      ? msg
+      : "PDF generation failed. If deploying to serverless, ensure puppeteer-core and @sparticuz/chromium are used.";
     return NextResponse.json(
-      { error: msg },
+      { error: userMessage },
       { status: isValidation ? 400 : 500 }
     );
   }
@@ -147,9 +150,10 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({ ok: true, message: "Email sent" });
   } catch (err) {
-    console.error("ITR email failed", err);
+    const msg = err instanceof Error ? err.message : "Email send failed";
+    console.error("[ITR-PLA-001] Email send failed after PDF generation:", msg, err);
     return NextResponse.json(
-      { error: err instanceof Error ? err.message : "Email failed" },
+      { error: "Email failed. PDF was generated but could not be sent." },
       { status: 500 }
     );
   }

@@ -23,7 +23,7 @@ export async function GET(request: NextRequest) {
 
   const { data: section, error: sectionError } = await supabase
     .from("drainer_sections")
-    .select("id,name,project_name,project_number")
+    .select("id,name,project_name,project_number,direction,start_ch,end_ch")
     .eq("id", sectionId)
     .single();
 
@@ -42,10 +42,11 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: recordsError.message }, { status: 500 });
   }
 
-  const { buffer, contentType, fileName } = await generateAuditReportPdf(
+  const { buffer, contentType, fileName } = await generateAuditReportPdf({
     section,
-    records ?? []
-  );
+    records: records ?? [],
+    generatedBy: user?.email ?? undefined,
+  });
 
   const pdfBody: BodyInit =
     buffer instanceof Buffer ? new Uint8Array(buffer) : (buffer as unknown as BodyInit);

@@ -79,8 +79,12 @@ export async function POST(request: NextRequest) {
     fileName = result.fileName;
   } catch (err) {
     const msg = err instanceof Error ? err.message : "PDF generation failed";
+    console.error("[ITR-PLA-001] PDF generation failed:", msg, err);
     const isValidation = msg.includes("maximum of") && msg.includes("rows");
-    return NextResponse.json({ error: msg }, { status: isValidation ? 400 : 500 });
+    const userMessage = isValidation
+      ? msg
+      : "PDF generation failed. If deploying to serverless, ensure puppeteer-core and @sparticuz/chromium are used.";
+    return NextResponse.json({ error: userMessage }, { status: isValidation ? 400 : 500 });
   }
 
   const pdfBody: BodyInit =
