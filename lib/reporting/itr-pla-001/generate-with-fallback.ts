@@ -29,7 +29,8 @@ export async function generateITRPla001PdfWithFallback(
   totalPages: number,
   options?: { isOpenITR?: boolean }
 ): Promise<GenerateResult> {
-  console.log("[ITR-PLA-001] React-PDF only diagnostic mode");
+  console.log("[ITR-PLA-001] generate-with-fallback version check");
+  console.log("[ITR] React-PDF generator executing");
   console.log("[ITR-PLA-001] input data summary:", {
     sectionName: section?.name,
     recordsCount: records?.length,

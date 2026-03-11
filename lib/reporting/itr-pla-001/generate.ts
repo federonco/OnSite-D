@@ -1,8 +1,8 @@
 /**
- * ITR-PLA-001 PDF generation via Puppeteer (HTML/CSS → PDF).
- * Replaces React-PDF for print-first technical report fidelity.
- * Max 9 rows per page — see config.ITR_MAX_ROWS.
+ * TODO: legacy Puppeteer generator – safe to remove once confirmed unused.
  *
+ * ITR-PLA-001 PDF generation via Puppeteer (HTML/CSS → PDF).
+ * Max 9 rows per page — see config.ITR_MAX_ROWS.
  * Uses puppeteer-core + @sparticuz/chromium for serverless (Vercel) compatibility.
  * Local dev: set CHROME_EXECUTABLE_PATH to use system Chrome, or let @sparticuz/chromium
  * download Chromium on first run.

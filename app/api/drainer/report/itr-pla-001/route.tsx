@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getUserFromRequest } from "@/lib/api-auth";
 import { isAdminEmail } from "@/lib/admin";
 import { getSupabaseServer } from "@/lib/supabase/server";
-import { generateITRPla001PdfWithFallback } from "@/lib/reporting/itr-pla-001";
+import { generateITRPla001PdfWithFallback } from "@/lib/reporting/itr-pla-001/generate-with-fallback";
 import { ITR_PAGE_SIZE } from "@/lib/drainer";
 
 export async function POST(request: NextRequest) {
@@ -68,6 +68,7 @@ export async function POST(request: NextRequest) {
   let contentType: string;
   let fileName: string;
   try {
+    console.log("[ITR] generator executing");
     const result = await generateITRPla001PdfWithFallback(
       section,
       pageRecords,
@@ -78,14 +79,14 @@ export async function POST(request: NextRequest) {
     contentType = result.contentType;
     fileName = result.fileName;
     console.log("[ITR-PLA-001] direct route: PDF generated", { source: result.source, bufferSize: buffer?.length ?? 0 });
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : "PDF generation failed";
-    console.error("[ITR-PLA-001] PDF generation failed:", msg, err);
+  } catch (error) {
+    console.error("[ITR-PLA-001] PDF generation failed:", error);
+    const msg = (error as Error)?.message ?? String(error ?? "");
     const isValidation = msg.includes("maximum of") && msg.includes("rows");
-    const userMessage = isValidation
-      ? msg
-      : "PDF generation failed. If deploying to serverless, ensure puppeteer-core and @sparticuz/chromium are used.";
-    return NextResponse.json({ error: userMessage }, { status: isValidation ? 400 : 500 });
+    return NextResponse.json(
+      { error: `ITR PDF generation failed: ${msg}` },
+      { status: isValidation ? 400 : 500 }
+    );
   }
 
   const pdfBody: BodyInit =

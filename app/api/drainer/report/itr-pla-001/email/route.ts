@@ -2,13 +2,14 @@ import { NextRequest, NextResponse } from "next/server";
 import { getUserFromRequest } from "@/lib/api-auth";
 import { isAdminEmail } from "@/lib/admin";
 import { getSupabaseServer } from "@/lib/supabase/server";
-import { generateITRPla001PdfWithFallback } from "@/lib/reporting/itr-pla-001";
+import { generateITRPla001PdfWithFallback } from "@/lib/reporting/itr-pla-001/generate-with-fallback";
 import { ITR_PAGE_SIZE } from "@/lib/drainer";
 import { createEmailTransporter, getEmailFrom, getEmailSignatureHtml, getLogoAttachment, hasEmailConfig, LOGO_CID } from "@/lib/email-config";
 
 export const runtime = "nodejs";
 
 export async function POST(request: NextRequest) {
+  console.log("[ITR EMAIL ROUTE] version check");
   console.log("[ITR-PLA-001] email route: start");
   const { user, token } = await getUserFromRequest(request);
   if (!user || !token) {
@@ -84,6 +85,7 @@ export async function POST(request: NextRequest) {
   let fileName: string;
   console.log("[ITR-PLA-001] email route: before PDF generation", { sectionId, itrIndex, recordsCount: pageRecords.length });
   try {
+    console.log("[ITR] generator executing");
     const result = await generateITRPla001PdfWithFallback(
       section,
       pageRecords,
@@ -94,14 +96,12 @@ export async function POST(request: NextRequest) {
     buffer = result.buffer;
     fileName = result.fileName;
     console.log("[ITR-PLA-001] email route: successful PDF buffer size:", buffer?.length ?? 0);
-  } catch (pdfErr) {
-    const msg = pdfErr instanceof Error ? pdfErr.message : String(pdfErr);
-    const stack = pdfErr instanceof Error ? pdfErr.stack : undefined;
-    console.error("[ITR-PLA-001] PDF generation failed - full error:", { message: msg, stack, error: pdfErr });
+  } catch (error) {
+    console.error("[ITR-PLA-001] PDF generation failed:", error);
+    const msg = (error as Error)?.message ?? String(error ?? "");
     const isValidation = msg.includes("maximum of") && msg.includes("rows");
-    const userMessage = isValidation ? msg : `React-PDF generation failed: ${msg}`;
     return NextResponse.json(
-      { error: userMessage },
+      { error: `ITR PDF generation failed: ${msg}` },
       { status: isValidation ? 400 : 500 }
     );
   }
