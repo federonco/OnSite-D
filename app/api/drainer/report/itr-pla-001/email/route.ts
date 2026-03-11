@@ -93,19 +93,13 @@ export async function POST(request: NextRequest) {
     );
     buffer = result.buffer;
     fileName = result.fileName;
-    console.log("[ITR-PLA-001] email route: after PDF generation", {
-      bufferSize: buffer?.length ?? 0,
-      fileName,
-      source: result.source,
-    });
+    console.log("[ITR-PLA-001] email route: successful PDF buffer size:", buffer?.length ?? 0);
   } catch (pdfErr) {
-    const msg = pdfErr instanceof Error ? pdfErr.message : "PDF generation failed";
+    const msg = pdfErr instanceof Error ? pdfErr.message : String(pdfErr);
     const stack = pdfErr instanceof Error ? pdfErr.stack : undefined;
-    console.error("[ITR-PLA-001] PDF generation failed:", { message: msg, stack, error: pdfErr });
+    console.error("[ITR-PLA-001] PDF generation failed - full error:", { message: msg, stack, error: pdfErr });
     const isValidation = msg.includes("maximum of") && msg.includes("rows");
-    const userMessage = isValidation
-      ? msg
-      : "PDF generation failed. If deploying to serverless, ensure puppeteer-core and @sparticuz/chromium are used.";
+    const userMessage = isValidation ? msg : `React-PDF generation failed: ${msg}`;
     return NextResponse.json(
       { error: userMessage },
       { status: isValidation ? 400 : 500 }
@@ -162,7 +156,7 @@ export async function POST(request: NextRequest) {
   } catch (err) {
     const msg = err instanceof Error ? err.message : "Email send failed";
     const stack = err instanceof Error ? err.stack : undefined;
-    console.error("[ITR-PLA-001] sendMail failed:", { message: msg, stack, error: err });
+    console.error("[ITR-PLA-001] sendMail failed - full error stack:", { message: msg, stack, error: err });
     return NextResponse.json(
       { error: "Email failed. PDF was generated but could not be sent." },
       { status: 500 }

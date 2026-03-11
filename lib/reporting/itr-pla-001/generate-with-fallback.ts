@@ -1,12 +1,15 @@
 /**
- * ITR-PLA-001 PDF generator: Puppeteer (primary) + React-PDF (fallback).
- * Primary: high-fidelity HTML/CSS via puppeteer-core + @sparticuz/chromium.
- * Fallback: React-PDF when Puppeteer fails (e.g. Vercel cold start, memory).
+ * DIAGNOSTIC PATCH: React-PDF only, no Puppeteer.
+ *
+ * This temporary implementation bypasses Puppeteer completely to determine whether:
+ * - the issue is Puppeteer/fallback logic, OR
+ * - React-PDF ITR generation itself.
+ *
+ * TODO: Revert to Puppeteer primary + React-PDF fallback after diagnosis.
  */
 
 import type { SectionInfo } from "./types";
 import type { RecordRow } from "./mapper";
-import { generateITRPla001Pdf } from "./generate";
 import { generateITRPla001PdfReact } from "../itr-pla-001-react-pdf";
 
 export type GenerateResult = {
@@ -17,7 +20,7 @@ export type GenerateResult = {
 };
 
 /**
- * Generate ITR-PLA-001 PDF. Tries Puppeteer first; falls back to React-PDF on failure.
+ * Generate ITR-PLA-001 PDF via React-PDF only (diagnostic).
  */
 export async function generateITRPla001PdfWithFallback(
   section: SectionInfo,
@@ -26,27 +29,23 @@ export async function generateITRPla001PdfWithFallback(
   totalPages: number,
   options?: { isOpenITR?: boolean }
 ): Promise<GenerateResult> {
-  try {
-    const result = await generateITRPla001Pdf(
-      section,
-      records,
-      pageNumber,
-      totalPages,
-      options
-    );
-    console.log("[ITR-PLA-001] PDF generated via Puppeteer (primary)");
-    return { ...result, source: "puppeteer" };
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
-    console.warn("[ITR-PLA-001] Puppeteer failed, falling back to React-PDF:", msg);
-    const result = await generateITRPla001PdfReact(
-      section,
-      records,
-      pageNumber,
-      totalPages,
-      options
-    );
-    console.log("[ITR-PLA-001] PDF generated via React-PDF (fallback)");
-    return { ...result, source: "react-pdf" };
-  }
+  console.log("[ITR-PLA-001] React-PDF only diagnostic mode");
+  console.log("[ITR-PLA-001] input data summary:", {
+    sectionName: section?.name,
+    recordsCount: records?.length,
+    pageNumber,
+    totalPages,
+    isOpenITR: options?.isOpenITR,
+  });
+
+  const result = await generateITRPla001PdfReact(
+    section,
+    records,
+    pageNumber,
+    totalPages,
+    options
+  );
+
+  console.log("[ITR-PLA-001] successful PDF buffer size:", result.buffer?.length ?? 0);
+  return { ...result, source: "react-pdf" };
 }
