@@ -1,15 +1,35 @@
 import { readFileSync } from "fs";
 import { join } from "path";
+import nodemailer from "nodemailer";
 
 /** Default from address for all emails (Resend). Requires readx.com.au verified in Resend dashboard. */
 export const EMAIL_FROM_DEFAULT = "OnSite-D <info@readx.com.au>";
 
-/** Resend SMTP config - use RESEND_API_KEY for auth */
+/** Resend SMTP config - hardcoded to avoid Gmail override via env */
 export const RESEND_SMTP = {
-  host: process.env.SMTP_HOST || "smtp.resend.com",
-  port: Number(process.env.SMTP_PORT) || 465,
-  user: process.env.SMTP_USER || "resend",
+  host: "smtp.resend.com",
+  port: 465,
+  user: "resend",
 };
+
+/** Creates nodemailer transporter for Resend SMTP. Requires RESEND_API_KEY. */
+export function createEmailTransporter() {
+  const pass = process.env.RESEND_API_KEY?.trim();
+  if (!pass) {
+    throw new Error("RESEND_API_KEY required for email");
+  }
+  return nodemailer.createTransport({
+    host: RESEND_SMTP.host,
+    port: RESEND_SMTP.port,
+    secure: true,
+    auth: { user: RESEND_SMTP.user, pass },
+  });
+}
+
+/** Returns true if email can be sent (RESEND_API_KEY set). */
+export function hasEmailConfig(): boolean {
+  return !!process.env.RESEND_API_KEY?.trim();
+}
 
 /** From address for outgoing emails. Priority: RESEND_FROM > SMTP_FROM > ALERT_FROM_EMAIL > default */
 export function getEmailFrom(): string {

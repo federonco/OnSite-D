@@ -1,11 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
-import nodemailer from "nodemailer";
 import QRCode from "qrcode";
 import { getUserFromRequest } from "@/lib/api-auth";
 import { isAdminEmail } from "@/lib/admin";
 import { getSupabaseServer } from "@/lib/supabase/server";
 import { generateSectionQRPdf } from "@/lib/reporting/section-qr-pdf";
-import { getEmailFrom, getEmailSignatureHtml, getLogoAttachment, LOGO_CID, RESEND_SMTP } from "@/lib/email-config";
+import { createEmailTransporter, getEmailFrom, getEmailSignatureHtml, getLogoAttachment, hasEmailConfig, LOGO_CID } from "@/lib/email-config";
 
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || "https://onsite-d.vercel.app";
 
@@ -67,20 +66,14 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  const pass = process.env.SMTP_PASS?.trim() || process.env.RESEND_API_KEY?.trim();
-  if (!pass) {
+  if (!hasEmailConfig()) {
     return NextResponse.json(
-      { error: "SMTP_PASS or RESEND_API_KEY required for email" },
+      { error: "RESEND_API_KEY required for email" },
       { status: 500 }
     );
   }
 
-  const transporter = nodemailer.createTransport({
-    host: RESEND_SMTP.host,
-    port: RESEND_SMTP.port,
-    secure: true,
-    auth: { user: RESEND_SMTP.user, pass },
-  });
+  const transporter = createEmailTransporter();
 
   const logoAtt = getLogoAttachment();
   const logoSrc = logoAtt ? `cid:${LOGO_CID}` : `${process.env.NEXT_PUBLIC_SITE_URL || "https://onsite-d.vercel.app"}/readx-logo.png`;

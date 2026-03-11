@@ -307,6 +307,14 @@ export default function AdminPage() {
     type: "itr-complete" | "itr-open" | "audit",
     payload: { itrIndex?: number; recordCount?: number }
   ) => {
+    if ((type === "itr-complete" || type === "itr-open") && (payload.recordCount ?? 0) > ITR_PAGE_SIZE) {
+      pushToast({
+        type: "error",
+        title: "Too many records",
+        message: `ITR-PLA-001 supports a maximum of ${ITR_PAGE_SIZE} rows per page. This ITR has ${payload.recordCount ?? 0} records.`,
+      });
+      return;
+    }
     setReportModalType(type);
     setReportModalPayload(payload);
     setReportEmail(reportDefaultEmail || authEmail || "");
@@ -542,7 +550,7 @@ export default function AdminPage() {
             <CardContent className="space-y-3">
               <div className="flex items-center gap-2">
                 <p className="text-xs font-bold text-[var(--muted-foreground)]">
-                  Records: {records.length}
+                  Records: {records.length} (max {ITR_PAGE_SIZE} per ITR)
                 </p>
                 <span className="drainer-badge-orange">
                   Ready {progress.completeITRs}
@@ -610,6 +618,7 @@ export default function AdminPage() {
                           onClick={() =>
                             openReportModal("itr-complete", {
                               itrIndex: block.index,
+                              recordCount: block.recordCount,
                             })
                           }
                           disabled={printingItrIndex !== null}
@@ -784,6 +793,11 @@ export default function AdminPage() {
             <DialogTitle>Send report to</DialogTitle>
           </DialogHeader>
           <div className="space-y-3">
+            {(reportModalType === "itr-complete" || reportModalType === "itr-open") && reportModalPayload && (
+              <p className="text-xs text-[var(--muted-foreground)]">
+                Max 9 records per ITR-PLA-001 page. This ITR has {reportModalPayload.recordCount ?? 0} records.
+              </p>
+            )}
             <Input
               type="email"
               placeholder="Email address"

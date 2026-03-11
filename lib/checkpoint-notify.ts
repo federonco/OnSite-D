@@ -1,6 +1,5 @@
-import nodemailer from "nodemailer";
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { getEmailFrom, getEmailSignatureHtml, getLogoAttachment, LOGO_CID, RESEND_SMTP } from "./email-config";
+import { createEmailTransporter, getEmailFrom, getEmailSignatureHtml, getLogoAttachment, hasEmailConfig, LOGO_CID } from "./email-config";
 
 const PROXIMITY_METERS = 30;
 
@@ -10,12 +9,8 @@ export async function processCheckpointAlerts(
   supabase: SupabaseClient,
   sectionId?: string | null
 ): Promise<void> {
-  const pass =
-    process.env.SMTP_PASS?.trim() || process.env.RESEND_API_KEY?.trim();
-  if (!pass) {
-    console.warn(
-      "Checkpoint alerts: SMTP_PASS or RESEND_API_KEY not set, skipping"
-    );
+  if (!hasEmailConfig()) {
+    console.warn("Checkpoint alerts: RESEND_API_KEY not set, skipping");
     return;
   }
 
@@ -65,12 +60,7 @@ export async function processCheckpointAlerts(
 
   if (!candidates?.length) return;
 
-  const transporter = nodemailer.createTransport({
-    host: RESEND_SMTP.host,
-    port: RESEND_SMTP.port,
-    secure: true,
-    auth: { user: RESEND_SMTP.user, pass },
-  });
+  const transporter = createEmailTransporter();
 
   const logoAttachment = getLogoAttachment();
   const logoSrc = logoAttachment ? `cid:${LOGO_CID}` : `${process.env.NEXT_PUBLIC_SITE_URL || "https://onsite-d.vercel.app"}/readx-logo.png`;

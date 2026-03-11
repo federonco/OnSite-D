@@ -1,11 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
-import nodemailer from "nodemailer";
 import { getUserFromRequest } from "@/lib/api-auth";
 import { isAdminEmail } from "@/lib/admin";
 import { getSupabaseServer } from "@/lib/supabase/server";
-import { generateITRPla001Pdf } from "@/lib/reporting/itr-pla-001-pdf";
+import { generateITRPla001Pdf } from "@/lib/reporting/itr-pla-001";
 import { ITR_PAGE_SIZE } from "@/lib/drainer";
-import { getEmailFrom, getEmailSignatureHtml, getLogoAttachment, LOGO_CID, RESEND_SMTP } from "@/lib/email-config";
+import { createEmailTransporter, getEmailFrom, getEmailSignatureHtml, getLogoAttachment, hasEmailConfig, LOGO_CID } from "@/lib/email-config";
 
 export const runtime = "nodejs";
 
@@ -71,6 +70,12 @@ export async function POST(request: NextRequest) {
       { status: 400 }
     );
   }
+  if (pageRecords.length > ITR_PAGE_SIZE) {
+    return NextResponse.json(
+      { error: `ITR-PLA-001 supports a maximum of ${ITR_PAGE_SIZE} rows per page. Received ${pageRecords.length}.` },
+      { status: 400 }
+    );
+  }
 
   const totalPages = Math.ceil(records.length / ITR_PAGE_SIZE);
   const isOpenITR = pageRecords.length < ITR_PAGE_SIZE;
@@ -88,17 +93,17 @@ export async function POST(request: NextRequest) {
     fileName = result.fileName;
   } catch (pdfErr) {
     console.error("ITR PDF generation failed", pdfErr);
+    const msg = pdfErr instanceof Error ? pdfErr.message : "PDF generation failed";
+    const isValidation = msg.includes("maximum of") && msg.includes("rows");
     return NextResponse.json(
-      { error: pdfErr instanceof Error ? pdfErr.message : "PDF generation failed" },
-      { status: 500 }
+      { error: msg },
+      { status: isValidation ? 400 : 500 }
     );
   }
 
-  const pass =
-    process.env.SMTP_PASS?.trim() || process.env.RESEND_API_KEY?.trim();
-  if (!pass) {
+  if (!hasEmailConfig()) {
     return NextResponse.json(
-      { error: "SMTP_PASS or RESEND_API_KEY required for email" },
+      { error: "RESEND_API_KEY required for email" },
       { status: 500 }
     );
   }
@@ -129,12 +134,7 @@ export async function POST(request: NextRequest) {
   if (logoAtt) attachments.unshift(logoAtt);
 
   try {
-    const transporter = nodemailer.createTransport({
-      host: RESEND_SMTP.host,
-      port: RESEND_SMTP.port,
-      secure: true,
-      auth: { user: RESEND_SMTP.user, pass },
-    });
+    const transporter = createEmailTransporter();
 
     await transporter.sendMail({
       from: getEmailFrom(),

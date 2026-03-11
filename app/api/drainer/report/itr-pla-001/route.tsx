@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getUserFromRequest } from "@/lib/api-auth";
 import { isAdminEmail } from "@/lib/admin";
 import { getSupabaseServer } from "@/lib/supabase/server";
-import { generateITRPla001Pdf } from "@/lib/reporting/itr-pla-001-pdf";
+import { generateITRPla001Pdf } from "@/lib/reporting/itr-pla-001";
 import { ITR_PAGE_SIZE } from "@/lib/drainer";
 
 export async function POST(request: NextRequest) {
@@ -56,14 +56,32 @@ export async function POST(request: NextRequest) {
       { status: 400 }
     );
   }
+  if (pageRecords.length > ITR_PAGE_SIZE) {
+    return NextResponse.json(
+      { error: `ITR-PLA-001 supports a maximum of ${ITR_PAGE_SIZE} rows per page. Received ${pageRecords.length}.` },
+      { status: 400 }
+    );
+  }
 
   const totalPages = Math.ceil(records.length / ITR_PAGE_SIZE);
-  const { buffer, contentType, fileName } = await generateITRPla001Pdf(
-    section,
-    pageRecords,
-    itrIndex,
-    totalPages
-  );
+  let buffer: Buffer;
+  let contentType: string;
+  let fileName: string;
+  try {
+    const result = await generateITRPla001Pdf(
+      section,
+      pageRecords,
+      itrIndex,
+      totalPages
+    );
+    buffer = result.buffer;
+    contentType = result.contentType;
+    fileName = result.fileName;
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : "PDF generation failed";
+    const isValidation = msg.includes("maximum of") && msg.includes("rows");
+    return NextResponse.json({ error: msg }, { status: isValidation ? 400 : 500 });
+  }
 
   const pdfBody: BodyInit =
     buffer instanceof Buffer ? new Uint8Array(buffer) : (buffer as unknown as BodyInit);

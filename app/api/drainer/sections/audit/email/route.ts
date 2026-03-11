@@ -1,10 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
-import nodemailer from "nodemailer";
 import { getUserFromRequest } from "@/lib/api-auth";
 import { isAdminEmail } from "@/lib/admin";
 import { getSupabaseServer } from "@/lib/supabase/server";
 import { generateAuditReportPdf } from "@/lib/reporting/audit-report-pdf";
-import { getEmailFrom, getEmailSignatureHtml, getLogoAttachment, LOGO_CID, RESEND_SMTP } from "@/lib/email-config";
+import { createEmailTransporter, getEmailFrom, getEmailSignatureHtml, getLogoAttachment, hasEmailConfig, LOGO_CID } from "@/lib/email-config";
 
 export const runtime = "nodejs";
 
@@ -66,11 +65,9 @@ export async function POST(request: NextRequest) {
     records ?? []
   );
 
-  const pass =
-    process.env.SMTP_PASS?.trim() || process.env.RESEND_API_KEY?.trim();
-  if (!pass) {
+  if (!hasEmailConfig()) {
     return NextResponse.json(
-      { error: "SMTP_PASS or RESEND_API_KEY required for email" },
+      { error: "RESEND_API_KEY required for email" },
       { status: 500 }
     );
   }
@@ -94,12 +91,7 @@ export async function POST(request: NextRequest) {
   if (logoAtt) attachments.unshift(logoAtt);
 
   try {
-    const transporter = nodemailer.createTransport({
-      host: RESEND_SMTP.host,
-      port: RESEND_SMTP.port,
-      secure: true,
-      auth: { user: RESEND_SMTP.user, pass },
-    });
+    const transporter = createEmailTransporter();
 
     await transporter.sendMail({
       from: getEmailFrom(),
