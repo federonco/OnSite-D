@@ -26,9 +26,12 @@ export function createEmailTransporter() {
   });
 }
 
-/** Returns true if email can be sent (RESEND_API_KEY set). */
+/** Returns true if email can be sent (RESEND_API_KEY set and not placeholder). */
 export function hasEmailConfig(): boolean {
-  return !!process.env.RESEND_API_KEY?.trim();
+  const key = process.env.RESEND_API_KEY?.trim();
+  if (!key) return false;
+  if (key === "..." || key.length < 10) return false;
+  return true;
 }
 
 /** From address for outgoing emails. Priority: RESEND_FROM > SMTP_FROM > ALERT_FROM_EMAIL > default */

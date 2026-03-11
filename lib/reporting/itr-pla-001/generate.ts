@@ -25,8 +25,7 @@ chromium.setGraphicsMode = false;
 /** Resolve Chromium executable path: local override or serverless bundle */
 async function getChromiumExecutablePath(): Promise<string> {
   const override = process.env.CHROME_EXECUTABLE_PATH?.trim();
-  if (override) return override;
-  return chromium.executablePath();
+  return override || (await chromium.executablePath());
 }
 
 async function fetchLogoDataUrl(): Promise<string | null> {
@@ -84,17 +83,30 @@ export async function generateITRPla001Pdf(
     logoDataUrl,
   });
 
+  console.log("[ITR-PLA-001] generate: start", {
+    sectionName: section?.name,
+    recordsCount: records?.length,
+    pageNumber,
+    pageNoLabel,
+  });
+  console.log("[ITR-PLA-001] generate: HTML length:", html?.length ?? 0);
   let browser;
   try {
     const executablePath = await getChromiumExecutablePath();
+    console.log("[ITR-PLA-001] generate: executablePath resolved:", executablePath?.slice(0, 80) + (executablePath?.length > 80 ? "…" : ""));
+    console.log("[ITR-PLA-001] generate: chromium.args count:", chromium.args?.length ?? 0);
+    console.log("[ITR-PLA-001] generate: before puppeteer.launch");
     browser = await puppeteer.launch({
       args: chromium.args,
       executablePath,
       headless: true,
     });
+    console.log("[ITR-PLA-001] generate: after browser launch");
 
     const page = await browser.newPage();
+    console.log("[ITR-PLA-001] generate: after newPage");
     await page.setContent(html, { waitUntil: "networkidle0" });
+    console.log("[ITR-PLA-001] generate: after setContent");
     const pdfBuffer = await page.pdf({
       format: "A4",
       landscape: true,
@@ -103,6 +115,7 @@ export async function generateITRPla001Pdf(
       preferCSSPageSize: false,
       scale: 0.98,
     });
+    console.log("[ITR-PLA-001] generate: after page.pdf, buffer size:", pdfBuffer?.byteLength ?? 0);
 
     const safeName = (section.name ?? "section").replace(/\s+/g, "-");
     return {
@@ -110,7 +123,13 @@ export async function generateITRPla001Pdf(
       contentType: "application/pdf",
       fileName: `ITR-PLA-001_${safeName}_ITR-${pageNumber}_${Date.now()}.pdf`,
     };
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : "unknown";
+    const stack = err instanceof Error ? err.stack : undefined;
+    console.error("[ITR-PLA-001] generate: error:", { message: msg, stack, error: err });
+    throw err;
   } finally {
     if (browser) await browser.close();
+    console.log("[ITR-PLA-001] generate: after browser.close");
   }
 }

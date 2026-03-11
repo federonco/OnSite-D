@@ -8,7 +8,6 @@ import {
   Image,
   renderToBuffer,
 } from "@react-pdf/renderer";
-import { computeAuditSummary, type AuditSummary } from "./audit-summary";
 
 const LOGO_URL =
   "https://raw.githubusercontent.com/federonco/readx-assets/main/readX%20blue.png";
@@ -79,7 +78,7 @@ const styles = StyleSheet.create({
     fontWeight: "normal",
   },
 
-  /* Audit summary block */
+  /* Audit summary block - single metric */
   summaryBlock: {
     marginBottom: 12,
     borderWidth: 0.5,
@@ -96,55 +95,20 @@ const styles = StyleSheet.create({
     fontWeight: "bold",
     color: palette.black,
   },
-  summaryGrid: {
+  summaryContent: {
     flexDirection: "row",
-    flexWrap: "wrap",
-  },
-  summaryCard: {
-    width: "25%",
+    alignItems: "center",
     padding: 8,
-    borderRightWidth: 0.5,
-    borderBottomWidth: 0.5,
-    borderColor: palette.greyBorder,
   },
-  summaryCardLast: {
-    borderRightWidth: 0,
-  },
-  summaryCardLabel: {
-    fontSize: 7,
+  summaryLabel: {
+    fontSize: 8,
     color: palette.grey,
-    marginBottom: 2,
+    marginRight: 8,
   },
-  summaryCardValue: {
+  summaryValue: {
     fontSize: 10,
     fontWeight: "bold",
     color: palette.black,
-  },
-  summaryBreakdown: {
-    width: "100%",
-    padding: 8,
-    borderTopWidth: 0.5,
-    borderColor: palette.greyBorder,
-    flexDirection: "row",
-  },
-  breakdownItem: {
-    flex: 1,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 4,
-  },
-  breakdownLabel: {
-    fontSize: 7,
-    color: palette.grey,
-  },
-  breakdownValue: {
-    fontSize: 8,
-    fontWeight: "bold",
-    color: palette.black,
-  },
-  breakdownZero: {
-    fontSize: 8,
-    color: palette.greyLight,
   },
 
   /* Table */
@@ -158,7 +122,8 @@ const styles = StyleSheet.create({
     backgroundColor: palette.greyDark,
   },
   tableGroupHeaderCell: {
-    padding: 4,
+    paddingVertical: 6,
+    paddingHorizontal: 8,
     fontSize: 7,
     fontWeight: "bold",
     color: palette.white,
@@ -172,7 +137,8 @@ const styles = StyleSheet.create({
     borderColor: palette.greyBorder,
   },
   tableHeaderCell: {
-    padding: 5,
+    paddingVertical: 6,
+    paddingHorizontal: 8,
     fontSize: 7,
     fontWeight: "bold",
     color: palette.black,
@@ -183,7 +149,8 @@ const styles = StyleSheet.create({
     borderRightWidth: 0,
   },
   tableHeaderPipeChecks: {
-    padding: 5,
+    paddingVertical: 6,
+    paddingHorizontal: 8,
     fontSize: 7,
     fontWeight: "bold",
     color: palette.black,
@@ -201,7 +168,8 @@ const styles = StyleSheet.create({
     backgroundColor: palette.greyBg,
   },
   tableDataCell: {
-    padding: 4,
+    paddingVertical: 5,
+    paddingHorizontal: 8,
     fontSize: 7,
     color: palette.black,
     borderRightWidth: 0.5,
@@ -277,21 +245,21 @@ type RecordRow = {
   inspector_name: string | null;
 };
 
-/* Column config: [label, width, alignCenter, isPipeCheck] */
+/* Column config: [label, width, alignCenter, isPipeCheck] — scaled for A4 landscape ~794pt */
 const COLUMNS: Array<[string, number, boolean, boolean]> = [
-  ["Date", 32, false, false],
-  ["Ch", 28, false, false],
-  ["Pipe ID", 52, false, false],
-  ["Joint", 28, false, false],
-  ["Witness", 24, true, false],
-  ["Seal", 24, true, false],
-  ["Alignment", 58, false, false],
-  ["CP", 18, true, true],
-  ["Ovality", 22, true, true],
-  ["Air", 18, true, true],
-  ["Cement", 24, true, true],
-  ["Spark", 22, true, true],
-  ["Inspector", 56, false, false],
+  ["Date", 65, false, false],
+  ["Ch", 65, false, false],
+  ["Pipe ID", 145, false, false],
+  ["Joint", 51, false, false],
+  ["Witness", 44, true, false],
+  ["Seal", 44, true, false],
+  ["Alignment", 130, false, false],
+  ["CP", 33, true, true],
+  ["Ovality", 33, true, true],
+  ["Air", 33, true, true],
+  ["Cement", 33, true, true],
+  ["Spark", 33, true, true],
+  ["Inspector", 87, false, false],
 ];
 
 function formatDate(d: string | null) {
@@ -344,7 +312,6 @@ export type AuditReportParams = {
 
 export async function generateAuditReportPdf(params: AuditReportParams) {
   const { section, records, generatedBy } = params;
-  const summary = computeAuditSummary(records);
   const chainageRange = getChainageRange(records);
   const generatedDate = new Date().toLocaleDateString("en-AU", {
     day: "2-digit",
@@ -407,45 +374,28 @@ export async function generateAuditReportPdf(params: AuditReportParams) {
           <View style={styles.summaryHeader}>
             <Text style={styles.summaryHeaderText}>Audit Summary</Text>
           </View>
-          <View style={styles.summaryGrid}>
-            <View style={styles.summaryCard}>
-              <Text style={styles.summaryCardLabel}>Total records</Text>
-              <Text style={styles.summaryCardValue}>{summary.total}</Text>
-            </View>
-            <View style={[styles.summaryCard, styles.summaryCardLast]}>
-              <Text style={styles.summaryCardLabel}>All checks passed</Text>
-              <Text style={styles.summaryCardValue}>{summary.allPassed}</Text>
-            </View>
-            <View style={styles.summaryCard}>
-              <Text style={styles.summaryCardLabel}>With issues</Text>
-              <Text style={styles.summaryCardValue}>{summary.withIssues}</Text>
-            </View>
-            <View style={[styles.summaryCard, styles.summaryCardLast]}>
-              <Text style={styles.summaryCardLabel}>Pass rate</Text>
-              <Text style={styles.summaryCardValue}>{summary.passRatePct}%</Text>
-            </View>
-          </View>
-          <View style={styles.summaryBreakdown}>
-            <FailureBreakdown summary={summary} />
+          <View style={styles.summaryContent}>
+            <Text style={styles.summaryLabel}>Total Records:</Text>
+            <Text style={styles.summaryValue}>{records.length}</Text>
           </View>
         </View>
 
         {/* 4. Raw records table */}
         <View style={styles.table}>
-          {/* Grouped header: Pipe Checks spans 5 columns */}
+          {/* Grouped header: Pipe Details | Pipe Checks | Inspector */}
           <View style={styles.tableGroupHeader}>
             <Text
-              style={[styles.tableGroupHeaderCell, { width: 246 }]}
+              style={[styles.tableGroupHeaderCell, { width: 544 }]}
             >
               Pipe Details
             </Text>
             <Text
-              style={[styles.tableGroupHeaderCell, { width: 104 }]}
+              style={[styles.tableGroupHeaderCell, { width: 165 }]}
             >
               Pipe Checks
             </Text>
             <Text
-              style={[styles.tableGroupHeaderCell, { width: 56, borderRightWidth: 0 }]}
+              style={[styles.tableGroupHeaderCell, { width: 87, borderRightWidth: 0 }]}
             >
               Inspector
             </Text>
@@ -497,32 +447,6 @@ export async function generateAuditReportPdf(params: AuditReportParams) {
   };
 }
 
-function FailureBreakdown({ summary }: { summary: AuditSummary }) {
-  const items: Array<{ label: string; value: number }> = [
-    { label: "CP", value: summary.failures.cp },
-    { label: "Ovality", value: summary.failures.ovality },
-    { label: "Air", value: summary.failures.air },
-    { label: "Cement", value: summary.failures.cement },
-    { label: "Spark", value: summary.failures.spark },
-  ];
-  return (
-    <>
-      {items.map(({ label, value }) => (
-        <View key={label} style={styles.breakdownItem}>
-          <Text style={styles.breakdownLabel}>{label}:</Text>
-          <Text
-            style={
-              value > 0 ? styles.breakdownValue : styles.breakdownZero
-            }
-          >
-            {value}
-          </Text>
-        </View>
-      ))}
-    </>
-  );
-}
-
 function TableDataCells({
   record: r,
   columns,
@@ -570,6 +494,7 @@ function TableDataCells({
         return (
           <Text
             key={i}
+            wrap={isAlign}
             style={[
               styles.tableDataCell,
               { width },

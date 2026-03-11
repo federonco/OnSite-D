@@ -2,13 +2,14 @@ import { NextRequest, NextResponse } from "next/server";
 import { getUserFromRequest } from "@/lib/api-auth";
 import { isAdminEmail } from "@/lib/admin";
 import { getSupabaseServer } from "@/lib/supabase/server";
-import { generateITRPla001Pdf } from "@/lib/reporting/itr-pla-001";
+import { generateITRPla001PdfWithFallback } from "@/lib/reporting/itr-pla-001";
 import { ITR_PAGE_SIZE } from "@/lib/drainer";
 import { createEmailTransporter, getEmailFrom, getEmailSignatureHtml, getLogoAttachment, hasEmailConfig, LOGO_CID } from "@/lib/email-config";
 
 export const runtime = "nodejs";
 
 export async function POST(request: NextRequest) {
+  console.log("[ITR-PLA-001] email route: start");
   const { user, token } = await getUserFromRequest(request);
   if (!user || !token) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -81,8 +82,9 @@ export async function POST(request: NextRequest) {
   const isOpenITR = pageRecords.length < ITR_PAGE_SIZE;
   let buffer: Buffer;
   let fileName: string;
+  console.log("[ITR-PLA-001] email route: before PDF generation", { sectionId, itrIndex, recordsCount: pageRecords.length });
   try {
-    const result = await generateITRPla001Pdf(
+    const result = await generateITRPla001PdfWithFallback(
       section,
       pageRecords,
       itrIndex,
@@ -91,9 +93,15 @@ export async function POST(request: NextRequest) {
     );
     buffer = result.buffer;
     fileName = result.fileName;
+    console.log("[ITR-PLA-001] email route: after PDF generation", {
+      bufferSize: buffer?.length ?? 0,
+      fileName,
+      source: result.source,
+    });
   } catch (pdfErr) {
     const msg = pdfErr instanceof Error ? pdfErr.message : "PDF generation failed";
-    console.error("[ITR-PLA-001] PDF generation failed:", msg, pdfErr);
+    const stack = pdfErr instanceof Error ? pdfErr.stack : undefined;
+    console.error("[ITR-PLA-001] PDF generation failed:", { message: msg, stack, error: pdfErr });
     const isValidation = msg.includes("maximum of") && msg.includes("rows");
     const userMessage = isValidation
       ? msg
@@ -136,6 +144,7 @@ export async function POST(request: NextRequest) {
   const logoAtt = getLogoAttachment();
   if (logoAtt) attachments.unshift(logoAtt);
 
+  console.log("[ITR-PLA-001] email route: before sendMail", { recipient, fileName, pdfBufferSize: buffer?.length ?? 0 });
   try {
     const transporter = createEmailTransporter();
 
@@ -148,10 +157,12 @@ export async function POST(request: NextRequest) {
       attachments,
     });
 
+    console.log("[ITR-PLA-001] email route: after sendMail");
     return NextResponse.json({ ok: true, message: "Email sent" });
   } catch (err) {
     const msg = err instanceof Error ? err.message : "Email send failed";
-    console.error("[ITR-PLA-001] Email send failed after PDF generation:", msg, err);
+    const stack = err instanceof Error ? err.stack : undefined;
+    console.error("[ITR-PLA-001] sendMail failed:", { message: msg, stack, error: err });
     return NextResponse.json(
       { error: "Email failed. PDF was generated but could not be sent." },
       { status: 500 }

@@ -73,16 +73,17 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  const transporter = createEmailTransporter();
+  try {
+    const transporter = createEmailTransporter();
 
-  const logoAtt = getLogoAttachment();
-  const logoSrc = logoAtt ? `cid:${LOGO_CID}` : `${process.env.NEXT_PUBLIC_SITE_URL || "https://onsite-d.vercel.app"}/readx-logo.png`;
-  const attachments: Array<{ filename: string; content: Buffer; cid?: string }> = [
-    { filename: fileName, content: buffer },
-  ];
-  if (logoAtt) attachments.unshift(logoAtt);
+    const logoAtt = getLogoAttachment();
+    const logoSrc = logoAtt ? `cid:${LOGO_CID}` : `${process.env.NEXT_PUBLIC_SITE_URL || "https://onsite-d.vercel.app"}/readx-logo.png`;
+    const attachments: Array<{ filename: string; content: Buffer; cid?: string }> = [
+      { filename: fileName, content: buffer },
+    ];
+    if (logoAtt) attachments.unshift(logoAtt);
 
-  const htmlBody = `
+    const htmlBody = `
 <div style="font-family: Arial, sans-serif; color: #333; padding: 24px;">
   <h2 style="color: #1a5276;">Section QR Code</h2>
   <p>Attached: QR code for <strong>${section.name}</strong></p>
@@ -90,13 +91,20 @@ export async function POST(request: NextRequest) {
   ${getEmailSignatureHtml(logoSrc)}
 </div>`;
 
-  await transporter.sendMail({
-    from: getEmailFrom(),
-    to: recipient,
-    subject: `Section QR: ${section.name}`,
-    html: htmlBody,
-    attachments,
-  });
+    await transporter.sendMail({
+      from: getEmailFrom(),
+      to: recipient,
+      subject: `Section QR: ${section.name}`,
+      html: htmlBody,
+      attachments,
+    });
 
-  return NextResponse.json({ success: true, message: `QR sent to ${recipient}` });
+    return NextResponse.json({ success: true, message: `QR sent to ${recipient}` });
+  } catch (err) {
+    console.error("Send QR email failed:", err);
+    return NextResponse.json(
+      { error: err instanceof Error ? err.message : "Email failed" },
+      { status: 500 }
+    );
+  }
 }

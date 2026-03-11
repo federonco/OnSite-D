@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getUserFromRequest } from "@/lib/api-auth";
 import { isAdminEmail } from "@/lib/admin";
 import { getSupabaseServer } from "@/lib/supabase/server";
-import { generateITRPla001Pdf } from "@/lib/reporting/itr-pla-001";
+import { generateITRPla001PdfWithFallback } from "@/lib/reporting/itr-pla-001";
 import { ITR_PAGE_SIZE } from "@/lib/drainer";
 
 export async function POST(request: NextRequest) {
@@ -68,7 +68,7 @@ export async function POST(request: NextRequest) {
   let contentType: string;
   let fileName: string;
   try {
-    const result = await generateITRPla001Pdf(
+    const result = await generateITRPla001PdfWithFallback(
       section,
       pageRecords,
       itrIndex,
@@ -77,6 +77,7 @@ export async function POST(request: NextRequest) {
     buffer = result.buffer;
     contentType = result.contentType;
     fileName = result.fileName;
+    console.log("[ITR-PLA-001] direct route: PDF generated", { source: result.source, bufferSize: buffer?.length ?? 0 });
   } catch (err) {
     const msg = err instanceof Error ? err.message : "PDF generation failed";
     console.error("[ITR-PLA-001] PDF generation failed:", msg, err);
