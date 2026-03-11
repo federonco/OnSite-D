@@ -148,7 +148,7 @@ export async function POST(request: NextRequest) {
   }
 
   const supabaseAdmin = getSupabaseServer({ useServiceRole: true });
-  processCheckpointAlerts(supabaseAdmin).catch((err) =>
+  processCheckpointAlerts(supabaseAdmin, section_id).catch((err) =>
     console.error("Checkpoint alerts:", err)
   );
   detectRecordInconsistencies(supabaseAdmin).catch((err) =>

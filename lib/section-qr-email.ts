@@ -1,5 +1,6 @@
 import nodemailer from "nodemailer";
 import QRCode from "qrcode";
+import { getEmailFrom, getEmailSignatureHtml, getLogoAttachment, LOGO_CID, RESEND_SMTP } from "./email-config";
 
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || "https://onsite-d.vercel.app";
 
@@ -22,22 +23,18 @@ export async function sendSectionQREmail(params: {
     color: { dark: "#000000", light: "#ffffff" },
   });
 
-  const smtpHost = process.env.SMTP_HOST || "smtp.resend.com";
-  const smtpPort = Number(process.env.SMTP_PORT) || 465;
-  const smtpUser = process.env.SMTP_USER || "resend";
-  const smtpFrom =
-    process.env.SMTP_FROM ||
-    process.env.ALERT_FROM_EMAIL?.trim() ||
-    "Water Cart <info@readx.com.au>";
-
   const transporter = nodemailer.createTransport({
-    host: smtpHost,
-    port: smtpPort,
+    host: RESEND_SMTP.host,
+    port: RESEND_SMTP.port,
     secure: true,
-    auth: { user: smtpUser, pass },
+    auth: { user: RESEND_SMTP.user, pass },
   });
 
-  const html = `
+  const logoAtt = getLogoAttachment();
+  const logoSrc = logoAtt ? `cid:${LOGO_CID}` : `${process.env.NEXT_PUBLIC_SITE_URL || "https://onsite-d.vercel.app"}/readx-logo.png`;
+  const attachments = logoAtt ? [logoAtt] : [];
+
+  const htmlWithSig = `
 <!DOCTYPE html>
 <html>
 <head><meta charset="utf-8"><title>Section QR — ${escapeHtml(sectionName)}</title></head>
@@ -50,17 +47,17 @@ export async function sendSectionQREmail(params: {
     <p style="margin: 12px 0 0; font-size: 14px; font-weight: bold; text-align: center;">${escapeHtml(sectionName)}</p>
   </div>
   <p style="margin-top: 24px; font-size: 12px; color: #666;">Link: <a href="${qrUrl}">${qrUrl}</a></p>
-  <hr style="border: none; border-top: 1px solid #e0e0e0; margin: 24px 0;" />
-  <p style="font-size: 12px; color: #666;">readX — APA Quality Management Systems</p>
+  ${getEmailSignatureHtml(logoSrc)}
 </body>
 </html>
 `;
 
   await transporter.sendMail({
-    from: smtpFrom,
+    from: getEmailFrom(),
     to: recipientEmail.trim(),
     subject: `Section QR: ${sectionName}`,
-    html,
+    html: htmlWithSig,
+    attachments,
   });
 }
 

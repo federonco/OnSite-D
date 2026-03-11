@@ -6,6 +6,7 @@ import {
   Text,
   View,
   Image,
+  Font,
   renderToBuffer,
 } from "@react-pdf/renderer";
 import path from "path";
@@ -19,153 +20,214 @@ const REVISION_NO = "1";
 
 const ITR_PAGE_SIZE = 9;
 
-/** Column widths (px, landscape A4 ~801 usable): A-N per Excel template */
-const COL_WIDTHS = [55, 48, 75, 40, 45, 45, 95, 48, 42, 55, 52, 52, 58, 55];
+const STYLES = {
+  BLUE_PRIMARY: "#1155CC",
+  GREY_ASTERISKS: "#D9D9D9",
+  WHITE: "#FFFFFF",
+  BLACK: "#000000",
+  FONT_FAMILY: "Arial",
+  TITLE_SIZE: 8,
+  HEADER_LABEL_SIZE: 7,
+  COLUMN_HEADER_SIZE: 5,
+  DATA_SIZE: 7,
+  NOTES_SIZE: 8,
+  PAGE_MARGIN: 50,
+  DATA_ROW_HEIGHT: 24.7,
+  COLUMN_HEADER_HEIGHT: 43,
+  ASTERISK_ROW_HEIGHT: 12,
+  BORDER_WIDTH: 0.5,
+};
 
-const BLUE_4472C4 = "#4472C4";
-const BLUE_8EA9D8 = "#8EA9D8";
-const GRAY_F2F2F2 = "#F2F2F2";
+const COL_WIDTHS = [55.5, 55.5, 55.5, 55.5, 55.5, 39, 87.4, 48.9, 37.9, 43.4, 50.5, 55.5, 46.2, 55.5];
+
+const COLUMN_HEADERS = [
+  "Date Installed",
+  "Pipe Chainage",
+  "Pipe No Stamp or\nFitting ID",
+  "Joint Type\n(WR, RRJ,\nWB, or CWB)",
+  "Pipe Installed to\nWittness Mark\n(Y/N)",
+  "Internal\nRubber Seal\nCheck (Y/N)",
+  "Alignment & Deflection Check\nAlignment:\nHor ±100mm/ Vert ±50mm\nJoint Deflection:\nsee note below",
+  "CP Lugs Installed\n@ 12 O'clock (RRJ\nONLY)",
+  "Ovality Check\n**",
+  "Joint Air Test\nRRJ-WR ONLY\n(80kPa hold for\n2 min)",
+  "Internal Cement\nLiner\n(OK/Patch)",
+  "Spark Testing\n(OK/Patched)",
+  "NAME",
+  "SIGNATURE",
+];
+
+const ASTERISK_ROW: Record<number, string> = {
+  2: "*",
+  4: "*",
+  6: "***",
+  7: "*",
+  8: "**",
+  9: "*",
+  10: "*(If Patched)",
+  11: "*(If Patched)",
+};
+
+// Arimo = clon métrico de Arial (Google Fonts, Apache). Prefer local .ttf, else @fontsource/arimo.
+const fontsDir = path.join(process.cwd(), "public", "fonts");
+const arimoRegular = path.join(fontsDir, "Arimo-Regular.ttf");
+const arimoBold = path.join(fontsDir, "Arimo-Bold.ttf");
+
+if (fs.existsSync(arimoRegular) && fs.existsSync(arimoBold)) {
+  Font.register({
+    family: "Arial",
+    fonts: [
+      { src: arimoRegular, fontWeight: "normal", fontStyle: "normal" },
+      { src: arimoBold, fontWeight: "bold", fontStyle: "normal" },
+    ],
+  });
+} else {
+  const arimoDir = path.join(process.cwd(), "node_modules", "@fontsource", "arimo", "files");
+  Font.register({
+    family: "Arial",
+    fonts: [
+      { src: path.join(arimoDir, "arimo-latin-400-normal.woff"), fontWeight: "normal" },
+      { src: path.join(arimoDir, "arimo-latin-700-normal.woff"), fontWeight: "bold", fontStyle: "normal" },
+    ],
+  });
+}
+Font.registerHyphenationCallback((word) => [word]);
+
+const cellBorder = {
+  borderWidth: STYLES.BORDER_WIDTH,
+  borderColor: STYLES.BLACK,
+  borderStyle: "solid" as const,
+};
 
 const styles = StyleSheet.create({
   page: {
-    padding: 20,
-    fontSize: 6,
-    flexDirection: "column",
+    padding: STYLES.PAGE_MARGIN,
+    fontFamily: STYLES.FONT_FAMILY,
+    fontSize: STYLES.DATA_SIZE,
   },
-  // Header: single bordered container, 3 columns 25% | 45% | 30%
-  headerOuter: {
+  headerTable: {
     flexDirection: "row",
-    marginBottom: 8,
-    borderWidth: 1,
-    borderStyle: "solid",
-    borderColor: "#333",
+    marginBottom: 6,
+    ...cellBorder,
   },
   headerLeft: {
-    width: "25%",
-    borderRightWidth: 0.5,
-    borderColor: "#333",
+    width: 220,
+    padding: 4,
+    ...cellBorder,
   },
-  headerLeftCell: {
+  headerRow: {
     flexDirection: "row",
-    borderBottomWidth: 0.5,
-    borderColor: "#333",
-    padding: 3,
-    fontSize: 6,
+    minHeight: 10,
+    borderBottomWidth: STYLES.BORDER_WIDTH,
+    borderColor: STYLES.BLACK,
   },
-  headerLeftCellLast: {
-    flexDirection: "row",
-    padding: 3,
-    fontSize: 6,
+  headerRowLast: { borderBottomWidth: 0 },
+  headerLabelCell: {
+    width: 95,
+    padding: 4,
+    borderRightWidth: STYLES.BORDER_WIDTH,
+    borderColor: STYLES.BLACK,
   },
-  headerLeftLabel: { width: 70 },
-  headerLeftValue: { flex: 1 },
-  headerCenter: {
-    width: "45%",
-    justifyContent: "center",
-    alignItems: "center",
-    borderRightWidth: 0.5,
-    borderColor: "#333",
-  },
-  titleLine1: { fontSize: 11, fontWeight: "bold" },
-  titleLine2: { fontSize: 10, fontWeight: "bold", marginTop: 2 },
+  headerLabel: { fontWeight: "bold", fontSize: STYLES.HEADER_LABEL_SIZE },
+  headerValueCell: { flex: 1, padding: 4 },
+  headerValue: { fontSize: STYLES.HEADER_LABEL_SIZE },
   headerRight: {
-    width: "30%",
-    alignItems: "flex-end",
-    justifyContent: "center",
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
     padding: 4,
+    ...cellBorder,
   },
-  logoPlaceholder: {
-    fontSize: 7,
-    color: "#4472C4",
-    fontWeight: "bold",
-    textAlign: "center",
-  },
-  logoImg: { height: 35, maxWidth: 110 },
-  // Project info: blue title row, white data rows
-  projectSection: {
-    borderWidth: 1,
-    borderStyle: "solid",
-    borderColor: "#333",
-    marginBottom: 6,
-  },
+  headerTitleBlock: { alignItems: "center", flex: 1 },
+  headerTitle1: { fontSize: STYLES.TITLE_SIZE, fontWeight: "bold" },
+  headerTitle2: { fontSize: STYLES.TITLE_SIZE, fontWeight: "bold", marginTop: 2 },
+  logoImg: { height: 26, width: 98 },
+  logoPlaceholder: { fontSize: 7, color: STYLES.BLUE_PRIMARY, fontWeight: "bold" },
+  projectSection: { marginBottom: 6, ...cellBorder },
   projectTitleRow: {
-    backgroundColor: BLUE_4472C4,
+    backgroundColor: STYLES.BLUE_PRIMARY,
     padding: 4,
+    minHeight: 12,
   },
   projectTitle: {
-    color: "white",
+    color: STYLES.WHITE,
     fontWeight: "bold",
-    fontSize: 8,
+    fontSize: STYLES.TITLE_SIZE,
     textAlign: "center",
   },
-  projectDataRow: {
-    flexDirection: "row",
-    backgroundColor: "white",
-  },
+  projectDataRow: { flexDirection: "row" },
   projectDataCell: {
     flex: 1,
-    padding: 4,
-    borderTopWidth: 0.5,
-    borderBottomWidth: 0.5,
-    borderRightWidth: 0.5,
-    borderColor: "#333",
+    padding: 6,
+    ...cellBorder,
   },
-  projectDataCellText: { color: "black", fontSize: 7 },
-  // Pipe records table
-  pipeRecordsSection: {
-    borderWidth: 1,
-    borderStyle: "solid",
-    borderColor: "#333",
+  projectDataText: { fontSize: STYLES.DATA_SIZE },
+  pipeRecordsSection: { ...cellBorder },
+  pipeRecordsTitleRow: {
+    backgroundColor: STYLES.BLUE_PRIMARY,
+    padding: 4,
+    minHeight: 12,
   },
   pipeRecordsTitle: {
-    backgroundColor: BLUE_4472C4,
-    padding: 4,
-  },
-  pipeRecordsTitleText: {
-    color: "white",
+    color: STYLES.WHITE,
     fontWeight: "bold",
-    fontSize: 8,
+    fontSize: STYLES.TITLE_SIZE,
     textAlign: "center",
   },
-  groupHeaderRow: {
+  categoryRow: {
     flexDirection: "row",
-    backgroundColor: BLUE_8EA9D8,
+    backgroundColor: STYLES.BLUE_PRIMARY,
+    minHeight: 12,
   },
-  groupHeaderCell: {
-    flex: 1,
-    padding: 3,
-    borderTopWidth: 0.5,
-    borderRightWidth: 0.5,
-    borderColor: "rgba(255,255,255,0.5)",
+  categoryCell: {
+    padding: 2,
+    justifyContent: "center",
+    ...cellBorder,
   },
-  groupHeaderText: { color: "white", fontSize: 6, fontWeight: "bold", textAlign: "center" },
+  categoryText: { color: STYLES.WHITE, fontSize: 6, fontWeight: "bold", textAlign: "center" },
   colHeaderRow: {
     flexDirection: "row",
-    backgroundColor: BLUE_4472C4,
+    backgroundColor: STYLES.BLUE_PRIMARY,
+    minHeight: STYLES.COLUMN_HEADER_HEIGHT,
   },
-  cell: {
-    borderRightWidth: 0.5,
-    borderBottomWidth: 0.5,
-    borderColor: "#333",
-    padding: 2,
+  colHeaderCell: {
+    padding: 4,
+    justifyContent: "center",
+    ...cellBorder,
   },
-  headerCell: {
-    color: "white",
-    fontSize: 6,
+  colHeaderText: {
+    color: STYLES.WHITE,
+    fontSize: STYLES.COLUMN_HEADER_SIZE,
+    fontWeight: "bold",
     textAlign: "center",
   },
-  subheaderRow: {
+  asteriskRow: {
     flexDirection: "row",
-    backgroundColor: GRAY_F2F2F2,
+    backgroundColor: STYLES.GREY_ASTERISKS,
+    minHeight: STYLES.ASTERISK_ROW_HEIGHT,
   },
-  subheaderCell: { fontSize: 6, textAlign: "center" },
-  dataRow: { flexDirection: "row", minHeight: 12 },
-  dataRowAlt: { flexDirection: "row", minHeight: 12, backgroundColor: GRAY_F2F2F2 },
-  notesRow: {
-    marginTop: 4,
-    paddingHorizontal: 4,
-    fontSize: 5,
-    lineHeight: 1.3,
+  asteriskCell: {
+    padding: 2,
+    fontSize: STYLES.COLUMN_HEADER_SIZE,
+    textAlign: "center",
+    ...cellBorder,
+  },
+  dataRow: {
+    flexDirection: "row",
+    minHeight: STYLES.DATA_ROW_HEIGHT,
+    backgroundColor: STYLES.WHITE,
+  },
+  dataCell: {
+    padding: 4,
+    fontSize: STYLES.DATA_SIZE,
+    textAlign: "center",
+    ...cellBorder,
+  },
+  notesSection: {
+    marginTop: 6,
+    fontSize: STYLES.NOTES_SIZE,
+    lineHeight: 1.4,
   },
 });
 
@@ -193,34 +255,6 @@ type RecordRow = {
   cement_liner: boolean | null;
   spark_testing: boolean | null;
   inspector_name: string | null;
-};
-
-const HEADERS = [
-  "Date Installed",
-  "Pipe Chainage",
-  "Pipe No Stamp or Fitting ID",
-  "Joint Type (RRJ, WR, or Transition)",
-  "Witness Mark (Y/N)",
-  "Internal Seal (Y/N)",
-  "Alignment & Deflection Hor ±100mm / Vert ±50mm",
-  "CP Lugs @ 12 O'clock (RRJ ONLY)",
-  "Ovality Check",
-  "Joint Air Test (80kPa, 2 min)",
-  "Cement Liner (OK/Patch)",
-  "Spark Testing (OK/Patched)",
-  "NAME",
-  "SIGNATURE",
-];
-
-const SUBHEADER_NOTES: Record<number, string> = {
-  2: "*",
-  4: "*",
-  6: "***",
-  7: "*",
-  8: "**",
-  9: "*",
-  10: "*(If Patched)",
-  11: "*(If Patched)",
 };
 
 function formatDate(d: string | null) {
@@ -251,9 +285,14 @@ function formatAlignment(r: RecordRow) {
   return `V: ${vSign}${vMm}mm / H: ${hSide}${hMm}mm`;
 }
 
-function yn(val: boolean | null | undefined) {
+function yn(val: boolean | null | undefined): string {
   if (val == null) return "";
   return val ? "Y" : "";
+}
+
+function passOrEmpty(val: boolean | null | undefined): string {
+  if (val == null) return "";
+  return val ? "PASS" : "";
 }
 
 function cpLugsVal(r: RecordRow) {
@@ -264,17 +303,17 @@ function cpLugsVal(r: RecordRow) {
 
 function jointAirTestVal(r: RecordRow) {
   const jt = (r.joint_type ?? "").toString().toUpperCase().trim();
-  // Transition: N/A (no air test required)
   if (jt === "TRANSITION") return "N/A";
-  // RRJ: does NOT require air test per reference template — always blank
-  if (jt === "RRJ") return "";
-  // WR: show Y only when checked
-  if (jt === "WR") return yn(r.joint_air_test);
+  if (jt === "RRJ" || jt === "WR") return yn(r.joint_air_test);
   return "N/A";
 }
 
+function cementLinerVal(r: RecordRow) {
+  if (r.cement_liner == null) return "";
+  return r.cement_liner ? "OK" : "Patch";
+}
+
 async function fetchLogoDataUrl(): Promise<string | null> {
-  // 1. Try local: public/alkimos-logo.png
   try {
     const publicPath = path.join(process.cwd(), "public", "alkimos-logo.png");
     if (fs.existsSync(publicPath)) {
@@ -284,7 +323,6 @@ async function fetchLogoDataUrl(): Promise<string | null> {
   } catch {
     /* ignore */
   }
-  // 2. Try local: app/uploads (Alkimos_logo.png or Alkimos logo.png)
   try {
     for (const name of ["Alkimos_logo.png", "Alkimos logo.png"]) {
       const uploadsPath = path.join(process.cwd(), "app", "uploads", name);
@@ -296,7 +334,6 @@ async function fetchLogoDataUrl(): Promise<string | null> {
   } catch {
     /* ignore */
   }
-  // 3. Try remote URL
   try {
     const res = await fetch(LOGO_URL);
     if (!res.ok) return null;
@@ -317,39 +354,54 @@ export async function generateITRPla001Pdf(
 ) {
   const pageRecords = records.slice(0, ITR_PAGE_SIZE);
   const emptyToFill = ITR_PAGE_SIZE - pageRecords.length;
-  const emptyAfterComplete = pageRecords.length === ITR_PAGE_SIZE ? 3 : 0;
-  const totalEmptyRows = emptyToFill + emptyAfterComplete;
+  const totalEmptyRows = emptyToFill;
   const logoDataUrl = await fetchLogoDataUrl();
   const pageNoLabel = options?.isOpenITR ? "In Progress" : `${pageNumber} of ${totalPages}`;
 
   const doc = (
     <Document>
       <Page size="A4" orientation="landscape" style={styles.page}>
-        {/* HEADER: single bordered container, 3 columns */}
-        <View style={styles.headerOuter}>
+        {/* Header: 4 rows × (label | value | title/logo) con bordes */}
+        <View style={styles.headerTable}>
           <View style={styles.headerLeft}>
-            <View style={styles.headerLeftCell}>
-              <Text style={styles.headerLeftLabel}>Doc No:</Text>
-              <Text style={styles.headerLeftValue}>{DOC_NO}</Text>
+            <View style={styles.headerRow}>
+              <View style={styles.headerLabelCell}>
+                <Text style={styles.headerLabel}>Doc No:</Text>
+              </View>
+              <View style={styles.headerValueCell}>
+                <Text style={styles.headerValue}>{DOC_NO}</Text>
+              </View>
             </View>
-            <View style={styles.headerLeftCell}>
-              <Text style={styles.headerLeftLabel}>Effective Date:</Text>
-              <Text style={styles.headerLeftValue}>{EFFECTIVE_DATE}</Text>
+            <View style={styles.headerRow}>
+              <View style={styles.headerLabelCell}>
+                <Text style={styles.headerLabel}>Effective Date:</Text>
+              </View>
+              <View style={styles.headerValueCell}>
+                <Text style={styles.headerValue}>{EFFECTIVE_DATE}</Text>
+              </View>
             </View>
-            <View style={styles.headerLeftCell}>
-              <Text style={styles.headerLeftLabel}>Revision No:</Text>
-              <Text style={styles.headerLeftValue}>{REVISION_NO}</Text>
+            <View style={styles.headerRow}>
+              <View style={styles.headerLabelCell}>
+                <Text style={styles.headerLabel}>Revision No:</Text>
+              </View>
+              <View style={styles.headerValueCell}>
+                <Text style={styles.headerValue}>{REVISION_NO}</Text>
+              </View>
             </View>
-            <View style={styles.headerLeftCellLast}>
-              <Text style={styles.headerLeftLabel}>Page No:</Text>
-              <Text style={styles.headerLeftValue}>{pageNoLabel}</Text>
+            <View style={[styles.headerRow, styles.headerRowLast]}>
+              <View style={styles.headerLabelCell}>
+                <Text style={styles.headerLabel}>Page No:</Text>
+              </View>
+              <View style={styles.headerValueCell}>
+                <Text style={styles.headerValue}>{pageNoLabel}</Text>
+              </View>
             </View>
-          </View>
-          <View style={styles.headerCenter}>
-            <Text style={styles.titleLine1}>PIPE LAYING INSPECTION FIELD RECORD</Text>
-            <Text style={styles.titleLine2}>ITR-PLA-001</Text>
           </View>
           <View style={styles.headerRight}>
+            <View style={styles.headerTitleBlock}>
+              <Text style={styles.headerTitle1}>PIPE LAYING INSPECTION FIELD RECORD</Text>
+              <Text style={styles.headerTitle2}>ITR-PLA-001</Text>
+            </View>
             {logoDataUrl ? (
               <Image src={logoDataUrl} style={styles.logoImg} />
             ) : (
@@ -358,110 +410,143 @@ export async function generateITRPla001Pdf(
           </View>
         </View>
 
-        {/* PROJECT INFO SECTION */}
+        {/* PROJECT INFORMATION */}
         <View style={styles.projectSection}>
           <View style={styles.projectTitleRow}>
             <Text style={styles.projectTitle}>PROJECT INFORMATION</Text>
           </View>
           <View style={styles.projectDataRow}>
             <View style={styles.projectDataCell}>
-              <Text style={styles.projectDataCellText}>PROJECT NAME: {section.project_name ?? "—"}</Text>
+              <Text style={styles.projectDataText}>
+                <Text style={{ fontWeight: "bold" }}>PROJECT NAME: </Text>
+                {section.project_name ?? "—"}
+              </Text>
             </View>
-            <View style={[styles.projectDataCell, { borderRightWidth: 0 }]}>
-              <Text style={styles.projectDataCellText}>PROJECT NUMBER: {section.project_number ?? "—"}</Text>
+            <View style={styles.projectDataCell}>
+              <Text style={styles.projectDataText}>
+                <Text style={{ fontWeight: "bold" }}>PROJECT NUMBER: </Text>
+                {section.project_number ?? "—"}
+              </Text>
             </View>
           </View>
           <View style={styles.projectDataRow}>
             <View style={styles.projectDataCell}>
-              <Text style={styles.projectDataCellText}>SECTION-SUBLOT: {section.name}</Text>
+              <Text style={styles.projectDataText}>
+                <Text style={{ fontWeight: "bold" }}>SECTION-SUBLOT: </Text>
+                {section.name}
+              </Text>
             </View>
-            <View style={[styles.projectDataCell, { borderRightWidth: 0 }]}>
-              <Text style={styles.projectDataCellText}>ITP: {section.itp_number ?? "—"}</Text>
+            <View style={styles.projectDataCell}>
+              <Text style={styles.projectDataText}>
+                <Text style={{ fontWeight: "bold" }}>ITP: </Text>
+                {section.itp_number ?? "—"}
+              </Text>
             </View>
           </View>
         </View>
 
         {/* PIPE RECORDS TABLE */}
         <View style={styles.pipeRecordsSection}>
-          <View style={styles.pipeRecordsTitle}>
-            <Text style={styles.pipeRecordsTitleText}>PIPE RECORDS</Text>
+          <View style={styles.pipeRecordsTitleRow}>
+            <Text style={styles.pipeRecordsTitle}>PIPE RECORDS</Text>
           </View>
-          {/* Group headers */}
-          <View style={styles.groupHeaderRow}>
-            <View style={[styles.groupHeaderCell, { flex: 4.8 }]}>
-              <Text style={styles.groupHeaderText}>Pipe/ Fitting Details</Text>
+          <View style={styles.categoryRow}>
+            <View style={[styles.categoryCell, { width: 316.5 }]}>
+              <Text style={styles.categoryText}>Pipe/ Fitting Details</Text>
             </View>
-            <View style={[styles.groupHeaderCell, { flex: 1.55 }]}>
-              <Text style={styles.groupHeaderText}>PIPE SPECIFICS</Text>
+            <View style={[styles.categoryCell, { width: 217.6 }]}>
+              <Text style={styles.categoryText}>PIPE SPECIFICS</Text>
             </View>
-            <View style={[styles.groupHeaderCell, { flex: 1.1 }]}>
-              <Text style={styles.groupHeaderText}>FINAL CHECK</Text>
+            <View style={[styles.categoryCell, { width: 106 }]}>
+              <Text style={styles.categoryText}>FINAL CHECK</Text>
             </View>
-            <View style={[styles.groupHeaderCell, { flex: 1.15 }]}>
-              <Text style={styles.groupHeaderText}>APA Signoff</Text>
+            <View style={[styles.categoryCell, { width: 101.7 }]}>
+              <Text style={styles.categoryText}>APA Signoff</Text>
             </View>
           </View>
-          {/* Column headers */}
           <View style={styles.colHeaderRow}>
-            {HEADERS.map((label, idx) => (
-              <Text
-                key={idx}
-                style={[
-                  styles.cell,
-                  styles.headerCell,
-                  { width: COL_WIDTHS[idx], minHeight: 14 },
-                ]}
-              >
-                {label}
-              </Text>
+            {COLUMN_HEADERS.map((label, idx) => (
+              <View key={idx} style={[styles.colHeaderCell, { width: COL_WIDTHS[idx] }]}>
+                <Text style={styles.colHeaderText}>{label}</Text>
+              </View>
             ))}
           </View>
-          {/* Asterisk subheader */}
-          <View style={styles.subheaderRow}>
-            {HEADERS.map((_, idx) => (
-              <Text
-                key={idx}
-                style={[
-                  styles.cell,
-                  styles.subheaderCell,
-                  { width: COL_WIDTHS[idx] },
-                ]}
-              >
-                {SUBHEADER_NOTES[idx] ?? ""}
-              </Text>
+          <View style={styles.asteriskRow}>
+            {COLUMN_HEADERS.map((_, idx) => (
+              <View key={idx} style={[styles.asteriskCell, { width: COL_WIDTHS[idx] }]}>
+                <Text>{ASTERISK_ROW[idx] ?? ""}</Text>
+              </View>
             ))}
           </View>
-          {/* Data rows (9) */}
           {pageRecords.map((r, idx) => (
-            <View key={idx} style={idx % 2 === 0 ? styles.dataRow : styles.dataRowAlt}>
-              <Text style={[styles.cell, { width: COL_WIDTHS[0] }]}>{formatDate(r.date_installed)}</Text>
-              <Text style={[styles.cell, { width: COL_WIDTHS[1] }]}>{formatChainage(r.chainage)}</Text>
-              <Text style={[styles.cell, { width: COL_WIDTHS[2] }]}>{r.pipe_fitting_id ?? ""}</Text>
-              <Text style={[styles.cell, { width: COL_WIDTHS[3] }]}>{r.joint_type ?? ""}</Text>
-              <Text style={[styles.cell, { width: COL_WIDTHS[4] }]}>{yn(r.witness_mark)}</Text>
-              <Text style={[styles.cell, { width: COL_WIDTHS[5] }]}>{yn(r.internal_seal)}</Text>
-              <Text style={[styles.cell, { width: COL_WIDTHS[6] }]}>{formatAlignment(r)}</Text>
-              <Text style={[styles.cell, { width: COL_WIDTHS[7] }]}>{cpLugsVal(r)}</Text>
-              <Text style={[styles.cell, { width: COL_WIDTHS[8] }]}>{yn(r.ovality_check)}</Text>
-              <Text style={[styles.cell, { width: COL_WIDTHS[9] }]}>{jointAirTestVal(r)}</Text>
-              <Text style={[styles.cell, { width: COL_WIDTHS[10] }]}>{yn(r.cement_liner)}</Text>
-              <Text style={[styles.cell, { width: COL_WIDTHS[11] }]}>{yn(r.spark_testing)}</Text>
-              <Text style={[styles.cell, { width: COL_WIDTHS[12] }]}>{r.inspector_name ?? ""}</Text>
-              <Text style={[styles.cell, { width: COL_WIDTHS[13] }]} />
+            <View key={idx} style={styles.dataRow}>
+              <View style={[styles.dataCell, { width: COL_WIDTHS[0] }]}>
+                <Text>{formatDate(r.date_installed)}</Text>
+              </View>
+              <View style={[styles.dataCell, { width: COL_WIDTHS[1] }]}>
+                <Text>{formatChainage(r.chainage)}</Text>
+              </View>
+              <View style={[styles.dataCell, { width: COL_WIDTHS[2] }]}>
+                <Text>{r.pipe_fitting_id ?? ""}</Text>
+              </View>
+              <View style={[styles.dataCell, { width: COL_WIDTHS[3] }]}>
+                <Text>{r.joint_type ?? ""}</Text>
+              </View>
+              <View style={[styles.dataCell, { width: COL_WIDTHS[4] }]}>
+                <Text>{yn(r.witness_mark)}</Text>
+              </View>
+              <View style={[styles.dataCell, { width: COL_WIDTHS[5] }]}>
+                <Text>{yn(r.internal_seal)}</Text>
+              </View>
+              <View style={[styles.dataCell, { width: COL_WIDTHS[6] }]}>
+                <Text>{formatAlignment(r)}</Text>
+              </View>
+              <View style={[styles.dataCell, { width: COL_WIDTHS[7] }]}>
+                <Text>{cpLugsVal(r)}</Text>
+              </View>
+              <View style={[styles.dataCell, { width: COL_WIDTHS[8] }]}>
+                <Text>{passOrEmpty(r.ovality_check)}</Text>
+              </View>
+              <View style={[styles.dataCell, { width: COL_WIDTHS[9] }]}>
+                <Text>{jointAirTestVal(r)}</Text>
+              </View>
+              <View style={[styles.dataCell, { width: COL_WIDTHS[10] }]}>
+                <Text>{cementLinerVal(r)}</Text>
+              </View>
+              <View style={[styles.dataCell, { width: COL_WIDTHS[11] }]}>
+                <Text>{passOrEmpty(r.spark_testing)}</Text>
+              </View>
+              <View style={[styles.dataCell, { width: COL_WIDTHS[12] }]}>
+                <Text>{r.inspector_name ?? ""}</Text>
+              </View>
+              <View style={[styles.dataCell, { width: COL_WIDTHS[13] }]}>
+                <Text />
+              </View>
             </View>
           ))}
           {Array.from({ length: totalEmptyRows }).map((_, i) => (
-            <View key={`e-${i}`} style={(pageRecords.length + i) % 2 === 0 ? styles.dataRow : styles.dataRowAlt}>
-              {HEADERS.map((_, j) => (
-                <Text key={j} style={[styles.cell, { width: COL_WIDTHS[j] }]} />
+            <View key={`e-${i}`} style={styles.dataRow}>
+              {COLUMN_HEADERS.map((_, j) => (
+                <View key={j} style={[styles.dataCell, { width: COL_WIDTHS[j] }]}>
+                  <Text />
+                </View>
               ))}
             </View>
           ))}
         </View>
 
         {/* Notes */}
-        <View style={styles.notesRow}>
+        <View style={styles.notesSection}>
           <Text>NOTE: * Has photo requirements.</Text>
+          <Text>
+            NOTE:** Measurements for Ovality check are to be done at evenly spaced intervals
+            approximately 2Pi/3 around the inside of the pipe
+          </Text>
+          <Text>
+            NOTE: *** Max deviation and deflection in WR joint is 1.1deg. Max Deflection in RRJ is
+            0.6deg. Max Deflection with Site Weld Band is 6 deg. No reverse grade permitted- Any
+            exceedance in alignment to be RFI'd.
+          </Text>
         </View>
       </Page>
     </Document>

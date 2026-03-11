@@ -5,6 +5,7 @@ import { getUserFromRequest } from "@/lib/api-auth";
 import { isAdminEmail } from "@/lib/admin";
 import { getSupabaseServer } from "@/lib/supabase/server";
 import { generateSectionQRPdf } from "@/lib/reporting/section-qr-pdf";
+import { getEmailFrom, getEmailSignatureHtml, getLogoAttachment, LOGO_CID, RESEND_SMTP } from "@/lib/email-config";
 
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || "https://onsite-d.vercel.app";
 
@@ -48,11 +49,23 @@ export async function POST(request: NextRequest) {
     color: { dark: "#000000", light: "#ffffff" },
   });
 
-  const { buffer, fileName } = await generateSectionQRPdf({
-    sectionId,
-    sectionName: section.name,
-    qrDataUrl,
-  });
+  let buffer: Buffer;
+  let fileName: string;
+  try {
+    const result = await generateSectionQRPdf({
+      sectionId,
+      sectionName: section.name,
+      qrDataUrl,
+    });
+    buffer = result.buffer;
+    fileName = result.fileName;
+  } catch (err) {
+    console.error("QR PDF generation failed", err);
+    return NextResponse.json(
+      { error: err instanceof Error ? err.message : "PDF generation failed" },
+      { status: 500 }
+    );
+  }
 
   const pass = process.env.SMTP_PASS?.trim() || process.env.RESEND_API_KEY?.trim();
   if (!pass) {
@@ -62,35 +75,34 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  const smtpHost = process.env.SMTP_HOST || "smtp.resend.com";
-  const smtpPort = Number(process.env.SMTP_PORT) || 465;
-  const smtpUser = process.env.SMTP_USER || "resend";
-  const smtpFrom =
-    process.env.SMTP_FROM ||
-    process.env.ALERT_FROM_EMAIL?.trim() ||
-    "Water Cart <info@readx.com.au>";
-
   const transporter = nodemailer.createTransport({
-    host: smtpHost,
-    port: smtpPort,
+    host: RESEND_SMTP.host,
+    port: RESEND_SMTP.port,
     secure: true,
-    auth: { user: smtpUser, pass },
+    auth: { user: RESEND_SMTP.user, pass },
   });
 
+  const logoAtt = getLogoAttachment();
+  const logoSrc = logoAtt ? `cid:${LOGO_CID}` : `${process.env.NEXT_PUBLIC_SITE_URL || "https://onsite-d.vercel.app"}/readx-logo.png`;
+  const attachments: Array<{ filename: string; content: Buffer; cid?: string }> = [
+    { filename: fileName, content: buffer },
+  ];
+  if (logoAtt) attachments.unshift(logoAtt);
+
+  const htmlBody = `
+<div style="font-family: Arial, sans-serif; color: #333; padding: 24px;">
+  <h2 style="color: #1a5276;">Section QR Code</h2>
+  <p>Attached: QR code for <strong>${section.name}</strong></p>
+  <p>Scan to open in the app.</p>
+  ${getEmailSignatureHtml(logoSrc)}
+</div>`;
+
   await transporter.sendMail({
-    from: smtpFrom,
+    from: getEmailFrom(),
     to: recipient,
     subject: `Section QR: ${section.name}`,
-    html: `
-      <p>Attached: QR code for <strong>${section.name}</strong></p>
-      <p>Scan to open in the app.</p>
-    `,
-    attachments: [
-      {
-        filename: fileName,
-        content: buffer,
-      },
-    ],
+    html: htmlBody,
+    attachments,
   });
 
   return NextResponse.json({ success: true, message: `QR sent to ${recipient}` });

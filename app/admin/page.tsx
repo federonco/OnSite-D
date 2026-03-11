@@ -88,6 +88,7 @@ export default function AdminPage() {
   const [sendQROpen, setSendQROpen] = useState(false);
   const [sendQREmail, setSendQREmail] = useState("");
   const [sendingQR, setSendingQR] = useState(false);
+  const [recordsRefreshing, setRecordsRefreshing] = useState(false);
 
   const getAccessToken = useCallback(async () => {
     const { data } = await supabase.auth.getSession();
@@ -283,7 +284,7 @@ export default function AdminPage() {
           recipientEmail: sendQREmail.trim(),
         }),
       });
-      const data = await res.json();
+      const data = (await res.json().catch(() => ({}))) as { error?: string };
       if (!res.ok) throw new Error(data.error ?? "Send failed");
       pushToast({
         type: "success",
@@ -335,7 +336,7 @@ export default function AdminPage() {
           },
           body: JSON.stringify({ sectionId, recipientEmail: email }),
         });
-        const data = await res.json();
+        const data = (await res.json().catch(() => ({}))) as { error?: string };
         if (!res.ok) throw new Error(data.error ?? "Send failed");
         pushToast({
           type: "success",
@@ -355,7 +356,7 @@ export default function AdminPage() {
             recipientEmail: email,
           }),
         });
-        const data = await res.json();
+        const data = (await res.json().catch(() => ({}))) as { error?: string };
         if (!res.ok) throw new Error(data.error ?? "Send failed");
         const isOpen = reportModalType === "itr-open";
         pushToast({
@@ -456,6 +457,18 @@ export default function AdminPage() {
                 ))}
               </SelectContent>
             </Select>
+            <Button
+              variant="outline"
+              size="sm"
+              className="min-h-[44px] px-4 text-sm shrink-0"
+              onClick={() => {
+                setSendQREmail(reportDefaultEmail || authEmail || "");
+                setSendQROpen(true);
+              }}
+              disabled={!sectionId}
+            >
+              Send QR
+            </Button>
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button variant="outline" size="sm" className="min-h-[44px] min-w-[44px] px-0 bg-[var(--card-bg)] border-0 hover:bg-[var(--surface)]">
@@ -508,28 +521,21 @@ export default function AdminPage() {
                         "Print audit"
                       )}
                     </Button>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="min-h-[44px] px-4 text-sm"
-                      onClick={() => {
-                        setSendQREmail(reportDefaultEmail || authEmail || "");
-                        setSendQROpen(true);
-                      }}
-                      disabled={!sectionId}
-                    >
-                      Send QR
-                    </Button>
                   </div>
                 </div>
                 <Button
                   variant="outline"
                   size="sm"
                   className="min-h-[44px] min-w-[44px] shrink-0 rounded-full bg-[var(--card-bg)] border-0 hover:bg-[var(--surface)]"
-                  onClick={loadRecords}
+                  onClick={async () => {
+                    setRecordsRefreshing(true);
+                    await loadRecords();
+                    setRecordsRefreshing(false);
+                  }}
+                  disabled={recordsRefreshing}
                   title="Refresh"
                 >
-                  <RefreshCw className="size-4" />
+                  <RefreshCw className={`size-4 ${recordsRefreshing ? "animate-spin" : ""}`} />
                 </Button>
               </div>
             </CardHeader>

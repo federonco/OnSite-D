@@ -1,12 +1,14 @@
 import nodemailer from "nodemailer";
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { getEmailFrom, getEmailSignatureHtml, getLogoAttachment, LOGO_CID, RESEND_SMTP } from "./email-config";
 
-const PROXIMITY_METERS = 24;
+const PROXIMITY_METERS = 30;
 
 const FALLBACK_ALERT_EMAIL = process.env.ALERT_EMAIL?.trim();
 
 export async function processCheckpointAlerts(
-  supabase: SupabaseClient
+  supabase: SupabaseClient,
+  sectionId?: string | null
 ): Promise<void> {
   const pass =
     process.env.SMTP_PASS?.trim() || process.env.RESEND_API_KEY?.trim();
@@ -16,47 +18,67 @@ export async function processCheckpointAlerts(
     );
     return;
   }
-  const smtpHost = process.env.SMTP_HOST || "smtp.resend.com";
-  const smtpPort = Number(process.env.SMTP_PORT) || 465;
-  const smtpUser = process.env.SMTP_USER || "resend";
-  const smtpFrom =
-    process.env.SMTP_FROM ||
-    process.env.ALERT_FROM_EMAIL?.trim() ||
-    "Water Cart <info@readx.com.au>";
 
-  const { data: maxRow } = await supabase
+  let direction = "onwards";
+  if (sectionId) {
+    const { data: section } = await supabase
+      .from("drainer_sections")
+      .select("direction")
+      .eq("id", sectionId)
+      .single();
+    direction = (section?.direction as string) || "onwards";
+  }
+  const isBackwards = direction === "backwards";
+
+  let chainageQuery = supabase
     .from("drainer_pipe_records")
-    .select("chainage")
-    .order("chainage", { ascending: false })
-    .limit(1)
-    .maybeSingle();
+    .select("chainage");
+  if (sectionId) {
+    chainageQuery = chainageQuery.eq("section_id", sectionId);
+  }
+  chainageQuery = chainageQuery.order("chainage", { ascending: isBackwards });
+  const { data: frontRow } = await chainageQuery.limit(1).maybeSingle();
+  const chFront = frontRow?.chainage != null ? Number(frontRow.chainage) : null;
+  if (chFront == null) return;
 
-  const chActual = maxRow?.chainage != null ? Number(maxRow.chainage) : null;
-  if (chActual == null) return;
+  let candidates: { id: string; name: string; ch: number; alert_email: string | null }[] = [];
 
-  const { data: candidates } = await supabase
-    .from("checkpoints")
-    .select("id,name,ch,alert_email")
-    .eq("active", true)
-    .eq("notified", false)
-    .gte("ch", chActual)
-    .lte("ch", chActual + PROXIMITY_METERS);
+  if (isBackwards) {
+    const { data } = await supabase
+      .from("checkpoints")
+      .select("id,name,ch,alert_email")
+      .eq("active", true)
+      .eq("notified", false)
+      .lt("ch", chFront)
+      .gte("ch", chFront - PROXIMITY_METERS);
+    candidates = (data ?? []) as { id: string; name: string; ch: number; alert_email: string | null }[];
+  } else {
+    const { data } = await supabase
+      .from("checkpoints")
+      .select("id,name,ch,alert_email")
+      .eq("active", true)
+      .eq("notified", false)
+      .gt("ch", chFront)
+      .lte("ch", chFront + PROXIMITY_METERS);
+    candidates = (data ?? []) as { id: string; name: string; ch: number; alert_email: string | null }[];
+  }
 
   if (!candidates?.length) return;
 
   const transporter = nodemailer.createTransport({
-    host: smtpHost,
-    port: smtpPort,
+    host: RESEND_SMTP.host,
+    port: RESEND_SMTP.port,
     secure: true,
-    auth: { user: smtpUser, pass },
+    auth: { user: RESEND_SMTP.user, pass },
   });
 
-  const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://onsite-d.vercel.app";
+  const logoAttachment = getLogoAttachment();
+  const logoSrc = logoAttachment ? `cid:${LOGO_CID}` : `${process.env.NEXT_PUBLIC_SITE_URL || "https://onsite-d.vercel.app"}/readx-logo.png`;
 
   for (const cp of candidates) {
     const ch = Number(cp.ch);
-    const dist = ch - chActual;
-    if (dist < 0 || dist > PROXIMITY_METERS) continue;
+    const dist = isBackwards ? chFront - ch : ch - chFront;
+    if (dist <= 0 || dist > PROXIMITY_METERS) continue;
 
     const to = (cp.alert_email?.trim() || FALLBACK_ALERT_EMAIL)?.trim();
     if (!to) {
@@ -67,7 +89,7 @@ export async function processCheckpointAlerts(
     const textBody = [
       `Checkpoint: ${cp.name}`,
       `Checkpoint CH: ${ch} m`,
-      `Recorded CH: ${chActual} m`,
+      `Recorded CH: ${chFront} m`,
       `Remaining distance: ${dist} m`,
     ].join("\n\n");
 
@@ -75,34 +97,18 @@ export async function processCheckpointAlerts(
 <div style="font-family: Arial, sans-serif; color: #333; padding: 24px;">
   <h2 style="color: #1a5276;">⚠️ Checkpoint Approaching</h2>
   <p><strong>${cp.name}</strong></p>
-  <p>Checkpoint CH: ${ch} m<br />Recorded CH: ${chActual} m<br />Remaining distance: ${dist} m</p>
-
-  <hr style="border: none; border-top: 1px solid #e0e0e0; margin: 32px 0;" />
-
-  <table cellpadding="0" cellspacing="0" style="font-family: Arial, sans-serif;">
-    <tr>
-      <td style="padding-right: 16px; vertical-align: middle;">
-        <a href="https://www.readx.com.au" target="_blank" style="display:block;">
-          <img src="${siteUrl}/readx-logo.png" alt="readX" width="80" style="display:block;" />
-        </a>
-      </td>
-      <td style="vertical-align: middle; border-left: 2px solid #1a5276; padding-left: 16px;">
-        <p style="margin:0; font-size: 15px; font-weight: bold; color: #1a5276;">readX Team</p>
-        <p style="margin:4px 0 0; font-size: 13px; color: #555;">Drainer - OnSite-D</p>
-        <p style="margin:4px 0 0; font-size: 12px;">
-          <a href="https://www.readx.com.au" target="_blank"
-             style="color: #1a5276; text-decoration: none;">www.readX.com.au</a>
-        </p>
-      </td>
-    </tr>
-  </table>
+  <p>Checkpoint CH: ${ch} m<br />Recorded CH: ${chFront} m<br />Remaining distance: ${dist} m</p>
+  ${getEmailSignatureHtml(logoSrc)}
 </div>
 `;
 
+    const logoAtt = getLogoAttachment();
+    const attachments = logoAtt ? [logoAtt] : [];
     try {
       await transporter.sendMail({
-        from: smtpFrom,
+        from: getEmailFrom(),
         to,
+        attachments,
         subject: `⚠️ Checkpoint approaching: ${cp.name}`,
         text: textBody,
         html: htmlBody,

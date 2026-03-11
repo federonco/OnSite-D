@@ -30,7 +30,9 @@ export function LastPipesView({
     try {
       const res = await fetch(`/api/drainer/records?sectionId=${sectionId}&limit=3`);
       const data = await res.json();
-      setRecords((data.records ?? []).slice(0, 3));
+      const list = (data.records ?? []).slice(0, 3);
+      list.sort((a: PipeRecord, b: PipeRecord) => Number(a.chainage) - Number(b.chainage));
+      setRecords(list);
     } catch {
       setRecords([]);
     } finally {

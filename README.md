@@ -12,6 +12,8 @@ Pipe laying inspection and ITR reporting for drainage works.
    - `NEXT_PUBLIC_SITE_URL` — Site URL for auth redirects (e.g. `https://on-site-d.vercel.app` or `http://localhost:3000`)
    - `ADMIN_EMAIL_ALLOWLIST` — Comma-separated admin emails
    - `ALERT_EMAIL` — Recipient for checkpoint proximity alerts
+   - `RESEND_API_KEY` — For sending emails (Resend SMTP)
+   - `RESEND_FROM` — Sender address (default: `OnSite-D <info@readx.com.au>`). Domain must be verified in [Resend](https://resend.com/domains).
    - `GEMINI_API_KEY` — For AI insight (optional)
 3. Run the checkpoints migration in Supabase SQL editor: `supabase/migrations/20250305000000_create_checkpoints.sql`
 4. Run `npm install` then `npm run dev`

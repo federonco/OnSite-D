@@ -354,7 +354,7 @@ export function LodgeForm({
             {chainageStatus === "checking" && (
               <>
                 <Loader2 className="size-3.5 shrink-0 animate-spin text-[var(--muted-foreground)]" />
-                <span className="text-[var(--muted-foreground)]">Checking</span>
+                <span className="text-[var(--muted-foreground)]">Checking for overlaps</span>
               </>
             )}
             {chainageStatus === "clear" && chainage && (

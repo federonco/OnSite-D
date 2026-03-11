@@ -4,6 +4,7 @@ import { getUserFromRequest } from "@/lib/api-auth";
 import { isAdminEmail } from "@/lib/admin";
 import { getSupabaseServer } from "@/lib/supabase/server";
 import { generateAuditReportPdf } from "@/lib/reporting/audit-report-pdf";
+import { getEmailFrom, getEmailSignatureHtml, getLogoAttachment, LOGO_CID, RESEND_SMTP } from "@/lib/email-config";
 
 export const runtime = "nodejs";
 
@@ -74,65 +75,39 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  const smtpHost = process.env.SMTP_HOST || "smtp.resend.com";
-  const smtpPort = Number(process.env.SMTP_PORT) || 465;
-  const smtpUser = process.env.SMTP_USER || "resend";
-  const smtpFrom =
-    process.env.SMTP_FROM ||
-    process.env.ALERT_FROM_EMAIL?.trim() ||
-    "Water Cart <info@readx.com.au>";
-
   const text = `Please find attached the full audit report for ${section.name}.`;
-  const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || "https://onsite-d.vercel.app";
+  const logoAttachment = getLogoAttachment();
+  const logoSrc = logoAttachment ? `cid:${LOGO_CID}` : `${process.env.NEXT_PUBLIC_SITE_URL || "https://onsite-d.vercel.app"}/readx-logo.png`;
   const htmlBody = `
 <div style="font-family: Arial, sans-serif; color: #333; padding: 24px;">
   <h2 style="color: #1a5276;">Audit Report</h2>
   <p>Please find the attached full audit report for <strong>${section.name}</strong>.</p>
   <p style="color: #666; font-size: 13px;">This report was generated automatically by OnSite-D.</p>
-
-  <hr style="border: none; border-top: 1px solid #e0e0e0; margin: 32px 0;" />
-
-  <table cellpadding="0" cellspacing="0" style="font-family: Arial, sans-serif;">
-    <tr>
-      <td style="padding-right: 16px; vertical-align: middle;">
-        <a href="https://www.readx.com.au" target="_blank" style="display:block;">
-          <img src="${siteUrl}/readx-logo.png" alt="readX" width="80" style="display:block;" />
-        </a>
-      </td>
-      <td style="vertical-align: middle; border-left: 2px solid #1a5276; padding-left: 16px;">
-        <p style="margin:0; font-size: 15px; font-weight: bold; color: #1a5276;">readX Team</p>
-        <p style="margin:4px 0 0; font-size: 13px; color: #555;">Drainer - OnSite-D</p>
-        <p style="margin:4px 0 0; font-size: 12px;">
-          <a href="https://www.readx.com.au" target="_blank"
-             style="color: #1a5276; text-decoration: none;">www.readX.com.au</a>
-        </p>
-      </td>
-    </tr>
-  </table>
+  ${getEmailSignatureHtml(logoSrc)}
 </div>
 `;
 
+  const attachments: Array<{ filename: string; content: Buffer; contentType?: string; cid?: string }> = [
+    { filename: fileName, content: buffer, contentType: "application/pdf" },
+  ];
+  const logoAtt = getLogoAttachment();
+  if (logoAtt) attachments.unshift(logoAtt);
+
   try {
     const transporter = nodemailer.createTransport({
-      host: smtpHost,
-      port: smtpPort,
+      host: RESEND_SMTP.host,
+      port: RESEND_SMTP.port,
       secure: true,
-      auth: { user: smtpUser, pass },
+      auth: { user: RESEND_SMTP.user, pass },
     });
 
     await transporter.sendMail({
-      from: smtpFrom,
+      from: getEmailFrom(),
       to: recipient,
       subject: `Audit Report — ${section.name}`,
       text,
       html: htmlBody,
-      attachments: [
-        {
-          filename: fileName,
-          content: buffer,
-          contentType: "application/pdf",
-        },
-      ],
+      attachments,
     });
 
     return NextResponse.json({ ok: true, message: "Email sent" });
