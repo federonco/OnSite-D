@@ -793,11 +793,6 @@ export default function AdminPage() {
             <DialogTitle>Send report to</DialogTitle>
           </DialogHeader>
           <div className="space-y-3">
-            {(reportModalType === "itr-complete" || reportModalType === "itr-open") && reportModalPayload && (
-              <p className="text-xs text-[var(--muted-foreground)]">
-                Max 9 records per ITR-PLA-001 page. This ITR has {reportModalPayload.recordCount ?? 0} records.
-              </p>
-            )}
             <Input
               type="email"
               placeholder="Email address"
