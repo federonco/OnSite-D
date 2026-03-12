@@ -15,6 +15,7 @@ Pipe laying inspection and ITR reporting for drainage works.
    - `RESEND_API_KEY` — For sending emails (Resend SMTP)
    - `RESEND_FROM` — Sender address (default: `OnSite-D <info@readx.com.au>`). Domain must be verified in [Resend](https://resend.com/domains).
    - `GEMINI_API_KEY` — For AI insight (optional)
+   - PDF: `ITR_PDF_RENDERER` (auto→React-PDF), `ITR_FORCE_REACT_PDF`, `ITR_PDF_DEBUG` (see `lib/reporting/itr-pla-001/PDF_OPTIMIZATION.md`)
 3. Run the checkpoints migration in Supabase SQL editor: `supabase/migrations/20250305000000_create_checkpoints.sql`
 4. Run `npm install` then `npm run dev`
 
@@ -26,6 +27,12 @@ Pipe laying inspection and ITR reporting for drainage works.
 - **Checkpoints** — Preload points of interest; receive email alerts when installation approaches (≤24 m)
 - **Notifications** — View missed checkpoint alerts (checkpoints passed without notification)
 - **Audit Report** — Raw records PDF per section
+
+## PDF smoke test
+
+```bash
+npm run pdf:smoke
+```
 
 ## Test deploy trigger
 
