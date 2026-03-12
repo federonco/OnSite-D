@@ -268,7 +268,7 @@ export function LodgeForm({
       <Card className="drainer-card">
         <CardContent className="pt-0">
           <div className="drainer-title">Location</div>
-          <div className="flex gap-2 items-center mt-2">
+          <div className="flex gap-2 items-center mt-[14px] mb-[2px]">
             <Select
               value={sectionId}
               onValueChange={(v) => {
@@ -307,7 +307,7 @@ export function LodgeForm({
           <div className="drainer-title">
             Current chainage (ch)
           </div>
-          <div className="relative mt-2 mb-0 w-full">
+          <div className="relative mt-[14px] mb-[2px] w-full">
             <Input
               type="text"
               inputMode="decimal"
@@ -315,7 +315,7 @@ export function LodgeForm({
               value={chainage}
               onChange={(e) => handleChainageChange(e.target.value)}
               onBlur={handleChainageBlur}
-              className={`drainer-input drainer-nums-plain-zero pr-14 pl-14 text-center ${
+              className={`drainer-input drainer-nums-plain-zero h-9 min-h-9 pr-14 pl-14 text-center rounded-full font-semibold ${
                 isDuplicate || chainageError ? "!border-red-500 !bg-red-50" : ""
               } ${isDuplicate ? "text-red-500" : ""}`}
               aria-invalid={!!chainageError || !!isDuplicate}
@@ -420,16 +420,18 @@ export function LodgeForm({
               Vertical deflection (mm)
             </label>
             <div className="flex gap-2">
-              <select
+              <Select
                 value={deflectionVSign}
-                onChange={(e) =>
-                  setDeflectionVSign(e.target.value as "+" | "-")
-                }
-                className="drainer-input drainer-input-sm w-20"
+                onValueChange={(v) => setDeflectionVSign(v as "+" | "-")}
               >
-                <option value="+">+</option>
-                <option value="-">−</option>
-              </select>
+                <SelectTrigger className="drainer-input drainer-input-sm w-20 h-10 min-h-10 rounded-[12px]">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="+">+</SelectItem>
+                  <SelectItem value="-">−</SelectItem>
+                </SelectContent>
+              </Select>
               <Input
                 type="number"
                 placeholder="0"
@@ -451,16 +453,18 @@ export function LodgeForm({
               Horizontal deflection (mm)
             </label>
             <div className="flex gap-2">
-              <select
+              <Select
                 value={deflectionHSide}
-                onChange={(e) =>
-                  setDeflectionHSide(e.target.value as "L" | "R")
-                }
-                className="drainer-input drainer-input-sm w-20"
+                onValueChange={(v) => setDeflectionHSide(v as "L" | "R")}
               >
-                <option value="L">Left</option>
-                <option value="R">Right</option>
-              </select>
+                <SelectTrigger className="drainer-input drainer-input-sm w-20 h-10 min-h-10 rounded-[12px]">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="L">Left</SelectItem>
+                  <SelectItem value="R">Right</SelectItem>
+                </SelectContent>
+              </Select>
               <Input
                 type="number"
                 placeholder="0"
@@ -521,7 +525,7 @@ export function LodgeForm({
                         checked: cpLugs,
                         set: setCpLugs,
                         label:
-                          "CP lugs installed @12 O'clock & Lead Connected",
+                          "CP lugs installed @12 O'clock & lead connected",
                       },
                     ]
                   : []),
@@ -550,7 +554,7 @@ export function LodgeForm({
         confirmLabel="Confirm?"
         onConfirm={handleSubmit}
         disabled={loading || !isFormValid}
-        className="drainer-button drainer-button-primary drainer-button-lodge w-full py-4 text-lg font-bold disabled:bg-slate-300 disabled:cursor-not-allowed"
+        className="drainer-button drainer-button-primary drainer-button-lodge w-full py-4 text-base font-semibold disabled:bg-slate-300 disabled:cursor-not-allowed"
       />
     </>
   );

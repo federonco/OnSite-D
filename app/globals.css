@@ -238,6 +238,16 @@ body {
     border-radius: var(--radius);
   }
 
+  /* Native <select> with drainer-input: match Input border, radius and height (h-10) */
+  select.drainer-input {
+    height: 2.5rem; /* 40px, same as h-10 */
+    min-height: 2.5rem;
+    border-radius: 12px;
+    border: 1px solid var(--input-border);
+    -webkit-appearance: none;
+    appearance: none;
+  }
+
   .drainer-input-sm {
     font-size: 0.75rem;
   }
@@ -362,5 +372,11 @@ body {
   }
   body {
     @apply bg-background text-foreground;
+  }
+  button,
+  input,
+  select,
+  textarea {
+    font-family: var(--font-body), system-ui, sans-serif;
   }
 }

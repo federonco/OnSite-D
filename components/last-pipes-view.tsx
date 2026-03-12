@@ -48,8 +48,8 @@ export function LastPipesView({
 
   return (
     <Card className="drainer-card">
-      <CardContent className="pt-4">
-        <div className="drainer-title text-sm">Last 3 pipes lodged</div>
+      <CardContent className="pt-0">
+        <div className="drainer-title">Last 3 pipes lodged</div>
         {loading ? (
           <p className="text-xs text-[var(--muted-foreground)] mt-2">Loading…</p>
         ) : records.length === 0 ? (
@@ -61,10 +61,10 @@ export function LastPipesView({
                 key={r.id}
                 className="flex justify-between items-center text-sm py-1 border-b border-[var(--border)] last:border-0"
               >
-                <span className="font-mono text-xs drainer-nums-plain-zero">
+                <span className="text-xs drainer-nums-plain-zero">
                   Ch {r.chainage.toLocaleString("en-AU", { minimumFractionDigits: 2 })}
                 </span>
-                <span className="font-mono text-xs truncate max-w-[140px]" title={r.pipe_fitting_id ?? ""}>
+                <span className="text-xs truncate max-w-[140px]" title={r.pipe_fitting_id ?? ""}>
                   {r.pipe_fitting_id ?? "—"}
                 </span>
                 <span className="text-xs text-[var(--muted-foreground)]">{r.joint_type ?? "—"}</span>
