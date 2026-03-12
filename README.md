@@ -26,3 +26,12 @@ Pipe laying inspection and ITR reporting for drainage works.
 - **Checkpoints** — Preload points of interest; receive email alerts when installation approaches (≤24 m)
 - **Notifications** — View missed checkpoint alerts (checkpoints passed without notification)
 - **Audit Report** — Raw records PDF per section
+
+## Test deploy trigger
+
+To trigger a Vercel redeploy (e.g. after env var changes), run:
+
+```bash
+git commit --allow-empty -m "chore: trigger Vercel deploy"
+git push
+```
