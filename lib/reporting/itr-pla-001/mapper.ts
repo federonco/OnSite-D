@@ -92,6 +92,5 @@ export function mapRecordToCells(r: RecordRow): string[] {
     cementLinerVal(r),
     passOrEmpty(r.spark_testing),
     r.inspector_name ?? "",
-    "", // signature
   ];
 }

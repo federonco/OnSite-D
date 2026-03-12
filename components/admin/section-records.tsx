@@ -26,6 +26,21 @@ function formatDate(d: string | null) {
   }
 }
 
+function formatTime(d: string | null, t: string | null) {
+  if (t) return t;
+  if (!d) return "—";
+  try {
+    const date = new Date(d);
+    if (isNaN(date.getTime())) return "—";
+    const hrs = date.getHours();
+    const mins = date.getMinutes();
+    if (hrs === 0 && mins === 0) return "—";
+    return `${String(hrs).padStart(2, "0")}:${String(mins).padStart(2, "0")}`;
+  } catch {
+    return "—";
+  }
+}
+
 function formatAlignment(r: PipeRecord) {
   const vSign = r.deflection_v_sign ?? "+";
   const vMm = r.deflection_v_mm ?? 0;
@@ -75,10 +90,10 @@ export function SectionRecords({
               <thead className="bg-[var(--surface-alt)] sticky top-0">
                 <tr>
                   <th className="text-left px-3 py-2 font-semibold whitespace-nowrap">Date</th>
+                  <th className="text-left px-3 py-2 font-semibold whitespace-nowrap">Time</th>
                   <th className="text-left px-3 py-2 font-semibold whitespace-nowrap">CH</th>
                   <th className="text-left px-3 py-2 font-semibold whitespace-nowrap">Pipe ID</th>
                   <th className="text-left px-3 py-2 font-semibold whitespace-nowrap">Joint</th>
-                  <th className="text-left px-3 py-2 font-semibold whitespace-nowrap">Inspector</th>
                   <th className="text-left px-3 py-2 font-semibold whitespace-nowrap">Action</th>
                 </tr>
               </thead>
@@ -96,10 +111,10 @@ export function SectionRecords({
                       className="border-t border-[var(--border)] hover:bg-[var(--surface-alt)]/50"
                     >
                       <td className="px-3 py-2 whitespace-nowrap">{formatDate(r.date_installed)}</td>
+                      <td className="px-3 py-2 whitespace-nowrap">{formatTime(r.date_installed, r.time_installed)}</td>
                       <td className="px-3 py-2 whitespace-nowrap">{r.chainage}</td>
                       <td className="px-3 py-2 font-mono text-xs whitespace-nowrap">{r.pipe_fitting_id ?? "—"}</td>
                       <td className="px-3 py-2 whitespace-nowrap">{r.joint_type ?? "—"}</td>
-                      <td className="px-3 py-2 whitespace-nowrap">{r.inspector_name ?? "—"}</td>
                       <td className="px-3 py-2">
                         <Button
                           variant="ghost"

@@ -550,7 +550,7 @@ export default function AdminPage() {
             <CardContent className="space-y-3">
               <div className="flex items-center gap-2">
                 <p className="text-xs font-bold text-[var(--muted-foreground)]">
-                  Records: {records.length} (max {ITR_PAGE_SIZE} per ITR)
+                  Records: {records.length}
                 </p>
                 <span className="drainer-badge-orange">
                   Ready {progress.completeITRs}
