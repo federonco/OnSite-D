@@ -255,7 +255,7 @@ export function RecordEditForm({
         </DialogHeader>
 
         {contextualNote && (
-          <p className="text-sm text-[var(--muted-foreground)] bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded-lg px-3 py-2">
+          <p className="text-sm font-medium bg-[#FFF6DB] text-[#9A6B00] border border-[#F3E3B0] rounded-full px-2.5 py-1.5">
             {contextualNote}
           </p>
         )}
@@ -345,14 +345,18 @@ export function RecordEditForm({
           <div>
             <label className="drainer-label block mb-1">Deflection V/H</label>
             <div className="flex items-center gap-2 flex-wrap">
-              <select
+              <Select
                 value={deflectionVSign}
-                onChange={(e) => setDeflectionVSign(e.target.value as "+" | "-")}
-                className="drainer-input w-14"
+                onValueChange={(v) => setDeflectionVSign(v as "+" | "-")}
               >
-                <option value="+">+</option>
-                <option value="-">−</option>
-              </select>
+                <SelectTrigger className="drainer-input w-14 h-10 min-h-10 rounded-[12px]">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="+">+</SelectItem>
+                  <SelectItem value="-">−</SelectItem>
+                </SelectContent>
+              </Select>
               <Input
                 type="number"
                 value={deflectionVMm}
@@ -360,14 +364,18 @@ export function RecordEditForm({
                 className="drainer-input w-20"
               />
               <span className="text-sm">/</span>
-              <select
+              <Select
                 value={deflectionHSide}
-                onChange={(e) => setDeflectionHSide(e.target.value as "L" | "R")}
-                className="drainer-input w-14"
+                onValueChange={(v) => setDeflectionHSide(v as "L" | "R")}
               >
-                <option value="L">L</option>
-                <option value="R">R</option>
-              </select>
+                <SelectTrigger className="drainer-input w-14 h-10 min-h-10 rounded-[12px]">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="L">L</SelectItem>
+                  <SelectItem value="R">R</SelectItem>
+                </SelectContent>
+              </Select>
               <Input
                 type="number"
                 value={deflectionHMm}
@@ -442,7 +450,7 @@ export function RecordEditForm({
             variant="destructive"
             onClick={handleDelete}
             disabled={loading || deleting || !recordId}
-            className="min-h-[44px] mr-auto"
+            className="drainer-button-delete-soft min-h-[44px] mr-auto"
           >
             {deleting ? "Deleting..." : "Delete"}
           </Button>
@@ -453,7 +461,7 @@ export function RecordEditForm({
             <Button
               onClick={handleSave}
               disabled={loading || isDuplicateChainage}
-              className="min-h-[44px]"
+              className="min-h-[44px] bg-[#B8682A] text-white border-0 hover:bg-[#A35D26]"
             >
               {loading ? "Saving..." : "Save"}
             </Button>

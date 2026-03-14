@@ -356,24 +356,32 @@ export default function NotificationsPage() {
                 {allInconsistencies.map(({ inc, sec }, idx) => (
                   <div
                     key={`${sec.section_id}-${idx}`}
-                    className="rounded-xl border border-[var(--border)] bg-white p-4 shadow-sm"
+                    className="rounded-xl border border-[var(--border)] bg-white p-4 shadow-sm flex flex-col min-h-[180px]"
                   >
                     <div className="flex items-center justify-between gap-2 mb-2">
-                      <span className={inc.type === "gap" ? "text-[var(--danger)] font-medium" : "text-[var(--warning)] font-medium"}>{inc.type === "gap" ? "Gap" : "Overlap"}</span>
+                      {inc.type === "gap" ? (
+                        <span className="drainer-badge-gap drainer-badge-gap-lg">Gap</span>
+                      ) : (
+                        <span className="drainer-badge-open drainer-badge-open-lg">Overlap</span>
+                      )}
                       <span className="text-sm font-medium">Record #{inc.record_from_counter ?? "—"}</span>
                     </div>
                     <p className="text-sm mb-2">
-                      CH {inc.ch_from.toLocaleString("en-AU", { minimumFractionDigits: 2 })} → {inc.ch_to.toLocaleString("en-AU", { minimumFractionDigits: 2 })} · <span className={inc.type === "gap" ? "text-[var(--danger)] font-medium" : "text-[var(--warning)] font-medium"}>{inc.diff.toLocaleString("en-AU", { minimumFractionDigits: 1 })}m</span>
+                      CH {inc.ch_from.toLocaleString("en-AU", { minimumFractionDigits: 2 })} → {inc.ch_to.toLocaleString("en-AU", { minimumFractionDigits: 2 })} · {inc.type === "gap" ? (
+                        <span className="drainer-badge-gap">{inc.diff.toLocaleString("en-AU", { minimumFractionDigits: 1 })}m</span>
+                      ) : (
+                        <span className="drainer-badge-open">{inc.diff.toLocaleString("en-AU", { minimumFractionDigits: 1 })}m</span>
+                      )}
                     </p>
                     <p className="text-xs text-[var(--muted-foreground)] mb-3">
                       {inc.type === "gap" ? "Possible missing record between these chainages." : "Possible duplicate or incorrect chainage entry."}
                     </p>
-                    <div className="flex flex-wrap gap-2">
-                      <Button variant="outline" size="sm" className="min-h-[44px] flex-1 md:flex-initial" onClick={() => openViewRecord(inc)}>
-                        View Record
-                      </Button>
-                      <Button variant="outline" size="sm" className="min-h-[44px] flex-1 md:flex-initial" onClick={() => openDeleteConfirm(inc)}>
+                    <div className="mt-auto flex flex-wrap gap-2 justify-between items-center w-full">
+                      <Button variant="outline" size="sm" className="min-h-[33px] h-[33px] px-3 text-xs bg-[var(--surface)] text-[var(--ink)] border-[var(--border)] hover:bg-[var(--surface-alt)]" onClick={() => openDeleteConfirm(inc)}>
                         Delete
+                      </Button>
+                      <Button variant="outline" size="sm" className="min-h-[33px] h-[33px] px-3 text-xs bg-[#B8682A] text-white border-0 hover:bg-[#A35D26] shrink-0" onClick={() => openViewRecord(inc)}>
+                        View Record
                       </Button>
                     </div>
                   </div>
@@ -457,11 +465,13 @@ export default function NotificationsPage() {
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       {nearToleranceData.flatMap((sec) =>
                         (sec.records ?? []).map((r) => (
-                          <div key={r.id} className="rounded-xl border border-[var(--border)] bg-white p-4 shadow-sm">
+                          <div key={r.id} className="rounded-xl border border-[var(--border)] bg-white p-4 shadow-sm flex flex-col min-h-[180px]">
                             <div className="flex items-center justify-between gap-2 mb-2">
-                              <span className={r.level === "critical" ? "text-[var(--danger)] font-medium" : "text-[var(--warning)] font-medium"}>
-                                {r.level === "critical" ? "Critical" : "Warning"}
-                              </span>
+                              {r.level === "critical" ? (
+                                <span className="drainer-badge-gap drainer-badge-gap-xl">Critical</span>
+                              ) : (
+                                <span className="drainer-badge-open drainer-badge-open-xl">Warning</span>
+                              )}
                               <span className="text-sm font-medium">Record #{r.counter ?? "—"}</span>
                             </div>
                             <p className="text-sm mb-1">CH {r.chainage.toLocaleString("en-AU", { minimumFractionDigits: 2 })} · {r.pipe_fitting_id ?? "—"}</p>
@@ -471,9 +481,11 @@ export default function NotificationsPage() {
                                 ? "Deflection approaching limit. Review installation before next ITR."
                                 : "Deflection within range but elevated. Monitor next records."}
                             </p>
-                            <Button variant="outline" size="sm" className="min-h-[44px] w-full md:w-auto" onClick={() => openViewRecordById(r.id, r.level === "critical" ? "Deflection approaching limit. Review installation before next ITR." : "Deflection within range but elevated. Monitor next records.")}>
-                              View Record
-                            </Button>
+                            <div className="mt-auto flex flex-wrap gap-2 justify-end items-center w-full">
+                              <Button variant="outline" size="sm" className="min-h-[33px] h-[33px] px-3 text-xs bg-[#B8682A] text-white border-0 hover:bg-[#A35D26] shrink-0" onClick={() => openViewRecordById(r.id, r.level === "critical" ? "Deflection approaching limit. Review installation before next ITR." : "Deflection within range but elevated. Monitor next records.")}>
+                                View Record
+                              </Button>
+                            </div>
                           </div>
                         ))
                       )}

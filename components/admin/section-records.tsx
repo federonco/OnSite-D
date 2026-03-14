@@ -1,7 +1,6 @@
 "use client";
 
 import { useMemo } from "react";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { getITRProgress } from "@/lib/drainer";
@@ -48,12 +47,14 @@ export function SectionRecords({
       </CardHeader>
       <CardContent className="space-y-4">
         <div className="flex flex-wrap gap-2 items-center">
-          <Badge variant="secondary">
+          <span className="drainer-badge-ready">
+            <span className="drainer-badge-ready-dot" aria-hidden />
             Total complete ITRs: {progress.completeITRs}
-          </Badge>
-          <Badge variant="outline">
+          </span>
+          <span className="drainer-badge-open">
+            <span className="drainer-badge-open-dot" aria-hidden />
             Current open: {progress.currentOpenCount} / {progress.currentOpenTotal} records
-          </Badge>
+          </span>
         </div>
 
         <div>
@@ -69,10 +70,10 @@ export function SectionRecords({
           </div>
         </div>
 
-        <div className="border border-[var(--border)] rounded-lg overflow-hidden">
+        <div className="border border-[var(--border)] rounded-lg overflow-hidden bg-[#E8D2BF]">
           <div className="overflow-x-auto max-h-64 overflow-y-auto">
-            <table className="w-full text-sm min-w-[400px]">
-              <thead className="bg-[var(--surface-alt)] sticky top-0">
+            <table className="w-full text-sm min-w-[400px] font-[var(--font-body)]">
+              <thead className="bg-[#EEE4DA] sticky top-0">
                 <tr>
                   <th className="text-left px-3 py-2 font-semibold whitespace-nowrap">Date</th>
                   <th className="text-left px-3 py-2 font-semibold whitespace-nowrap">CH</th>
@@ -97,14 +98,14 @@ export function SectionRecords({
                     >
                       <td className="px-3 py-2 whitespace-nowrap">{formatDate(r.date_installed)}</td>
                       <td className="px-3 py-2 whitespace-nowrap">{r.chainage}</td>
-                      <td className="px-3 py-2 font-mono text-xs whitespace-nowrap">{r.pipe_fitting_id ?? "—"}</td>
+                      <td className="px-3 py-2 text-xs whitespace-nowrap">{r.pipe_fitting_id ?? "—"}</td>
                       <td className="px-3 py-2 whitespace-nowrap">{r.joint_type ?? "—"}</td>
                       <td className="px-3 py-2 whitespace-nowrap">{r.inspector_name ?? "—"}</td>
                       <td className="px-3 py-2">
                         <Button
                           variant="ghost"
                           size="sm"
-                          className="min-h-[44px] min-w-[44px]"
+                          className="min-h-[44px] min-w-[44px] bg-[#B8682A] text-white border-0 hover:bg-[#A35D26]"
                           onClick={() => onEditRecord(r.id)}
                         >
                           Edit

@@ -485,7 +485,7 @@ export default function AdminPage() {
               </DropdownMenuTrigger>
                 <DropdownMenuContent align="end">
                 <DropdownMenuItem onClick={openCreate}>
-                  Create Section
+                  Create section
                 </DropdownMenuItem>
                 <DropdownMenuItem
                   onClick={() => selectedSection && openEdit(selectedSection)}
@@ -552,10 +552,12 @@ export default function AdminPage() {
                 <p className="text-xs font-bold text-[var(--muted-foreground)]">
                   Records: {records.length} (max {ITR_PAGE_SIZE} per ITR)
                 </p>
-                <span className="drainer-badge-orange">
+                <span className="drainer-badge-ready">
+                  <span className="drainer-badge-ready-dot" aria-hidden />
                   Ready {progress.completeITRs}
                 </span>
-                <span className="drainer-badge-orange">
+                <span className="drainer-badge-open">
+                  <span className="drainer-badge-open-dot" aria-hidden />
                   Open {progress.currentOpenCount > 0 ? 1 : 0}
                 </span>
               </div>
@@ -584,15 +586,23 @@ export default function AdminPage() {
                         <p className="mt-1 text-xs text-[var(--muted-foreground)]">
                           Status:{" "}
                           <span
-                            className={`inline-flex rounded-[var(--radius)] px-2 py-0.5 text-xs font-semibold ${
+                            className={
                               block.status === "READY"
-                                ? "drainer-badge-orange"
-                                : "drainer-badge-orange"
-                            }`}
+                                ? "drainer-badge-ready"
+                                : "drainer-badge-open"
+                            }
                           >
-                            {block.status === "READY"
-                              ? "Complete"
-                              : `${block.recordCount} / 9 records`}
+                            {block.status === "READY" ? (
+                              <>
+                                <span className="drainer-badge-ready-dot" aria-hidden />
+                                Complete
+                              </>
+                            ) : (
+                              <>
+                                <span className="drainer-badge-open-dot" aria-hidden />
+                                {block.recordCount} / 9 records
+                              </>
+                            )}
                           </span>
                         </p>
                         {block.status === "OPEN" && (
@@ -672,7 +682,7 @@ export default function AdminPage() {
         <DialogContent>
           <DialogHeader>
             <DialogTitle>
-              {modalMode === "create" ? "Create Section" : "Edit Section"}
+              {modalMode === "create" ? "Create section" : "Edit Section"}
             </DialogTitle>
           </DialogHeader>
           <div className="space-y-3">
@@ -718,7 +728,7 @@ export default function AdminPage() {
               </Select>
             </div>
             <div>
-              <label className="drainer-label block mb-1">Project Name</label>
+              <label className="drainer-label block mb-1">Project name</label>
               <Input
                 value={projectName}
                 onChange={(e) => setProjectName(e.target.value)}
@@ -726,7 +736,7 @@ export default function AdminPage() {
               />
             </div>
             <div>
-              <label className="drainer-label block mb-1">Project Number</label>
+              <label className="drainer-label block mb-1">Project number</label>
               <Input
                 value={projectNumber}
                 onChange={(e) => setProjectNumber(e.target.value)}
@@ -734,7 +744,7 @@ export default function AdminPage() {
               />
             </div>
             <div>
-              <label className="drainer-label block mb-1">ITP Number</label>
+              <label className="drainer-label block mb-1">ITP number</label>
               <Input
                 value={itpNumber}
                 onChange={(e) => setItpNumber(e.target.value)}
@@ -743,10 +753,18 @@ export default function AdminPage() {
             </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setModalOpen(false)}>
+            <Button
+              variant="outline"
+              onClick={() => setModalOpen(false)}
+              className="bg-[#EEE4DA] border-[var(--card-border)] hover:bg-[#E8D2BF]"
+            >
               Cancel
             </Button>
-            <Button onClick={handleSave} disabled={loading}>
+            <Button
+              onClick={handleSave}
+              disabled={loading}
+              className="bg-[#B8682A] text-white border-0 hover:bg-[#A35D26]"
+            >
               {loading ? "Saving…" : "Save"}
             </Button>
           </DialogFooter>
@@ -774,6 +792,7 @@ export default function AdminPage() {
             <Button
               onClick={handleSendQR}
               disabled={!sendQREmail.trim() || sendingQR}
+              className="bg-[#B8682A] text-white border-0 hover:bg-[#A35D26]"
             >
               {sendingQR ? "Sending…" : "Send"}
             </Button>
@@ -815,6 +834,7 @@ export default function AdminPage() {
                 printingItrIndex !== null ||
                 printingAudit
               }
+              className="bg-[#B8682A] text-white border-0 hover:bg-[#A35D26]"
             >
               {(printingItrIndex !== null || printingAudit)
                 ? "Sending…"

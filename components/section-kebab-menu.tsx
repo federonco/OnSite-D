@@ -33,7 +33,7 @@ export function SectionKebabMenu({
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end">
-        <DropdownMenuItem onClick={onCreate}>Create Section</DropdownMenuItem>
+        <DropdownMenuItem onClick={onCreate}>Create section</DropdownMenuItem>
         <DropdownMenuItem onClick={onEdit}>Edit Section</DropdownMenuItem>
         <DropdownMenuItem onClick={onAuditReport}>
           Audit Report

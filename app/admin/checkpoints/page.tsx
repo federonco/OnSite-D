@@ -407,14 +407,19 @@ export default function CheckpointsPage() {
                 {checkpoints.map((cp) => {
                   const statusBadge =
                     cp.active === false
-                      ? <span className="drainer-badge-orange shrink-0">Inactive</span>
+                      ? (
+                          <span className="drainer-badge-inactive shrink-0">
+                            <span className="drainer-badge-inactive-dot" aria-hidden />
+                            Inactive
+                          </span>
+                        )
                       : cp.active && cp.notified
                         ? <span className="drainer-badge-orange shrink-0">Notified ✓</span>
                         : <span className="drainer-badge-orange shrink-0">Active</span>;
                   return (
                     <div
                       key={cp.id}
-                      className="rounded-xl border border-[var(--border)] bg-white p-4 shadow-sm"
+                      className="rounded-xl border border-[var(--border)] bg-[#E8D2BF] p-4 shadow-sm"
                     >
                       <div className="flex items-start justify-between gap-2 mb-3">
                         <span className="font-bold text-sm">{cp.name}</span>
@@ -429,33 +434,35 @@ export default function CheckpointsPage() {
                       {cp.alert_email && (
                         <p className="text-xs text-[var(--muted-foreground)] mb-3">Alert to: {cp.alert_email}</p>
                       )}
-                      <div className="flex flex-wrap gap-2">
+                      <div className="flex flex-wrap gap-2 justify-between items-center w-full">
+                        <div className="flex flex-wrap gap-2">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="drainer-button-delete-soft min-h-[44px] px-4"
+                            onClick={() => handleDelete(cp.id)}
+                          >
+                            Delete
+                          </Button>
+                          {cp.notified && (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="min-h-[44px] min-w-[44px] px-4"
+                              onClick={() => handleResetNotification(cp)}
+                            >
+                              Reset notification
+                            </Button>
+                          )}
+                        </div>
                         <Button
                           variant="outline"
                           size="sm"
-                          className="min-h-[44px] px-4"
+                          className="min-h-[44px] px-4 bg-[#B8682A] text-white border-0 hover:bg-[#A35D26] shrink-0"
                           onClick={() => openEdit(cp)}
                         >
                           Edit
                         </Button>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          className="min-h-[44px] px-4"
-                          onClick={() => handleDelete(cp.id)}
-                        >
-                          Delete
-                        </Button>
-                        {cp.notified && (
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            className="min-h-[44px] min-w-[44px] px-4"
-                            onClick={() => handleResetNotification(cp)}
-                          >
-                            Reset notification
-                          </Button>
-                        )}
                       </div>
                     </div>
                   );
@@ -534,7 +541,7 @@ export default function CheckpointsPage() {
             <Button variant="outline" onClick={() => setModalOpen(false)} className="min-h-[44px]">
               Cancel
             </Button>
-            <Button onClick={handleSave} disabled={loading} className="min-h-[44px]">
+            <Button onClick={handleSave} disabled={loading} className="min-h-[44px] bg-[#B8682A] text-white border-0 hover:bg-[#A35D26]">
               {loading ? "Saving…" : "Save"}
             </Button>
           </DialogFooter>
