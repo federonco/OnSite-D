@@ -20,9 +20,9 @@ export const COLORS = {
   BLACK: "#000000",
 } as const;
 
-/** Column widths in pt. 14 columns total. APA Signoff: NAME + SIGNATURE only, no extra. */
+/** Column widths in pt (matches target template). Date Installed reduced, Pipe No Stamp widened for single-line IDs. */
 export const COL_WIDTHS_PT = [
-  48, 52, 62, 50, 38, 40, 88, 46, 36, 42, 48, 48, 50, 50,
+  48, 55.5, 63, 55.5, 55.5, 39, 87.4, 48.9, 37.9, 43.4, 50.5, 55.5, 46.2, 55.5,
 ] as const;
 
 /** Category row: [label, colspan] per JSON spec (7+3+2+2) */

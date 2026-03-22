@@ -592,16 +592,6 @@ export default function AdminPage() {
                     </span>
                   </div>
                 </div>
-                <div className="flex justify-between text-xs text-[var(--muted-foreground)] mb-1">
-                  <span>ITR progress</span>
-                  <span>{progress.percent}%</span>
-                </div>
-                <div className="h-2 rounded-full bg-[var(--surface-alt)] overflow-hidden">
-                  <div
-                    className="h-full bg-[var(--primary)] transition-all duration-300"
-                    style={{ width: `${progress.percent}%` }}
-                  />
-                </div>
                 <div className="space-y-1.5 text-xs">
                   <div className="text-[var(--muted-foreground)]">Records: {records.length}</div>
                   <div className="flex justify-between items-center">

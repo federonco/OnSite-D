@@ -7,7 +7,7 @@
  */
 
 import puppeteer from "puppeteer-core";
-import chromium from "@sparticuz/chromium";
+import { getPuppeteerLaunchConfig } from "./puppeteer-launch";
 import type { PreparedITRData } from "./prepare-data";
 import { buildITRHtml } from "./template";
 import { getTimeoutMs } from "./thresholds";
@@ -37,13 +37,13 @@ export async function generateWithPuppeteer(
   const safeName = (data.section.name ?? "section").replace(/\s+/g, "-");
   const fileName = `ITR-PLA-001_${safeName}_ITR-${data.pageNumber}_${Date.now()}.pdf`;
 
-  chromium.setGraphicsMode = false;
+  const { executablePath, args } = await getPuppeteerLaunchConfig();
   let browser;
   let page;
   try {
     browser = await puppeteer.launch({
-      args: PUPPETEER_ARGS,
-      executablePath: await chromium.executablePath(),
+      args: args.length > 0 ? args : PUPPETEER_ARGS,
+      executablePath,
       headless: true,
     });
 

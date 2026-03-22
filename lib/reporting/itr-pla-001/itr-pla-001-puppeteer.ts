@@ -7,7 +7,7 @@
 import * as fs from "fs";
 import * as path from "path";
 import puppeteer, { Browser } from "puppeteer-core";
-import chromium from "@sparticuz/chromium";
+import { getPuppeteerLaunchConfig } from "./puppeteer-launch";
 import type { SectionInfo } from "./types";
 import type { RecordRow } from "./mapper";
 import { mapRecordToCells } from "./mapper";
@@ -17,11 +17,11 @@ let _browser: Browser | null = null;
 
 async function getBrowser(): Promise<Browser> {
   if (_browser && _browser.connected) return _browser;
-  chromium.setGraphicsMode = false;
+  const { executablePath, args } = await getPuppeteerLaunchConfig();
   _browser = await puppeteer.launch({
     headless: true,
-    args: chromium.args,
-    executablePath: await chromium.executablePath(),
+    args,
+    executablePath,
   });
   return _browser;
 }
