@@ -9,11 +9,6 @@ import { createEmailTransporter, getEmailFrom, getEmailSignatureHtml, getLogoAtt
 export const runtime = "nodejs";
 
 export async function POST(request: NextRequest) {
-<<<<<<< HEAD
-  console.log("[ITR EMAIL ROUTE] version check");
-  console.log("[ITR] route hit: email");
-=======
->>>>>>> origin/main
   const { user, token } = await getUserFromRequest(request);
   if (!user || !token) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -96,10 +91,6 @@ export async function POST(request: NextRequest) {
     );
     buffer = result.buffer;
     fileName = result.fileName;
-<<<<<<< HEAD
-    console.log("[ITR] route: email | renderer: ", (result as { source?: string }).source, "| bufferSize:", buffer?.length ?? 0);
-=======
->>>>>>> origin/main
   } catch (error) {
     console.error("[ITR-PLA-001] PDF generation failed:", error);
     const msg = (error as Error)?.message ?? String(error ?? "");

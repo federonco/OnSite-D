@@ -578,7 +578,6 @@ export default function AdminPage() {
               </div>
             </CardHeader>
             <CardContent className="space-y-3">
-<<<<<<< HEAD
               <div className="rounded-2xl bg-white p-5 shadow-sm border border-[var(--border)] space-y-3">
                 <div className="flex items-center justify-between gap-3 flex-wrap">
                   <span className="font-semibold text-sm text-[var(--ink)]">{selectedSection.name}</span>
@@ -593,10 +592,18 @@ export default function AdminPage() {
                     </span>
                   </div>
                 </div>
+                <div className="flex justify-between text-xs text-[var(--muted-foreground)] mb-1">
+                  <span>ITR progress</span>
+                  <span>{progress.percent}%</span>
+                </div>
+                <div className="h-2 rounded-full bg-[var(--surface-alt)] overflow-hidden">
+                  <div
+                    className="h-full bg-[var(--primary)] transition-all duration-300"
+                    style={{ width: `${progress.percent}%` }}
+                  />
+                </div>
                 <div className="space-y-1.5 text-xs">
-                  <div className="text-[var(--muted-foreground)]">
-                    Records: {records.length}
-                  </div>
+                  <div className="text-[var(--muted-foreground)]">Records: {records.length}</div>
                   <div className="flex justify-between items-center">
                     <span className="text-[var(--muted-foreground)]">Pipes installed</span>
                     <span className="font-semibold text-[var(--ink)]">{pipesInstalled}</span>
@@ -606,28 +613,6 @@ export default function AdminPage() {
                     <span className="font-semibold text-[var(--ink)]">{fittingsInstalled}</span>
                   </div>
                 </div>
-=======
-              <div className="flex items-center gap-2">
-                <p className="text-xs font-bold text-[var(--muted-foreground)]">
-                  Records: {records.length}
-                </p>
-                <span className="drainer-badge-orange">
-                  Ready {progress.completeITRs}
-                </span>
-                <span className="drainer-badge-orange">
-                  Open {progress.currentOpenCount > 0 ? 1 : 0}
-                </span>
-              </div>
-              <div className="flex justify-between text-xs text-[var(--muted-foreground)] mb-1">
-                <span>ITR progress</span>
-                <span>{progress.percent}%</span>
-              </div>
-              <div className="h-2 rounded-full bg-[var(--surface-alt)] overflow-hidden">
-                <div
-                  className="h-full bg-[var(--primary)] transition-all duration-300"
-                  style={{ width: `${progress.percent}%` }}
-                />
->>>>>>> origin/main
               </div>
               <SectionProgressBar sectionId={sectionId} getAccessToken={getAccessToken} refreshTrigger={progressRefreshTrigger} />
               {itrBlocks.length > 0 ? (

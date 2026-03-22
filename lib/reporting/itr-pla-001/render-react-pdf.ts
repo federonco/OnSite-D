@@ -3,7 +3,7 @@
  */
 
 import type { PreparedITRData } from "./prepare-data";
-import { generateITRPla001PdfReact } from "../itr-pla-001-react-pdf";
+import { generateITRPla001PdfReact } from "./itr-pla-001-react-pdf";
 
 export async function generateWithReactPdf(
   data: PreparedITRData

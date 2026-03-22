@@ -1,14 +1,13 @@
 /**
  * ITR-PLA-001 PDF generator using Puppeteer + HTML template.
  * Parallel to React-PDF implementation — does not replace it.
- *
- * Requires: puppeteer (bundles Chromium).
- * For Vercel/serverless: use puppeteer-core + @sparticuz/chromium instead.
+ * Uses puppeteer-core + @sparticuz/chromium (serverless-safe).
  */
 
 import * as fs from "fs";
 import * as path from "path";
-import puppeteer, { Browser } from "puppeteer";
+import puppeteer, { Browser } from "puppeteer-core";
+import chromium from "@sparticuz/chromium";
 import type { SectionInfo } from "./types";
 import type { RecordRow } from "./mapper";
 import { mapRecordToCells } from "./mapper";
@@ -18,9 +17,11 @@ let _browser: Browser | null = null;
 
 async function getBrowser(): Promise<Browser> {
   if (_browser && _browser.connected) return _browser;
+  chromium.setGraphicsMode = false;
   _browser = await puppeteer.launch({
     headless: true,
-    args: ["--no-sandbox", "--disable-setuid-sandbox"],
+    args: chromium.args,
+    executablePath: await chromium.executablePath(),
   });
   return _browser;
 }
