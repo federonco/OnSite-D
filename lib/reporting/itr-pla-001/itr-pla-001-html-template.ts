@@ -47,18 +47,21 @@ export function buildItrPla001Html(
   const sectionName = escapeHtml(section.name);
   const itpNumber = escapeHtml(section.itp_number ?? "—");
 
+  const BORDER = "0.5pt solid #000";
   function cellHtml(c: string, i: number): string {
-    return `<td class="data-cell" style="width: ${COL_WIDTHS_PT[i]}pt">${escapeHtml(c)}</td>`;
+    const display = c ?? "";
+    return `<td class="data-cell" style="width: ${COL_WIDTHS_PT[i]}pt; border: ${BORDER}; padding: 1pt 2pt;">${escapeHtml(display)}</td>`;
   }
   const dataRowsHtml = dataRows
     .map(
-      (cells) => `
+      (cells) => {
+        const row = cells.slice(0, 14);
+        const padded = row.length < 14 ? [...row, ...Array(14 - row.length).fill("")] : row;
+        return `
     <tr>
-      ${cells
-        .slice(0, 14)
-        .map((c, i) => cellHtml(c, i))
-        .join("")}
-    </tr>`
+      ${padded.map((c, i) => cellHtml(c, i)).join("")}
+    </tr>`;
+      }
     )
     .join("");
 

@@ -1,9 +1,6 @@
 /**
  * ITR-PLA-001 PDF via Puppeteer. Optimized for 1024 MB serverless.
- * - Single page per request
- * - Request interception blocks all external resources
- * - Minimal Chromium args
- * - Always close browser/page in finally
+ * Uses puppeteer-launch for Vercel/local Chromium.
  */
 
 import puppeteer from "puppeteer-core";
@@ -11,23 +8,6 @@ import { getPuppeteerLaunchConfig } from "./puppeteer-launch";
 import type { PreparedITRData } from "./prepare-data";
 import { buildITRHtml } from "./template";
 import { getTimeoutMs } from "./thresholds";
-
-const PUPPETEER_ARGS = [
-  "--no-sandbox",
-  "--disable-setuid-sandbox",
-  "--disable-dev-shm-usage",
-  "--disable-gpu",
-  "--single-process",
-  "--no-zygote",
-  "--disable-extensions",
-  "--disable-background-networking",
-  "--disable-default-apps",
-  "--disable-sync",
-  "--disable-translate",
-  "--memory-pressure-off",
-  "--disable-features=TranslateUI",
-  "--disable-software-rasterizer",
-];
 
 export async function generateWithPuppeteer(
   data: PreparedITRData,
@@ -42,7 +22,7 @@ export async function generateWithPuppeteer(
   let page;
   try {
     browser = await puppeteer.launch({
-      args: args.length > 0 ? args : PUPPETEER_ARGS,
+      args,
       executablePath,
       headless: true,
     });

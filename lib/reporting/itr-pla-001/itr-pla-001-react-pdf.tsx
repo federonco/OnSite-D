@@ -31,8 +31,8 @@ import type { SectionInfo } from "./types";
 
 const WIDTHS = [...COL_WIDTHS_PT];
 const CATEGORY_WIDTHS = [
-  WIDTHS.slice(0, 7).reduce((a, b) => a + b, 0),
-  WIDTHS.slice(7, 10).reduce((a, b) => a + b, 0),
+  WIDTHS.slice(0, 6).reduce((a, b) => a + b, 0),
+  WIDTHS.slice(6, 10).reduce((a, b) => a + b, 0),
   WIDTHS.slice(10, 12).reduce((a, b) => a + b, 0),
   WIDTHS.slice(12, 14).reduce((a, b) => a + b, 0),
 ];

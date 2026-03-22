@@ -1,7 +1,6 @@
 /**
  * ITR-PLA-001 PDF generator using Puppeteer + HTML template.
- * Parallel to React-PDF implementation — does not replace it.
- * Uses puppeteer-core + @sparticuz/chromium (serverless-safe).
+ * Uses puppeteer-launch for Vercel/local Chromium.
  */
 
 import * as fs from "fs";

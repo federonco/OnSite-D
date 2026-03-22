@@ -1,12 +1,11 @@
 /**
  * ITR-PLA-001 PDF orchestrator.
- * Primary: HTML + Puppeteer. Fallback: React-PDF.
+ * Primary: HTML + Puppeteer. No fallback — throws on failure.
  */
 
 import type { SectionInfo } from "./types";
 import type { RecordRow } from "./mapper";
 import { generateITRPla001PdfHTML } from "./itr-pla-001-puppeteer";
-import { generateITRPla001PdfReact } from "./itr-pla-001-react-pdf";
 
 export type GenerateResult = {
   buffer: Buffer;
@@ -16,7 +15,7 @@ export type GenerateResult = {
 };
 
 /**
- * Generate ITR-PLA-001 PDF. Primary: Puppeteer HTML. Fallback: React-PDF.
+ * Generate ITR-PLA-001 PDF. Primary: Puppeteer HTML only. Throws on failure.
  */
 export async function generateITRPla001PdfWithFallback(
   section: SectionInfo,
@@ -47,26 +46,11 @@ export async function generateITRPla001PdfWithFallback(
     return { ...result, source: "puppeteer" };
   } catch (err) {
     const e = err as Error;
+    const msg = e?.message ?? String(err);
     console.error("[ITR] primary renderer failed: puppeteer-html");
-    console.error("[ITR] error.message:", e?.message ?? String(err));
+    console.error("[ITR] error.message:", msg);
     console.error("[ITR] error.stack:", e?.stack ?? "(no stack)");
     if (e?.cause) console.error("[ITR] error.cause:", e.cause);
-
-    const noFallback = process.env.ITR_DISABLE_REACT_PDF_FALLBACK === "true";
-    if (noFallback) {
-      console.error("[ITR] ITR_DISABLE_REACT_PDF_FALLBACK=true → rethrowing (no fallback)");
-      throw err;
-    }
-
-    console.log("[ITR] fallback renderer selected: react-pdf");
-    const result = await generateITRPla001PdfReact(
-      section,
-      records,
-      pageNumber,
-      totalPages,
-      options
-    );
-    console.log("[ITR-PLA-001] fallback PDF buffer size:", result.buffer?.length ?? 0);
-    return { ...result, source: "react-pdf" };
+    throw new Error(`Puppeteer rendering failed for ITR-PLA-001: ${msg}`);
   }
 }
