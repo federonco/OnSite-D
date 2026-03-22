@@ -9,8 +9,11 @@ import { createEmailTransporter, getEmailFrom, getEmailSignatureHtml, getLogoAtt
 export const runtime = "nodejs";
 
 export async function POST(request: NextRequest) {
+<<<<<<< HEAD
   console.log("[ITR EMAIL ROUTE] version check");
   console.log("[ITR] route hit: email");
+=======
+>>>>>>> origin/main
   const { user, token } = await getUserFromRequest(request);
   if (!user || !token) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -83,9 +86,7 @@ export async function POST(request: NextRequest) {
   const isOpenITR = pageRecords.length < ITR_PAGE_SIZE;
   let buffer: Buffer;
   let fileName: string;
-  console.log("[ITR-PLA-001] email route: before PDF generation", { sectionId, itrIndex, recordsCount: pageRecords.length });
   try {
-    console.log("[ITR] generator executing");
     const result = await generateITRPla001PdfWithFallback(
       section,
       pageRecords,
@@ -95,7 +96,10 @@ export async function POST(request: NextRequest) {
     );
     buffer = result.buffer;
     fileName = result.fileName;
+<<<<<<< HEAD
     console.log("[ITR] route: email | renderer: ", (result as { source?: string }).source, "| bufferSize:", buffer?.length ?? 0);
+=======
+>>>>>>> origin/main
   } catch (error) {
     console.error("[ITR-PLA-001] PDF generation failed:", error);
     const msg = (error as Error)?.message ?? String(error ?? "");
@@ -138,7 +142,6 @@ export async function POST(request: NextRequest) {
   const logoAtt = getLogoAttachment();
   if (logoAtt) attachments.unshift(logoAtt);
 
-  console.log("[ITR-PLA-001] email route: before sendMail", { recipient, fileName, pdfBufferSize: buffer?.length ?? 0 });
   try {
     const transporter = createEmailTransporter();
 
@@ -151,7 +154,6 @@ export async function POST(request: NextRequest) {
       attachments,
     });
 
-    console.log("[ITR-PLA-001] email route: after sendMail");
     return NextResponse.json({ ok: true, message: "Email sent" });
   } catch (err) {
     const msg = err instanceof Error ? err.message : "Email send failed";

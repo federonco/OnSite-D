@@ -24,13 +24,17 @@ export function getITRProgress(recordCount: number): {
   const completeITRs = Math.floor(recordCount / ITR_PAGE_SIZE);
   const currentOpenCount = recordCount % ITR_PAGE_SIZE;
   const currentOpenTotal = ITR_PAGE_SIZE;
+<<<<<<< HEAD
   const hasOpenReport = currentOpenCount > 0;
   const totalReports = completeITRs + (hasOpenReport ? 1 : 0);
   const reportPercent =
     totalReports > 0 ? Math.round((completeITRs / totalReports) * 100) : 0;
+=======
+  const totalSlots = Math.ceil(recordCount / ITR_PAGE_SIZE) * ITR_PAGE_SIZE;
+>>>>>>> origin/main
   const percent =
-    currentOpenTotal > 0
-      ? Math.min(100, Math.round((currentOpenCount / currentOpenTotal) * 100))
+    totalSlots > 0
+      ? Math.min(100, Math.round((recordCount / totalSlots) * 100))
       : 0;
   return { completeITRs, currentOpenCount, currentOpenTotal, percent, reportPercent };
 }

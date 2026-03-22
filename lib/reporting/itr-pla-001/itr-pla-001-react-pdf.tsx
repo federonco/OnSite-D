@@ -1,17 +1,16 @@
 /**
  * ITR-PLA-001 PDF via React-PDF (serverless-safe).
- * Same pipeline as audit report — no Puppeteer/Chromium.
- * Used when Puppeteer fails in serverless (e.g. Vercel).
+ * Layout tuned for Batch 4 visual target.
  */
 
 import React from "react";
 import {
   Document,
+  Image,
   Page,
   StyleSheet,
   Text,
   View,
-  Image,
   renderToBuffer,
 } from "@react-pdf/renderer";
 import {
@@ -24,104 +23,157 @@ import {
   COLUMN_HEADERS,
   ASTERISK_ROW,
   NOTES,
+<<<<<<< HEAD:lib/reporting/itr-pla-001/itr-pla-001-react-pdf.tsx
 } from "./config";
 import { mapRecordToCells } from "./mapper";
 import type { RecordRow } from "./mapper";
 import type { SectionInfo } from "./types";
-
-const LOGO_URL =
-  "https://raw.githubusercontent.com/federonco/readx-assets/main/Alkimos_logo.png";
+=======
+} from "@/lib/reporting/itr-pla-001/config";
+import { getLogoSrc } from "@/lib/reporting/itr-pla-001/logo";
+import { mapRecordToCells } from "@/lib/reporting/itr-pla-001/mapper";
+import type { RecordRow } from "@/lib/reporting/itr-pla-001/mapper";
+import type { SectionInfo } from "@/lib/reporting/itr-pla-001/types";
+>>>>>>> origin/main:lib/reporting/itr-pla-001-react-pdf.tsx
 
 const WIDTHS = [...COL_WIDTHS_PT];
 const CATEGORY_WIDTHS = [
-  WIDTHS.slice(0, 6).reduce((a, b) => a + b, 0),
-  WIDTHS.slice(6, 10).reduce((a, b) => a + b, 0),
+  WIDTHS.slice(0, 7).reduce((a, b) => a + b, 0),
+  WIDTHS.slice(7, 10).reduce((a, b) => a + b, 0),
   WIDTHS.slice(10, 12).reduce((a, b) => a + b, 0),
   WIDTHS.slice(12, 14).reduce((a, b) => a + b, 0),
+];
+
+const BORDER = 1;
+const FINAL_COLUMN_COUNT = 14; /** Table ends at SIGNATURE. No extra columns. */
+const CELL_ALIGN: ("left" | "right" | "center")[] = [
+  "left", "right", "left", "center", "center", "center", "left",
+  "center", "center", "center", "center", "center", "left", "left",
 ];
 
 const styles = StyleSheet.create({
   page: { padding: 24, fontSize: 7 },
   header: {
     flexDirection: "row",
-    borderWidth: 0.5,
-    marginBottom: 4,
+    borderWidth: BORDER,
+    borderColor: COLORS.BLACK,
+    marginBottom: 5,
   },
   headerLeft: {
-    width: 150,
-    borderRightWidth: 0.5,
+    width: "20%",
+    paddingVertical: 2,
+    paddingHorizontal: 6,
+    borderRightWidth: BORDER,
+    borderColor: COLORS.BLACK,
   },
-  headerRow: {
-    flexDirection: "row",
-    borderBottomWidth: 0.5,
-    padding: 2,
-    fontSize: 7,
-  },
-  headerLabel: { width: 70, paddingRight: 4 },
-  headerValue: { flex: 1 },
-  headerRight: {
+  headerMetaRow: { flexDirection: "row", fontSize: 6, marginBottom: 0 },
+  headerLabel: { fontWeight: "bold", marginRight: 4 },
+  headerCenter: {
     flex: 1,
-    flexDirection: "row",
+    justifyContent: "center",
     alignItems: "center",
-    padding: 8,
+    paddingVertical: 4,
   },
-  headerTitle: { flex: 1 },
-  headerTitleMain: { fontSize: 8, fontWeight: "bold" },
-  headerTitleSub: { fontSize: 7, marginTop: 2 },
-  logo: { width: 60, height: 18, objectFit: "contain" },
-  projSection: { borderWidth: 0.5, marginBottom: 4 },
+  headerTitle: { fontSize: 9, fontWeight: "bold", textTransform: "uppercase" },
+  headerSubtitle: { fontSize: 7, marginTop: 1 },
+  headerRight: {
+    width: "20%",
+    justifyContent: "center",
+    alignItems: "flex-end",
+    paddingVertical: 4,
+    paddingHorizontal: 6,
+    borderLeftWidth: BORDER,
+    borderColor: COLORS.BLACK,
+  },
+  logoImg: { width: 52, height: 20 },
+  logoPlaceholder: {
+    width: 52,
+    height: 20,
+    backgroundColor: COLORS.GREY,
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  projSection: {
+    borderWidth: BORDER,
+    borderColor: COLORS.BLACK,
+    marginBottom: 5,
+  },
   projHeader: {
-    padding: 4,
+    paddingVertical: 4,
+    paddingHorizontal: 6,
     fontSize: 7,
     fontWeight: "bold",
     textAlign: "center",
-    borderBottomWidth: 0.5,
+    borderBottomWidth: BORDER,
+    borderBottomColor: COLORS.BLACK,
   },
   projRow: { flexDirection: "row" },
   projCell: {
-    flex: 1,
-    padding: 4,
-    borderRightWidth: 0.5,
-    borderBottomWidth: 0.5,
+    paddingVertical: 3,
+    paddingHorizontal: 6,
+    borderRightWidth: BORDER,
+    borderBottomWidth: BORDER,
+    borderColor: COLORS.BLACK,
     fontSize: 7,
   },
-  tableWrap: { borderWidth: 0.5, marginBottom: 8 },
+  tableWrap: {
+    borderWidth: BORDER,
+    borderColor: COLORS.BLACK,
+    marginBottom: 8,
+  },
   tableHeader: {
-    padding: 4,
-    fontSize: 7,
+    paddingVertical: 5,
+    paddingHorizontal: 6,
+    fontSize: 8,
     fontWeight: "bold",
     textAlign: "center",
-    borderBottomWidth: 0.5,
+    backgroundColor: COLORS.BLUE,
+    color: COLORS.WHITE,
+    borderBottomWidth: BORDER,
+    borderBottomColor: COLORS.BLACK,
   },
-  tableRow: { flexDirection: "row" },
+  tableRow: { flexDirection: "row", minHeight: 18 },
   categoryCell: {
-    padding: 2,
+    paddingVertical: 4,
+    paddingHorizontal: 3,
     fontSize: 6,
     fontWeight: "bold",
-    borderRightWidth: 0.5,
-    borderBottomWidth: 0.5,
+    borderRightWidth: BORDER,
+    borderBottomWidth: BORDER,
+    textAlign: "center",
   },
   colHeaderCell: {
-    padding: 2,
+    paddingVertical: 4,
+    paddingHorizontal: 3,
     fontSize: 5,
     fontWeight: "bold",
-    borderRightWidth: 0.5,
-    borderBottomWidth: 0.5,
+    borderRightWidth: BORDER,
+    borderBottomWidth: BORDER,
     textAlign: "center",
   },
   asteriskCell: {
-    padding: 2,
+    paddingVertical: 3,
+    paddingHorizontal: 3,
     fontSize: 5,
-    borderRightWidth: 0.5,
-    borderBottomWidth: 0.5,
+    borderRightWidth: BORDER,
+    borderBottomWidth: BORDER,
+    borderColor: COLORS.BLACK,
   },
   dataCell: {
-    padding: 2,
+    paddingVertical: 2,
+    paddingHorizontal: 3,
     fontSize: 6,
-    borderRightWidth: 0.5,
-    borderBottomWidth: 0.5,
+    borderRightWidth: BORDER,
+    borderBottomWidth: BORDER,
+    borderColor: COLORS.BLACK,
+    backgroundColor: COLORS.WHITE,
   },
-  notes: { marginTop: 8, fontSize: 6, lineHeight: 1.2 },
+  notes: {
+    marginTop: 6,
+    fontSize: 6,
+    lineHeight: 1.3,
+  },
+  noteLine: { marginBottom: 1 },
 });
 
 export async function generateITRPla001PdfReact(
@@ -129,111 +181,152 @@ export async function generateITRPla001PdfReact(
   records: RecordRow[],
   pageNumber: number,
   _totalPages: number,
-  options?: { isOpenITR?: boolean }
+  options?: { isOpenITR?: boolean; dataRows?: string[][] }
 ): Promise<{ buffer: Buffer; contentType: string; fileName: string }> {
+<<<<<<< HEAD:lib/reporting/itr-pla-001/itr-pla-001-react-pdf.tsx
   console.log("[ITR] FILE GENERATED BY: react-pdf |", { sectionName: section?.name, recordsCount: records?.length, pageNumber });
+=======
+>>>>>>> origin/main:lib/reporting/itr-pla-001-react-pdf.tsx
   const pageNoLabel = options?.isOpenITR ? "In Progress" : "1 of 1";
-  const dataRows = records.map((r) => mapRecordToCells(r));
+  const dataRows = options?.dataRows ?? records.map((r) => mapRecordToCells(r));
 
   const doc = (
     <Document>
       <Page size="A4" orientation="landscape" style={styles.page}>
         <View style={styles.header}>
           <View style={styles.headerLeft}>
-            <View style={styles.headerRow}>
+            <View style={styles.headerMetaRow}>
               <Text style={styles.headerLabel}>Doc No:</Text>
-              <Text style={styles.headerValue}>{DOC_NO}</Text>
+              <Text>{DOC_NO}</Text>
             </View>
-            <View style={styles.headerRow}>
-              <Text style={styles.headerLabel}>Effective:</Text>
-              <Text style={styles.headerValue}>{EFFECTIVE_DATE}</Text>
+            <View style={styles.headerMetaRow}>
+              <Text style={styles.headerLabel}>Effective Date:</Text>
+              <Text>{EFFECTIVE_DATE}</Text>
             </View>
-            <View style={styles.headerRow}>
-              <Text style={styles.headerLabel}>Revision:</Text>
-              <Text style={styles.headerValue}>{REVISION_NO}</Text>
+            <View style={styles.headerMetaRow}>
+              <Text style={styles.headerLabel}>Revision No:</Text>
+              <Text>{REVISION_NO}</Text>
             </View>
-            <View style={styles.headerRow}>
+            <View style={styles.headerMetaRow}>
               <Text style={styles.headerLabel}>Page No:</Text>
-              <Text style={styles.headerValue}>{pageNoLabel}</Text>
+              <Text>{pageNoLabel}</Text>
             </View>
           </View>
+          <View style={styles.headerCenter}>
+            <Text style={styles.headerTitle}>PIPE LAYING INSPECTION FIELD RECORD</Text>
+            <Text style={styles.headerSubtitle}>ITR-PLA-001</Text>
+          </View>
           <View style={styles.headerRight}>
-            <View style={styles.headerTitle}>
-              <Text style={styles.headerTitleMain}>PIPE LAYING INSPECTION FIELD RECORD</Text>
-              <Text style={styles.headerTitleSub}>ITR-PLA-001</Text>
-            </View>
-            <Image src={LOGO_URL} style={styles.logo} />
+            {getLogoSrc() ? (
+              <Image src={getLogoSrc()!} style={styles.logoImg} />
+            ) : (
+              <View style={styles.logoPlaceholder}><Text style={{ fontSize: 5 }}>LOGO</Text></View>
+            )}
           </View>
         </View>
 
         <View style={styles.projSection}>
           <Text style={styles.projHeader}>PROJECT INFORMATION</Text>
           <View style={styles.projRow}>
-            <Text style={styles.projCell}>PROJECT: {section.project_name ?? "—"}</Text>
-            <Text style={styles.projCell}>NUMBER: {section.project_number ?? "—"}</Text>
+            <Text style={[styles.projCell, { flex: 3 }]}>PROJECT NAME:</Text>
+            <Text style={[styles.projCell, { flex: 4 }]}>{section.project_name ?? "—"}</Text>
+            <Text style={[styles.projCell, { flex: 2 }]}>PROJECT NUMBER:</Text>
+            <Text style={[styles.projCell, { flex: 5, borderRightWidth: 0 }]}>{section.project_number ?? "—"}</Text>
           </View>
           <View style={styles.projRow}>
-            <Text style={styles.projCell}>SECTION: {section.name}</Text>
-            <Text style={styles.projCell}>ITP: {section.itp_number ?? "—"}</Text>
+            <Text style={[styles.projCell, { flex: 3 }]}>SECTION-SUBLOT:</Text>
+            <Text style={[styles.projCell, { flex: 4 }]}>{section.name}</Text>
+            <Text style={[styles.projCell, { flex: 3 }]}>ITP:</Text>
+            <Text style={[styles.projCell, { flex: 4, borderRightWidth: 0 }]}>{section.itp_number ?? "—"}</Text>
           </View>
         </View>
 
         <View style={styles.tableWrap}>
           <Text style={styles.tableHeader}>PIPE RECORDS</Text>
-          {/* Category row */}
           <View style={[styles.tableRow, { backgroundColor: COLORS.BLUE }]}>
             {CATEGORIES.map((c, i) => (
               <Text
                 key={i}
                 style={[
                   styles.categoryCell,
-                  { width: CATEGORY_WIDTHS[i], color: COLORS.WHITE },
+                  {
+                    width: CATEGORY_WIDTHS[i],
+                    color: COLORS.WHITE,
+                    borderColor: COLORS.WHITE,
+                    borderRightWidth: i === CATEGORIES.length - 1 ? 0 : BORDER,
+                  },
                 ]}
               >
                 {c.label}
               </Text>
             ))}
           </View>
-          {/* Column headers */}
           <View style={[styles.tableRow, { backgroundColor: COLORS.BLUE }]}>
-            {COLUMN_HEADERS.map((h, i) => (
+            {COLUMN_HEADERS.slice(0, FINAL_COLUMN_COUNT).map((h, i) => (
               <Text
                 key={i}
                 style={[
                   styles.colHeaderCell,
-                  { width: WIDTHS[i], color: COLORS.WHITE },
+                  {
+                    width: WIDTHS[i],
+                    color: COLORS.WHITE,
+                    borderColor: COLORS.WHITE,
+                    borderRightWidth: i === FINAL_COLUMN_COUNT - 1 ? 0 : BORDER,
+                  },
                 ]}
               >
                 {h.replace(/\n/g, " ")}
               </Text>
             ))}
           </View>
-          {/* Asterisk row */}
           <View style={[styles.tableRow, { backgroundColor: COLORS.GREY }]}>
-            {WIDTHS.map((w, i) => (
-              <Text key={i} style={[styles.asteriskCell, { width: w }]}>
+            {WIDTHS.slice(0, FINAL_COLUMN_COUNT).map((w, i) => (
+              <Text
+                key={i}
+                style={[
+                  styles.asteriskCell,
+                  {
+                    width: w,
+                    borderRightWidth: i === FINAL_COLUMN_COUNT - 1 ? 0 : BORDER,
+                  },
+                ]}
+              >
                 {ASTERISK_ROW[i] ?? ""}
               </Text>
             ))}
           </View>
-          {/* Data rows */}
-          {dataRows.map((cells, ri) => (
-            <View key={ri} style={styles.tableRow}>
-              {cells.slice(0, 14).map((cell, ci) => (
-                <Text
-                  key={ci}
-                  style={[styles.dataCell, { width: WIDTHS[ci] }]}
-                >
-                  {cell}
-                </Text>
-              ))}
-            </View>
-          ))}
+          {dataRows.map((cells, ri) => {
+            const row = cells.slice(0, FINAL_COLUMN_COUNT);
+            const padded = row.length < FINAL_COLUMN_COUNT
+              ? [...row, ...Array(FINAL_COLUMN_COUNT - row.length).fill("")]
+              : row;
+            return (
+              <View key={ri} style={styles.tableRow}>
+                {padded.slice(0, FINAL_COLUMN_COUNT).map((cell, ci) => (
+                  <Text
+                    key={ci}
+                    style={[
+                      styles.dataCell,
+                      {
+                        width: WIDTHS[ci],
+                        textAlign: CELL_ALIGN[ci] ?? "left",
+                        borderRightWidth: ci === FINAL_COLUMN_COUNT - 1 ? 0 : BORDER,
+                      },
+                    ]}
+                  >
+                    {cell}
+                  </Text>
+                ))}
+              </View>
+            );
+          })}
         </View>
 
         <View style={styles.notes}>
           {NOTES.map((n, i) => (
-            <Text key={i}>{n}</Text>
+            <Text key={i} style={styles.noteLine}>
+              {n}
+            </Text>
           ))}
         </View>
       </Page>
@@ -241,7 +334,6 @@ export async function generateITRPla001PdfReact(
   );
 
   const buffer = (await renderToBuffer(doc)) as Buffer;
-  console.log("[ITR-PLA-001] React-PDF: after renderToBuffer", { bufferSize: buffer?.length ?? 0 });
   const safeName = (section.name ?? "section").replace(/\s+/g, "-");
   const fileName = `ITR-PLA-001_${safeName}_ITR-${pageNumber}_${Date.now()}.pdf`;
   return {

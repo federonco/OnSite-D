@@ -69,7 +69,6 @@ export async function POST(request: NextRequest) {
   let contentType: string;
   let fileName: string;
   try {
-    console.log("[ITR] generator executing");
     const result = await generateITRPla001PdfWithFallback(
       section,
       pageRecords,
@@ -79,7 +78,10 @@ export async function POST(request: NextRequest) {
     buffer = result.buffer;
     contentType = result.contentType;
     fileName = result.fileName;
+<<<<<<< HEAD
     console.log("[ITR] route hit: direct | renderer:", result.source, "| bufferSize:", buffer?.length ?? 0);
+=======
+>>>>>>> origin/main
   } catch (error) {
     console.error("[ITR-PLA-001] PDF generation failed:", error);
     const msg = (error as Error)?.message ?? String(error ?? "");
