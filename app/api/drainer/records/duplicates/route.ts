@@ -3,7 +3,8 @@ import { getUserFromRequest } from "@/lib/api-auth";
 import { isAdminEmail } from "@/lib/admin";
 import { getSupabaseServer } from "@/lib/supabase/server";
 
-const PIPE_REGEX = /^\d+-\d+$/;
+/** Pipe: digits-hyphen-digits, PP+digits-hyphen-digits, or just digits. */
+const PIPE_REGEX = /^((PP)?\d+-\d+|\d+)$/;
 
 function isPipeFormat(pipeFittingId: string | null): boolean {
   if (!pipeFittingId || typeof pipeFittingId !== "string") return false;

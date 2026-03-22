@@ -10,7 +10,7 @@ export const runtime = "nodejs";
 
 export async function POST(request: NextRequest) {
   console.log("[ITR EMAIL ROUTE] version check");
-  console.log("[ITR-PLA-001] email route: start");
+  console.log("[ITR] route hit: email");
   const { user, token } = await getUserFromRequest(request);
   if (!user || !token) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -95,7 +95,7 @@ export async function POST(request: NextRequest) {
     );
     buffer = result.buffer;
     fileName = result.fileName;
-    console.log("[ITR-PLA-001] email route: successful PDF buffer size:", buffer?.length ?? 0);
+    console.log("[ITR] route: email | renderer: ", (result as { source?: string }).source, "| bufferSize:", buffer?.length ?? 0);
   } catch (error) {
     console.error("[ITR-PLA-001] PDF generation failed:", error);
     const msg = (error as Error)?.message ?? String(error ?? "");

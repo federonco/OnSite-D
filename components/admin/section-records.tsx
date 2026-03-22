@@ -1,15 +1,78 @@
 "use client";
 
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { getITRProgress } from "@/lib/drainer";
 import type { PipeRecord } from "./record-edit-form";
 
+type SectionChProgress = {
+  currentCh: number | null;
+  endCh: number | null;
+  progressPercent: number;
+  configured: boolean;
+  hasRecords: boolean;
+};
+
+type SectionProgressBarProps = {
+  sectionId: string;
+  getAccessToken: () => Promise<string | null>;
+  refreshTrigger?: number; // increment to refetch (e.g. after record edit)
+};
+
+export function SectionProgressBar({ sectionId, getAccessToken, refreshTrigger }: SectionProgressBarProps) {
+  const [progress, setProgress] = useState<SectionChProgress | null>(null);
+
+  useEffect(() => {
+    if (!sectionId) return;
+    let cancelled = false;
+    (async () => {
+      const token = await getAccessToken();
+      if (cancelled) return;
+      const res = await fetch(`/api/drainer/sections/${sectionId}/progress`, {
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      });
+      if (cancelled) return;
+      const data = await res.json();
+      if (!cancelled && res.ok) setProgress(data);
+      else if (!cancelled) setProgress(null);
+    })();
+    return () => { cancelled = true; };
+  }, [sectionId, getAccessToken, refreshTrigger]);
+
+  const label = progress?.configured
+    ? progress?.hasRecords
+      ? `CH ${(progress.currentCh ?? 0).toLocaleString("en-AU", { minimumFractionDigits: 2 })} → ${(progress.endCh ?? 0).toLocaleString("en-AU", { minimumFractionDigits: 2 })} · ${progress.progressPercent}%`
+      : "No records yet"
+    : progress
+      ? "Configure section CH to see progress"
+      : "Loading…";
+  const percent = progress?.configured && progress?.hasRecords ? progress.progressPercent : 0;
+
+  return (
+    <div>
+      <div className="flex justify-between text-xs text-[var(--muted-foreground)] mb-1">
+        <span>Section Progress</span>
+        <span>{label}</span>
+      </div>
+      <div className="h-2 rounded-full bg-[var(--surface-alt)] overflow-hidden">
+        <div
+          className="h-full bg-[var(--primary)] transition-all duration-300"
+          style={{ width: `${percent}%` }}
+        />
+      </div>
+    </div>
+  );
+}
+
 type SectionRecordsProps = {
   sectionName: string;
+  sectionId: string;
   records: PipeRecord[];
   onEditRecord: (id: string) => void;
+  getAccessToken: () => Promise<string | null>;
+  emptyMessage?: string;
+  progressRefreshTrigger?: number;
 };
 
 function formatDate(d: string | null) {
@@ -35,10 +98,14 @@ function formatAlignment(r: PipeRecord) {
 
 export function SectionRecords({
   sectionName,
+  sectionId,
   records,
   onEditRecord,
+  getAccessToken,
+  emptyMessage = "No records yet",
+  progressRefreshTrigger,
 }: SectionRecordsProps) {
-  const progress = useMemo(() => getITRProgress(records.length), [records.length]);
+  const itrProgress = useMemo(() => getITRProgress(records.length), [records.length]);
 
   return (
     <Card className="drainer-card">
@@ -49,26 +116,15 @@ export function SectionRecords({
         <div className="flex flex-wrap gap-2 items-center">
           <span className="drainer-badge-ready">
             <span className="drainer-badge-ready-dot" aria-hidden />
-            Total complete ITRs: {progress.completeITRs}
+            Total complete ITRs: {itrProgress.completeITRs}
           </span>
           <span className="drainer-badge-open">
             <span className="drainer-badge-open-dot" aria-hidden />
-            Current open: {progress.currentOpenCount} / {progress.currentOpenTotal} records
+            Current open: {itrProgress.currentOpenCount} / {itrProgress.currentOpenTotal} records
           </span>
         </div>
 
-        <div>
-          <div className="flex justify-between text-xs text-[var(--muted-foreground)] mb-1">
-            <span>ITR progress</span>
-            <span>{progress.percent}%</span>
-          </div>
-          <div className="h-2 rounded-full bg-[var(--surface-alt)] overflow-hidden">
-            <div
-              className="h-full bg-[var(--primary)] transition-all duration-300"
-              style={{ width: `${progress.percent}%` }}
-            />
-          </div>
-        </div>
+        <SectionProgressBar sectionId={sectionId} getAccessToken={getAccessToken} refreshTrigger={progressRefreshTrigger} />
 
         <div className="border border-[var(--border)] rounded-lg overflow-hidden bg-[#E8D2BF]">
           <div className="overflow-x-auto max-h-64 overflow-y-auto">
@@ -87,7 +143,7 @@ export function SectionRecords({
                 {records.length === 0 ? (
                   <tr>
                     <td colSpan={6} className="px-3 py-4 text-center text-[var(--muted-foreground)]">
-                      No records yet
+                      {emptyMessage}
                     </td>
                   </tr>
                 ) : (

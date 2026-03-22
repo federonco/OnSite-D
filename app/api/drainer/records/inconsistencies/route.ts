@@ -4,11 +4,10 @@ import { isAdminEmail } from "@/lib/admin";
 import { getSupabaseServer } from "@/lib/supabase/server";
 
 /**
- * Pipe: pure digits-hyphen-digits (e.g. 000615-000550, 00615-000255).
- * Fitting: any other (e.g. 90D Bend, Double Scour, 000615-000351 - degree bend Weld Band).
- * Verified against production drainer_pipe_records data.
+ * Pipe: digits-hyphen-digits (000536-000096), PP+digits-hyphen-digits (PP000010-000169), or just digits.
+ * Fitting: anything else (90D Bend, Double Scour, etc).
  */
-const PIPE_REGEX = /^\d+-\d+$/;
+const PIPE_REGEX = /^((PP)?\d+-\d+|\d+)$/;
 
 function inferType(pipeFittingId: string | null): "pipe" | "fitting" {
   if (!pipeFittingId || typeof pipeFittingId !== "string") return "fitting";
@@ -150,10 +149,23 @@ async function getSectionInconsistencies(
     }
   }
 
+  const { data: validated } = await supabase
+    .from("drainer_validated_inconsistencies")
+    .select("record_from_id, record_to_id")
+    .eq("section_id", sectionId);
+
+  const validatedKeys = new Set(
+    (validated ?? []).map((v) => `${v.record_from_id}:${v.record_to_id}`)
+  );
+
+  const filtered = inconsistencies.filter(
+    (inc) => !validatedKeys.has(`${inc.record_from_id}:${inc.record_to_id}`)
+  );
+
   return {
     section_id: sectionId,
     total_records: records.length,
     max_ch: maxCh === Number.NEGATIVE_INFINITY ? null : maxCh,
-    inconsistencies,
+    inconsistencies: filtered,
   };
 }

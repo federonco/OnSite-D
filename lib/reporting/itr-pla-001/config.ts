@@ -19,9 +19,9 @@ export const COLORS = {
   BLACK: "#000000",
 } as const;
 
-/** Column widths in pt (matches target template) */
+/** Column widths in pt (matches target template). Date Installed reduced, Pipe No Stamp widened for single-line IDs. */
 export const COL_WIDTHS_PT = [
-  55.5, 55.5, 55.5, 55.5, 55.5, 39, 87.4, 48.9, 37.9, 43.4, 50.5, 55.5, 46.2, 55.5,
+  48, 55.5, 63, 55.5, 55.5, 39, 87.4, 48.9, 37.9, 43.4, 50.5, 55.5, 46.2, 55.5,
 ] as const;
 
 /** Category row: [label, colspan] */

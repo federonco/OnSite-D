@@ -19,7 +19,7 @@ import { getSupabaseBrowser } from "@/lib/supabase/browser";
 
 const JOINT_TYPES = [
   { value: "RRJ", label: "RRJ (Rubber Ring Joint)" },
-  { value: "WR", label: "WR (Weld Restricted)" },
+  { value: "WR", label: "WR (Weld Restrained)" },
   { value: "Transition", label: "Transition" },
 ] as const;
 

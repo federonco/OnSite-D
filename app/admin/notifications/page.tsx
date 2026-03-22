@@ -19,13 +19,6 @@ import {
 } from "@/components/ui/dialog";
 import { RefreshCw } from "lucide-react";
 
-type MissedCheckpoint = {
-  id: string;
-  name: string;
-  ch: number;
-  detected_at_ch: number;
-};
-
 type InconsistencyItem = {
   ch_from: number;
   ch_to: number;
@@ -86,12 +79,20 @@ type DeflectionTrendEntry = {
 };
 type DeflectionTrendSection = { section_id: string; section_name?: string; trends: DeflectionTrendEntry[] };
 
+type FittingRecord = {
+  id: string;
+  counter: number | null;
+  chainage: number;
+  pipe_fitting_id: string | null;
+  date_installed: string | null;
+};
+type FittingsSection = { section_id: string; section_name?: string; records: FittingRecord[] };
+
 export default function NotificationsPage() {
   const supabase = getSupabaseBrowser();
   const { pushToast } = useToast();
   const [authEmail, setAuthEmail] = useState<string | null>(null);
   const [isAdmin, setIsAdmin] = useState<boolean | null>(null);
-  const [missed, setMissed] = useState<MissedCheckpoint[]>([]);
   const [sectionData, setSectionData] = useState<SectionInconsistencies[]>([]);
   const [inconsistenciesLoading, setInconsistenciesLoading] = useState(true);
   const [duplicatesData, setDuplicatesData] = useState<DuplicatesSection[]>([]);
@@ -100,32 +101,40 @@ export default function NotificationsPage() {
   const [nearToleranceLoading, setNearToleranceLoading] = useState(false);
   const [deflectionTrendData, setDeflectionTrendData] = useState<DeflectionTrendSection[]>([]);
   const [deflectionTrendLoading, setDeflectionTrendLoading] = useState(false);
+  const [fittingsData, setFittingsData] = useState<FittingsSection[]>([]);
+  const [fittingsLoading, setFittingsLoading] = useState(false);
+  const [fittingsOpen, setFittingsOpen] = useState(false);
   const [dupOpen, setDupOpen] = useState(false);
   const [nearOpen, setNearOpen] = useState(false);
   const [trendOpen, setTrendOpen] = useState(false);
+  const [validateFittingConfirm, setValidateFittingConfirm] = useState<{ sec: FittingsSection; r: FittingRecord } | null>(null);
+  const [validatingFittingKey, setValidatingFittingKey] = useState<string | null>(null);
   const [editRecordId, setEditRecordId] = useState<string | null>(null);
   const [editOpen, setEditOpen] = useState(false);
   const [editContextualNote, setEditContextualNote] = useState<string | null>(null);
+  const [editContextChFrom, setEditContextChFrom] = useState<number | null>(null);
+  const [editContextChTo, setEditContextChTo] = useState<number | null>(null);
+  const [editContextRecordToId, setEditContextRecordToId] = useState<string | null>(null);
   const [deleteConfirm, setDeleteConfirm] = useState<{
     recordId: string;
     counter: number | null;
     chainage: number;
   } | null>(null);
   const [deleteLoading, setDeleteLoading] = useState(false);
-
+  const [validatingKey, setValidatingKey] = useState<string | null>(null);
+  const [validateConfirm, setValidateConfirm] = useState<{
+    sec: SectionInconsistencies;
+    inc: InconsistencyItem;
+  } | null>(null);
+  const [validateNearConfirm, setValidateNearConfirm] = useState<{
+    sec: NearToleranceSection;
+    r: NearToleranceRecord;
+  } | null>(null);
+  const [validatingNearKey, setValidatingNearKey] = useState<string | null>(null);
   const getAccessToken = useCallback(async () => {
     const { data } = await supabase.auth.getSession();
     return data.session?.access_token ?? null;
   }, [supabase]);
-
-  const loadMissed = useCallback(async () => {
-    const token = await getAccessToken();
-    const res = await fetch("/api/drainer/checkpoints/missed", {
-      headers: token ? { Authorization: `Bearer ${token}` } : {},
-    });
-    const data = await res.json();
-    if (data.missed) setMissed(data.missed);
-  }, [getAccessToken]);
 
   const loadInconsistencies = useCallback(async () => {
     const token = await getAccessToken();
@@ -177,6 +186,23 @@ export default function NotificationsPage() {
     }
   }, [getAccessToken]);
 
+  const loadFittings = useCallback(async () => {
+    const token = await getAccessToken();
+    setFittingsLoading(true);
+    try {
+      const res = await fetch("/api/drainer/records/fittings", {
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      });
+      const data = await res.json();
+      const sections: FittingsSection[] = data.sections ?? (data.records ? [{ section_id: data.section_id ?? "", section_name: data.section_name, records: data.records }] : []);
+      setFittingsData(sections);
+      const total = sections.reduce((s, sec) => s + (sec.records?.length ?? 0), 0);
+      setFittingsOpen(total > 0);
+    } finally {
+      setFittingsLoading(false);
+    }
+  }, [getAccessToken]);
+
   const loadDeflectionTrend = useCallback(async () => {
     const token = await getAccessToken();
     setDeflectionTrendLoading(true);
@@ -196,10 +222,11 @@ export default function NotificationsPage() {
 
   const loadAllValidation = useCallback(() => {
     loadInconsistencies();
+    loadFittings();
     loadDuplicates();
     loadNearTolerance();
     loadDeflectionTrend();
-  }, [loadInconsistencies, loadDuplicates, loadNearTolerance, loadDeflectionTrend]);
+  }, [loadInconsistencies, loadFittings, loadDuplicates, loadNearTolerance, loadDeflectionTrend]);
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => {
@@ -217,15 +244,15 @@ export default function NotificationsPage() {
       const json = await res.json();
       setIsAdmin(json.isAdmin ?? false);
       if (json.isAdmin) {
-        loadMissed();
         loadInconsistencies();
+        loadFittings();
         loadDuplicates();
         loadNearTolerance();
         loadDeflectionTrend();
       }
     };
     check();
-  }, [authEmail, getAccessToken, loadMissed, loadInconsistencies, loadDuplicates, loadNearTolerance, loadDeflectionTrend]);
+  }, [authEmail, getAccessToken, loadInconsistencies, loadFittings, loadDuplicates, loadNearTolerance, loadDeflectionTrend]);
 
   const openViewRecord = (inc: InconsistencyItem) => {
     const note =
@@ -233,12 +260,23 @@ export default function NotificationsPage() {
         ? `Possible missing record between CH ${inc.ch_from.toLocaleString("en-AU", { minimumFractionDigits: 2 })} and CH ${inc.ch_to.toLocaleString("en-AU", { minimumFractionDigits: 2 })}. A fitting or pipe may not have been lodged.`
         : `Possible duplicate or incorrect chainage entry near CH ${inc.ch_from.toLocaleString("en-AU", { minimumFractionDigits: 2 })}.`;
     setEditContextualNote(note);
+    setEditContextChFrom(inc.ch_from);
+    setEditContextChTo(inc.ch_to);
+    setEditContextRecordToId(inc.record_to_id);
     setEditRecordId(inc.record_from_id);
     setEditOpen(true);
   };
 
-  const openViewRecordById = (recordId: string, note?: string | null) => {
+  const openViewRecordById = (
+    recordId: string,
+    note?: string | null,
+    chFrom?: number | null,
+    chTo?: number | null
+  ) => {
     setEditContextualNote(note ?? null);
+    setEditContextChFrom(chFrom ?? null);
+    setEditContextChTo(chTo ?? null);
+    setEditContextRecordToId(null);
     setEditRecordId(recordId);
     setEditOpen(true);
   };
@@ -249,6 +287,105 @@ export default function NotificationsPage() {
       counter: inc.record_from_counter,
       chainage: inc.ch_from,
     });
+  };
+
+  const handleValidateInconsistency = async (
+    sec: SectionInconsistencies,
+    inc: InconsistencyItem
+  ) => {
+    const key = `${sec.section_id}:${inc.record_from_id}:${inc.record_to_id}`;
+    setValidatingKey(key);
+    try {
+      const token = await getAccessToken();
+      if (!token) throw new Error("Sign in required");
+      const res = await fetch("/api/drainer/records/inconsistencies/validate", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          section_id: sec.section_id,
+          record_from_id: inc.record_from_id,
+          record_to_id: inc.record_to_id,
+          issue_type: inc.type,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? "Validation failed");
+      pushToast({ type: "success", title: "Issue validated" });
+      setValidateConfirm(null);
+      loadInconsistencies();
+    } catch (err) {
+      pushToast({
+        type: "error",
+        title: "Validation failed",
+        message: err instanceof Error ? err.message : "Unknown error",
+      });
+    } finally {
+      setValidatingKey(null);
+    }
+  };
+
+  const handleValidateFitting = async (sec: FittingsSection, r: FittingRecord) => {
+    setValidatingFittingKey(r.id);
+    try {
+      const token = await getAccessToken();
+      if (!token) throw new Error("Sign in required");
+      const res = await fetch("/api/drainer/records/fittings/validate", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ record_id: r.id }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? "Validation failed");
+      pushToast({ type: "success", title: "Fitting validated" });
+      setValidateFittingConfirm(null);
+      loadFittings();
+    } catch (err) {
+      pushToast({
+        type: "error",
+        title: "Validation failed",
+        message: err instanceof Error ? err.message : "Unknown error",
+      });
+    } finally {
+      setValidatingFittingKey(null);
+    }
+  };
+
+  const handleValidateNearTolerance = async (
+    sec: NearToleranceSection,
+    r: NearToleranceRecord
+  ) => {
+    setValidatingNearKey(r.id);
+    try {
+      const token = await getAccessToken();
+      if (!token) throw new Error("Sign in required");
+      const res = await fetch("/api/drainer/records/near-tolerance/validate", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ record_id: r.id }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? "Validation failed");
+      pushToast({ type: "success", title: "Near-tolerance validated" });
+      setValidateNearConfirm(null);
+      loadNearTolerance();
+    } catch (err) {
+      pushToast({
+        type: "error",
+        title: "Validation failed",
+        message: err instanceof Error ? err.message : "Unknown error",
+      });
+    } finally {
+      setValidatingNearKey(null);
+    }
   };
 
   const handleDeleteRecord = async () => {
@@ -332,10 +469,10 @@ export default function NotificationsPage() {
                 size="sm"
                 className="min-h-[44px] min-w-[44px] shrink-0 rounded-full bg-[var(--card-bg)] border-0 hover:bg-[var(--surface)]"
                 onClick={loadAllValidation}
-                disabled={inconsistenciesLoading || duplicatesLoading || nearToleranceLoading || deflectionTrendLoading}
+                disabled={inconsistenciesLoading || duplicatesLoading || nearToleranceLoading || deflectionTrendLoading || fittingsLoading}
                 title="Refresh"
               >
-                {inconsistenciesLoading || duplicatesLoading || nearToleranceLoading || deflectionTrendLoading ? (
+                {inconsistenciesLoading || duplicatesLoading || nearToleranceLoading || deflectionTrendLoading || fittingsLoading ? (
                   <RefreshCw className="size-4 animate-spin" />
                 ) : (
                   <RefreshCw className="size-4" />
@@ -377,9 +514,20 @@ export default function NotificationsPage() {
                       {inc.type === "gap" ? "Possible missing record between these chainages." : "Possible duplicate or incorrect chainage entry."}
                     </p>
                     <div className="mt-auto flex flex-wrap gap-2 justify-between items-center w-full">
-                      <Button variant="outline" size="sm" className="min-h-[33px] h-[33px] px-3 text-xs bg-[var(--surface)] text-[var(--ink)] border-[var(--border)] hover:bg-[var(--surface-alt)]" onClick={() => openDeleteConfirm(inc)}>
-                        Delete
-                      </Button>
+                      <div className="flex gap-2">
+                        <Button variant="outline" size="sm" className="min-h-[33px] h-[33px] px-3 text-xs bg-[var(--surface)] text-[var(--ink)] border-[var(--border)] hover:bg-[var(--surface-alt)]" onClick={() => openDeleteConfirm(inc)}>
+                          Delete
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="min-h-[33px] h-[33px] px-3 text-xs bg-[#2F7D55] text-white border-0 hover:bg-[#267348] shrink-0"
+                          onClick={() => setValidateConfirm({ sec, inc })}
+                          disabled={validatingKey === `${sec.section_id}:${inc.record_from_id}:${inc.record_to_id}`}
+                        >
+                          {validatingKey === `${sec.section_id}:${inc.record_from_id}:${inc.record_to_id}` ? "Validating…" : "Validate"}
+                        </Button>
+                      </div>
                       <Button variant="outline" size="sm" className="min-h-[33px] h-[33px] px-3 text-xs bg-[#B8682A] text-white border-0 hover:bg-[#A35D26] shrink-0" onClick={() => openViewRecord(inc)}>
                         View Record
                       </Button>
@@ -388,7 +536,64 @@ export default function NotificationsPage() {
                 ))}
               </div>
             )}
-            {/* CHECK 1 — Duplicate Pipe ID */}
+            {/* CHECK 1 — Fittings (non-pipe pipe_fitting_id) */}
+            <div className="mt-6 border-t border-[var(--border)] pt-4">
+              <button
+                type="button"
+                className="flex items-center gap-2 w-full text-left font-medium text-sm"
+                onClick={() => setFittingsOpen((o) => !o)}
+              >
+                <span>{fittingsOpen ? "▼" : "▶"}</span>
+                <span>Fittings (non-pipe names)</span>
+                {!fittingsLoading && (
+                  <Badge variant="secondary" className="text-xs">
+                    {fittingsData.reduce((s, sec) => s + (sec.records?.length ?? 0), 0)}
+                  </Badge>
+                )}
+              </button>
+              {fittingsOpen && (
+                <div className="mt-2">
+                  {fittingsLoading ? (
+                    <p className="text-sm text-[var(--muted-foreground)] py-2">Loading…</p>
+                  ) : fittingsData.reduce((s, sec) => s + (sec.records?.length ?? 0), 0) === 0 ? (
+                    <p className="text-sm text-[var(--muted-foreground)] py-2">No fittings to validate</p>
+                  ) : (
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      {fittingsData.flatMap((sec) =>
+                        (sec.records ?? []).map((r) => (
+                          <div key={r.id} className="rounded-xl border border-[var(--border)] bg-white p-4 shadow-sm flex flex-col min-h-[140px]">
+                            <div className="flex items-center justify-between gap-2 mb-2">
+                              <Badge variant="secondary" className="text-xs">Fitting</Badge>
+                              <span className="text-sm font-medium">Record #{r.counter ?? "—"}</span>
+                            </div>
+                            <p className="text-sm mb-1">CH {r.chainage.toLocaleString("en-AU", { minimumFractionDigits: 2 })} · <span className="font-mono">{r.pipe_fitting_id ?? "—"}</span></p>
+                            <p className="text-xs text-[var(--muted-foreground)] mb-3">
+                              Name differs from pipe format (000536-000096 or PP000010-000169).
+                            </p>
+                            <div className="mt-auto flex flex-wrap gap-2 justify-between items-center w-full">
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                className="min-h-[33px] h-[33px] px-3 text-xs bg-[#2F7D55] text-white border-0 hover:bg-[#267348] shrink-0"
+                                onClick={() => setValidateFittingConfirm({ sec, r })}
+                                disabled={validatingFittingKey === r.id}
+                              >
+                                {validatingFittingKey === r.id ? "Validating…" : "Validate"}
+                              </Button>
+                              <Button variant="outline" size="sm" className="min-h-[33px] h-[33px] px-3 text-xs bg-[#B8682A] text-white border-0 hover:bg-[#A35D26] shrink-0" onClick={() => openViewRecordById(r.id, `Fitting: ${r.pipe_fitting_id ?? "—"}`, r.chainage, r.chainage)}>
+                                View Record
+                              </Button>
+                            </div>
+                          </div>
+                        ))
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {/* CHECK 2 — Duplicate Pipe ID */}
             <div className="mt-6 border-t border-[var(--border)] pt-4">
               <button
                 type="button"
@@ -426,7 +631,7 @@ export default function NotificationsPage() {
                             </p>
                             <div className="flex flex-wrap gap-2">
                               {dup.records.map((r) => (
-                                <Button key={r.id} variant="outline" size="sm" className="min-h-[44px]" onClick={() => openViewRecordById(r.id, `Duplicate pipe ID: ${dup.pipe_fitting_id}`)}>
+                                <Button key={r.id} variant="outline" size="sm" className="min-h-[44px]" onClick={() => openViewRecordById(r.id, `Duplicate pipe ID: ${dup.pipe_fitting_id}`, r.chainage, r.chainage)}>
                                   View #{r.counter ?? "?"}
                                 </Button>
                               ))}
@@ -481,8 +686,17 @@ export default function NotificationsPage() {
                                 ? "Deflection approaching limit. Review installation before next ITR."
                                 : "Deflection within range but elevated. Monitor next records."}
                             </p>
-                            <div className="mt-auto flex flex-wrap gap-2 justify-end items-center w-full">
-                              <Button variant="outline" size="sm" className="min-h-[33px] h-[33px] px-3 text-xs bg-[#B8682A] text-white border-0 hover:bg-[#A35D26] shrink-0" onClick={() => openViewRecordById(r.id, r.level === "critical" ? "Deflection approaching limit. Review installation before next ITR." : "Deflection within range but elevated. Monitor next records.")}>
+                            <div className="mt-auto flex flex-wrap gap-2 justify-between items-center w-full">
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                className="min-h-[33px] h-[33px] px-3 text-xs bg-[#2F7D55] text-white border-0 hover:bg-[#267348] shrink-0"
+                                onClick={() => setValidateNearConfirm({ sec, r })}
+                                disabled={validatingNearKey === r.id}
+                              >
+                                {validatingNearKey === r.id ? "Validating…" : "Validate"}
+                              </Button>
+                              <Button variant="outline" size="sm" className="min-h-[33px] h-[33px] px-3 text-xs bg-[#B8682A] text-white border-0 hover:bg-[#A35D26] shrink-0" onClick={() => openViewRecordById(r.id, r.level === "critical" ? "Deflection approaching limit. Review installation before next ITR." : "Deflection within range but elevated. Monitor next records.", r.chainage, r.chainage)}>
                                 View Record
                               </Button>
                             </div>
@@ -551,7 +765,7 @@ export default function NotificationsPage() {
                                 ))}
                               </ul>
                               {t.first_record_id && (
-                                <Button variant="outline" size="sm" className="min-h-[44px] w-full" onClick={() => openViewRecordById(t.first_record_id!, "Deflection trend — 4 consecutive records in same direction. Possible alignment issue in trench.")}>
+                                <Button variant="outline" size="sm" className="min-h-[44px] w-full" onClick={() => openViewRecordById(t.first_record_id!, "Deflection trend — 4 consecutive records in same direction. Possible alignment issue in trench.", chMin, chMax)}>
                                   View Record #{t.first_record_counter ?? "?"}
                                 </Button>
                               )}
@@ -567,55 +781,6 @@ export default function NotificationsPage() {
             </div>
           </CardContent>
         </Card>
-
-        <Card className="drainer-card">
-          <CardContent className="pt-0">
-            <div className="flex items-start justify-between gap-4">
-              <div className="drainer-title">Missed checkpoint alerts</div>
-              <Button
-                variant="outline"
-                size="sm"
-                className="min-h-[44px] min-w-[44px] shrink-0 rounded-full bg-[var(--card-bg)] border-0 hover:bg-[var(--surface)]"
-                onClick={loadMissed}
-                title="Refresh"
-              >
-                <RefreshCw className="size-4" />
-              </Button>
-            </div>
-            <div className="mt-4">
-            <p className="text-xs text-[var(--muted-foreground)] mb-3">
-              Active checkpoints that did not trigger an alert because the
-              current CH already passed the point.
-            </p>
-            {missed.length === 0 ? (
-              <p className="text-sm text-[var(--muted-foreground)] py-4 text-center">
-                No missed alerts.
-              </p>
-            ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm min-w-[280px]">
-                  <thead>
-                    <tr className="border-b border-[var(--border)]">
-                      <th className="text-left py-2 px-2 whitespace-nowrap">Name</th>
-                      <th className="text-left py-2 px-2 whitespace-nowrap">Checkpoint CH</th>
-                      <th className="text-left py-2 px-2 whitespace-nowrap">CH when exceeded</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {missed.map((m) => (
-                      <tr key={m.id} className="border-b border-[var(--border)]/50">
-                        <td className="py-2 px-2 font-medium whitespace-nowrap">{m.name ? m.name.charAt(0).toUpperCase() + m.name.slice(1).toLowerCase() : ""}</td>
-                        <td className="py-2 px-2 whitespace-nowrap">{m.ch.toLocaleString("en-AU", { minimumFractionDigits: 2 })}</td>
-                        <td className="py-2 px-2 whitespace-nowrap">{m.detected_at_ch.toLocaleString("en-AU", { minimumFractionDigits: 2 })}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-            </div>
-          </CardContent>
-        </Card>
       </div>
 
       <RecordEditForm
@@ -625,11 +790,92 @@ export default function NotificationsPage() {
           setEditOpen(false);
           setEditRecordId(null);
           setEditContextualNote(null);
+          setEditContextChFrom(null);
+          setEditContextChTo(null);
+          setEditContextRecordToId(null);
         }}
         onSaved={loadAllValidation}
         getAccessToken={getAccessToken}
         contextualNote={editContextualNote}
+        contextChFrom={editContextChFrom}
+        contextChTo={editContextChTo}
+        contextRecordToId={editContextRecordToId}
       />
+
+      <Dialog open={!!validateFittingConfirm} onOpenChange={(o) => !o && setValidateFittingConfirm(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Validate fitting</DialogTitle>
+          </DialogHeader>
+          {validateFittingConfirm && (
+            <p className="text-sm text-[var(--muted-foreground)]">
+              Mark Record #{validateFittingConfirm.r.counter ?? "?"} (CH {validateFittingConfirm.r.chainage.toLocaleString("en-AU", { minimumFractionDigits: 2 })}, {validateFittingConfirm.r.pipe_fitting_id ?? "—"}) as accepted? It will be removed from the list.
+            </p>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setValidateFittingConfirm(null)} className="min-h-[44px]">
+              Cancel
+            </Button>
+            <Button
+              onClick={() => validateFittingConfirm && handleValidateFitting(validateFittingConfirm.sec, validateFittingConfirm.r)}
+              disabled={!validateFittingConfirm || validatingFittingKey !== null}
+              className="min-h-[44px] bg-[#2F7D55] text-white hover:bg-[#267348]"
+            >
+              {validatingFittingKey ? "Validating…" : "Validate"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={!!validateNearConfirm} onOpenChange={(o) => !o && setValidateNearConfirm(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Validate near-tolerance</DialogTitle>
+          </DialogHeader>
+          {validateNearConfirm && (
+            <p className="text-sm text-[var(--muted-foreground)]">
+              Mark Record #{validateNearConfirm.r.counter ?? "?"} (CH {validateNearConfirm.r.chainage.toLocaleString("en-AU", { minimumFractionDigits: 2 })}, {validateNearConfirm.r.level}) as accepted? It will be removed from the list.
+            </p>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setValidateNearConfirm(null)} className="min-h-[44px]">
+              Cancel
+            </Button>
+            <Button
+              onClick={() => validateNearConfirm && handleValidateNearTolerance(validateNearConfirm.sec, validateNearConfirm.r)}
+              disabled={!validateNearConfirm || validatingNearKey !== null}
+              className="min-h-[44px] bg-[#2F7D55] text-white hover:bg-[#267348]"
+            >
+              {validatingNearKey ? "Validating…" : "Validate"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={!!validateConfirm} onOpenChange={(o) => !o && setValidateConfirm(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Validate issue</DialogTitle>
+          </DialogHeader>
+          {validateConfirm && (
+            <p className="text-sm text-[var(--muted-foreground)]">
+              Mark this {validateConfirm.inc.type} (CH {validateConfirm.inc.ch_from.toLocaleString("en-AU", { minimumFractionDigits: 2 })} → {validateConfirm.inc.ch_to.toLocaleString("en-AU", { minimumFractionDigits: 2 })}) as accepted? It will be removed from the potential issues list.
+            </p>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setValidateConfirm(null)} className="min-h-[44px]">
+              Cancel
+            </Button>
+            <Button
+              onClick={() => validateConfirm && handleValidateInconsistency(validateConfirm.sec, validateConfirm.inc)}
+              disabled={!validateConfirm || validatingKey !== null}
+              className="min-h-[44px] bg-[#2F7D55] text-white hover:bg-[#267348]"
+            >
+              {validatingKey ? "Validating…" : "Validate"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={!!deleteConfirm} onOpenChange={(o) => !o && setDeleteConfirm(null)}>
         <DialogContent>

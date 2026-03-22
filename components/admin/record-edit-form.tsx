@@ -53,6 +53,11 @@ type RecordEditFormProps = {
   getAccessToken: () => Promise<string | null>;
   /** Optional note shown above the form (e.g. Data Validation context) */
   contextualNote?: string | null;
+  /** CH range context (e.g. from inconsistency or fitting card) */
+  contextChFrom?: number | null;
+  contextChTo?: number | null;
+  /** When editing from inconsistency, the "to" record id for CH final updates */
+  contextRecordToId?: string | null;
 };
 
 export function RecordEditForm({
@@ -62,6 +67,9 @@ export function RecordEditForm({
   onSaved,
   getAccessToken,
   contextualNote,
+  contextChFrom,
+  contextChTo,
+  contextRecordToId,
 }: RecordEditFormProps) {
   const { pushToast } = useToast();
   const [loading, setLoading] = useState(false);
@@ -85,6 +93,13 @@ export function RecordEditForm({
   const [cementLiner, setCementLiner] = useState(false);
   const [sparkTesting, setSparkTesting] = useState(false);
   const [inspectorName, setInspectorName] = useState("");
+  const [contextChToLocal, setContextChToLocal] = useState("");
+
+  useEffect(() => {
+    if (open && contextChTo != null) {
+      setContextChToLocal(String(contextChTo));
+    }
+  }, [open, contextChTo]);
 
   useEffect(() => {
     if (!open || !recordId) return;
@@ -165,6 +180,24 @@ export function RecordEditForm({
         pushToast({ type: "error", title: "Sign in required" });
         setLoading(false);
         return;
+      }
+
+      if (contextRecordToId && contextChTo != null && contextChToLocal.trim()) {
+        const chToNum = parseFloat(contextChToLocal);
+        if (Number.isFinite(chToNum) && Math.abs(chToNum - contextChTo) > 0.001) {
+          const resTo = await fetch(`/api/drainer/records/${contextRecordToId}`, {
+            method: "PUT",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${token}`,
+            },
+            body: JSON.stringify({ chainage: chToNum }),
+          });
+          if (!resTo.ok) {
+            const dataTo = await resTo.json();
+            throw new Error(dataTo.error ?? "Failed to update CH final");
+          }
+        }
       }
 
       const res = await fetch(`/api/drainer/records/${recordId}`, {
@@ -258,6 +291,33 @@ export function RecordEditForm({
           <p className="text-sm font-medium bg-[#FFF6DB] text-[#9A6B00] border border-[#F3E3B0] rounded-full px-2.5 py-1.5">
             {contextualNote}
           </p>
+        )}
+
+        {(contextChFrom != null || contextChTo != null) && (
+          <div className="flex gap-4 flex-wrap items-center text-sm">
+            <div className="flex items-center gap-2">
+              <span className="text-[var(--muted-foreground)]">CH inicial:</span>
+              <Input
+                type="number"
+                step="0.01"
+                value={chainage}
+                onChange={(e) => setChainage(e.target.value)}
+                className="drainer-input w-24 h-9"
+                placeholder="—"
+              />
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="text-[var(--muted-foreground)]">CH final:</span>
+              <Input
+                type="number"
+                step="0.01"
+                value={contextChTo != null ? (contextRecordToId ? contextChToLocal : chainage) : ""}
+                onChange={(e) => contextRecordToId ? setContextChToLocal(e.target.value) : setChainage(e.target.value)}
+                className="drainer-input w-24 h-9"
+                placeholder="—"
+              />
+            </div>
+          </div>
         )}
 
         <div className="space-y-3">
@@ -385,25 +445,15 @@ export function RecordEditForm({
             </div>
           </div>
 
-          {(jointType === "RRJ" || jointType === "WR") && (
+          {(jointType === "RRJ") && (
             <div className="flex gap-4 flex-wrap">
-              {jointType === "RRJ" && (
-                <label className="flex items-center gap-2 text-sm">
-                  <input
-                    type="checkbox"
-                    checked={cpLugs ?? false}
-                    onChange={(e) => setCpLugs(e.target.checked)}
-                  />
-                  CP Lugs @12
-                </label>
-              )}
               <label className="flex items-center gap-2 text-sm">
                 <input
                   type="checkbox"
-                  checked={jointAirTest ?? false}
-                  onChange={(e) => setJointAirTest(e.target.checked)}
+                  checked={cpLugs ?? false}
+                  onChange={(e) => setCpLugs(e.target.checked)}
                 />
-                Joint Air Test
+                CP Lugs @12
               </label>
             </div>
           )}

@@ -6,6 +6,7 @@ import { generateITRPla001PdfWithFallback } from "@/lib/reporting/itr-pla-001/ge
 import { ITR_PAGE_SIZE } from "@/lib/drainer";
 
 export async function POST(request: NextRequest) {
+  console.log("[ITR] route hit: direct (PDF download)");
   const { user, token } = await getUserFromRequest(request);
   if (!user || !token) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -78,7 +79,7 @@ export async function POST(request: NextRequest) {
     buffer = result.buffer;
     contentType = result.contentType;
     fileName = result.fileName;
-    console.log("[ITR-PLA-001] direct route: PDF generated", { source: result.source, bufferSize: buffer?.length ?? 0 });
+    console.log("[ITR] route hit: direct | renderer:", result.source, "| bufferSize:", buffer?.length ?? 0);
   } catch (error) {
     console.error("[ITR-PLA-001] PDF generation failed:", error);
     const msg = (error as Error)?.message ?? String(error ?? "");

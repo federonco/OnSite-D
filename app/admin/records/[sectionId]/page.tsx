@@ -3,9 +3,11 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useParams, useSearchParams } from "next/navigation";
+import { Search } from "lucide-react";
 import { AdminNav } from "@/components/admin-nav";
 import { AuthPanel } from "@/components/auth-panel";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { SectionRecords } from "@/components/admin/section-records";
 import { RecordEditForm } from "@/components/admin/record-edit-form";
 import { getSupabaseBrowser } from "@/lib/supabase/browser";
@@ -23,10 +25,12 @@ export default function AdminRecordsPage() {
   const supabase = getSupabaseBrowser();
   const [authEmail, setAuthEmail] = useState<string | null>(null);
   const [isAdmin, setIsAdmin] = useState<boolean | null>(null);
-  const [sections, setSections] = useState<{ id: string; name: string }[]>([]);
+  const [sections, setSections] = useState<{ id: string; name: string; start_ch?: number | null; end_ch?: number | null }[]>([]);
   const [records, setRecords] = useState<PipeRecord[]>([]);
   const [editId, setEditId] = useState<string | null>(null);
   const [editOpen, setEditOpen] = useState(false);
+  const [pipeSearch, setPipeSearch] = useState("");
+  const [progressRefreshTrigger, setProgressRefreshTrigger] = useState(0);
 
   const chMin = chMinParam != null ? parseFloat(chMinParam) : null;
   const chMax = chMaxParam != null ? parseFloat(chMaxParam) : null;
@@ -83,20 +87,32 @@ export default function AdminRecordsPage() {
   }, [authEmail, getAccessToken, loadSections]);
 
   useEffect(() => {
-    if (sectionId && isAdmin) loadRecords();
-    else setRecords([]);
+    if (sectionId && isAdmin) {
+      loadRecords();
+    } else {
+      setRecords([]);
+    }
   }, [sectionId, isAdmin, loadRecords]);
 
   const filteredRecords = useMemo(() => {
-    if (recordFromId && recordToId) return records;
-    if (chMin == null && chMax == null) return records;
-    return records.filter((r) => {
-      const ch = Number(r.chainage);
-      if (chMin != null && ch < chMin) return false;
-      if (chMax != null && ch > chMax) return false;
-      return true;
+    let list = records;
+    if (!recordFromId || !recordToId) {
+      if (chMin != null || chMax != null) {
+        list = list.filter((r) => {
+          const ch = Number(r.chainage);
+          if (chMin != null && ch < chMin) return false;
+          if (chMax != null && ch > chMax) return false;
+          return true;
+        });
+      }
+    }
+    const q = pipeSearch.trim().toLowerCase();
+    if (!q) return list;
+    return list.filter((r) => {
+      const pf = (r.pipe_fitting_id ?? "").toLowerCase();
+      return pf.includes(q);
     });
-  }, [records, chMin, chMax, recordFromId, recordToId]);
+  }, [records, chMin, chMax, recordFromId, recordToId, pipeSearch]);
 
   const selectedSection = sections.find((s) => s.id === sectionId);
   const sectionName = selectedSection?.name ?? sectionId ?? "Records";
@@ -108,6 +124,7 @@ export default function AdminRecordsPage() {
 
   const handleEditSaved = () => {
     loadRecords();
+    setProgressRefreshTrigger((t) => t + 1);
   };
 
   const handleEditClose = () => {
@@ -184,10 +201,25 @@ export default function AdminRecordsPage() {
           </p>
         )}
 
+        <div className="relative mb-3">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-[var(--muted-foreground)] pointer-events-none" />
+          <Input
+            type="text"
+            placeholder="Search Pipe #..."
+            value={pipeSearch}
+            onChange={(e) => setPipeSearch(e.target.value)}
+            className="pl-9 max-w-xs"
+          />
+        </div>
+
         <SectionRecords
           sectionName={sectionName}
+          sectionId={sectionId}
           records={filteredRecords}
           onEditRecord={handleEditRecord}
+          getAccessToken={getAccessToken}
+          emptyMessage={pipeSearch.trim() && filteredRecords.length === 0 ? "No records found" : undefined}
+          progressRefreshTrigger={progressRefreshTrigger}
         />
       </div>
 

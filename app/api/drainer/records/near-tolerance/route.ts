@@ -89,8 +89,14 @@ async function getNearToleranceForSection(
     throw new Error(error.message);
   }
 
+  const { data: validatedRows } = await supabase
+    .from("drainer_validated_near_tolerance")
+    .select("record_id");
+  const validatedIds = new Set((validatedRows ?? []).map((v) => v.record_id));
+
   const flagged: NearToleranceRecord[] = [];
   for (const r of records ?? []) {
+    if (validatedIds.has(r.id)) continue;
     const vMm = Math.abs(Number(r.deflection_v_mm) ?? 0);
     const hMm = Math.abs(Number(r.deflection_h_mm) ?? 0);
     const level = getLevel(vMm, hMm);

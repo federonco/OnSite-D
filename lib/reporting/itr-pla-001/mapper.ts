@@ -41,6 +41,12 @@ export function formatChainage(n: number): string {
   });
 }
 
+/** Returns pipe/fitting ID as single line (no split). */
+export function formatPipeFittingId(id: string | null): string {
+  if (!id) return "";
+  return id.trim();
+}
+
 export function formatAlignment(r: RecordRow): string {
   const vSign = r.deflection_v_sign ?? "+";
   const vMm = r.deflection_v_mm ?? 0;
@@ -81,7 +87,7 @@ export function mapRecordToCells(r: RecordRow): string[] {
   return [
     formatDate(r.date_installed),
     formatChainage(r.chainage),
-    r.pipe_fitting_id ?? "",
+    formatPipeFittingId(r.pipe_fitting_id),
     r.joint_type ?? "",
     yn(r.witness_mark),
     yn(r.internal_seal),

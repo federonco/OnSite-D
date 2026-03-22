@@ -7,6 +7,7 @@ import { AdminNav } from "@/components/admin-nav";
 import { AuthPanel } from "@/components/auth-panel";
 import { useToast } from "@/components/toast";
 import { getSupabaseBrowser } from "@/lib/supabase/browser";
+import { SectionProgressBar } from "@/components/admin/section-records";
 import {
   ITR_PAGE_SIZE,
   getITRProgress,
@@ -48,11 +49,31 @@ type Section = {
   itp_number: string | null;
 };
 
+/** Pipe: digits-hyphen-digits, PP+digits-hyphen-digits, or just digits. Fitting: anything else. */
+const PIPE_REGEX = /^((PP)?\d+-\d+|\d+)$/;
+
 type RecordRow = {
   id: string;
   chainage: number;
   date_installed: string | null;
+  pipe_fitting_id?: string | null;
 };
+
+/**
+ * Pipes: 000536-000096, PP000010-000169, or just numbers. Fittings: rest (double scour, bend, valve, etc).
+ * Empty not counted as fitting.
+ */
+function countPipesAndFittings(records: RecordRow[]): { pipes: number; fittings: number } {
+  let pipes = 0;
+  let fittings = 0;
+  for (const r of records) {
+    const pf = (r.pipe_fitting_id ?? "").trim();
+    if (!pf) continue;
+    if (PIPE_REGEX.test(pf)) pipes++;
+    else fittings++;
+  }
+  return { pipes, fittings };
+}
 
 export default function AdminPage() {
   const supabase = getSupabaseBrowser();
@@ -89,6 +110,7 @@ export default function AdminPage() {
   const [sendQREmail, setSendQREmail] = useState("");
   const [sendingQR, setSendingQR] = useState(false);
   const [recordsRefreshing, setRecordsRefreshing] = useState(false);
+  const [progressRefreshTrigger, setProgressRefreshTrigger] = useState(0);
 
   const getAccessToken = useCallback(async () => {
     const { data } = await supabase.auth.getSession();
@@ -189,6 +211,13 @@ export default function AdminPage() {
     () => getITRProgress(records.length),
     [records.length]
   );
+
+  const { pipes: pipesInstalled, fittings: fittingsInstalled } = useMemo(
+    () => countPipesAndFittings(records),
+    [records]
+  );
+
+  const reportsPending = progress.currentOpenCount > 0 ? 1 : 0;
 
   const openCreate = () => {
     setModalMode("create");
@@ -539,6 +568,7 @@ export default function AdminPage() {
                     setRecordsRefreshing(true);
                     await loadRecords();
                     setRecordsRefreshing(false);
+                    setProgressRefreshTrigger((t) => t + 1);
                   }}
                   disabled={recordsRefreshing}
                   title="Refresh"
@@ -548,29 +578,35 @@ export default function AdminPage() {
               </div>
             </CardHeader>
             <CardContent className="space-y-3">
-              <div className="flex items-center gap-2">
-                <p className="text-xs font-bold text-[var(--muted-foreground)]">
-                  Records: {records.length} (max {ITR_PAGE_SIZE} per ITR)
-                </p>
-                <span className="drainer-badge-ready">
-                  <span className="drainer-badge-ready-dot" aria-hidden />
-                  Ready {progress.completeITRs}
-                </span>
-                <span className="drainer-badge-open">
-                  <span className="drainer-badge-open-dot" aria-hidden />
-                  Open {progress.currentOpenCount > 0 ? 1 : 0}
-                </span>
+              <div className="rounded-2xl bg-white p-5 shadow-sm border border-[var(--border)] space-y-3">
+                <div className="flex items-center justify-between gap-3 flex-wrap">
+                  <span className="font-semibold text-sm text-[var(--ink)]">{selectedSection.name}</span>
+                  <div className="flex items-center gap-2">
+                    <span className="drainer-badge-ready">
+                      <span className="drainer-badge-ready-dot" aria-hidden />
+                      Ready {progress.completeITRs}
+                    </span>
+                    <span className="drainer-badge-open">
+                      <span className="drainer-badge-open-dot" aria-hidden />
+                      Open {reportsPending}
+                    </span>
+                  </div>
+                </div>
+                <div className="space-y-1.5 text-xs">
+                  <div className="text-[var(--muted-foreground)]">
+                    Records: {records.length}
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <span className="text-[var(--muted-foreground)]">Pipes installed</span>
+                    <span className="font-semibold text-[var(--ink)]">{pipesInstalled}</span>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <span className="text-[var(--muted-foreground)]">Fittings installed</span>
+                    <span className="font-semibold text-[var(--ink)]">{fittingsInstalled}</span>
+                  </div>
+                </div>
               </div>
-              <div className="flex justify-between text-xs text-[var(--muted-foreground)] mb-1">
-                <span>ITR progress</span>
-                <span>{progress.percent}%</span>
-              </div>
-              <div className="h-2 rounded-full bg-[var(--surface-alt)] overflow-hidden">
-                <div
-                  className="h-full bg-[var(--primary)] transition-all duration-300"
-                  style={{ width: `${progress.percent}%` }}
-                />
-              </div>
+              <SectionProgressBar sectionId={sectionId} getAccessToken={getAccessToken} refreshTrigger={progressRefreshTrigger} />
               {itrBlocks.length > 0 ? (
                 <div className="max-h-[280px] space-y-3 overflow-y-auto pr-1">
                   {itrBlocks.map((block) => (
