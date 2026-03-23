@@ -96,9 +96,10 @@ export default function AdminPage() {
   const [loading, setLoading] = useState(false);
   const [printingItrIndex, setPrintingItrIndex] = useState<number | null>(null);
   const [printingAudit, setPrintingAudit] = useState(false);
+  const [printingAllItr, setPrintingAllItr] = useState(false);
   const [reportModalOpen, setReportModalOpen] = useState(false);
   const [reportModalType, setReportModalType] = useState<
-    "itr-complete" | "itr-open" | "audit" | null
+    "itr-complete" | "itr-open" | "itr-all" | "audit" | null
   >(null);
   const [reportModalPayload, setReportModalPayload] = useState<{
     itrIndex?: number;
@@ -333,7 +334,7 @@ export default function AdminPage() {
   };
 
   const openReportModal = (
-    type: "itr-complete" | "itr-open" | "audit",
+    type: "itr-complete" | "itr-open" | "itr-all" | "audit",
     payload: { itrIndex?: number; recordCount?: number }
   ) => {
     if ((type === "itr-complete" || type === "itr-open") && (payload.recordCount ?? 0) > ITR_PAGE_SIZE) {
@@ -359,6 +360,8 @@ export default function AdminPage() {
     }
     if (reportModalType === "itr-complete" || reportModalType === "itr-open") {
       setPrintingItrIndex(reportModalPayload?.itrIndex ?? null);
+    } else if (reportModalType === "itr-all") {
+      setPrintingAllItr(true);
     } else {
       setPrintingAudit(true);
     }
@@ -379,6 +382,22 @@ export default function AdminPage() {
           type: "success",
           title: "Audit report sent",
           message: `Report sent to ${email}`,
+        });
+      } else if (reportModalType === "itr-all") {
+        const res = await fetch("/api/drainer/report/itr-pla-001/email-all", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({ sectionId, recipientEmail: email }),
+        });
+        const data = (await res.json().catch(() => ({}))) as { error?: string };
+        if (!res.ok) throw new Error(data.error ?? "Send failed");
+        pushToast({
+          type: "success",
+          title: "All ITRs sent",
+          message: `All ITR reports sent to ${email}`,
         });
       } else {
         const res = await fetch("/api/drainer/report/itr-pla-001/email", {
@@ -414,6 +433,7 @@ export default function AdminPage() {
     } finally {
       setPrintingItrIndex(null);
       setPrintingAudit(false);
+      setPrintingAllItr(false);
     }
   };
 
@@ -547,7 +567,7 @@ export default function AdminPage() {
                       size="sm"
                       className="min-h-[44px] px-4 text-sm border-0 drainer-button-accent"
                       onClick={() => openReportModal("audit", {})}
-                      disabled={!sectionId || printingAudit}
+                      disabled={!sectionId || printingAudit || printingAllItr}
                     >
                       {printingAudit ? (
                         <>
@@ -555,7 +575,23 @@ export default function AdminPage() {
                           Sending…
                         </>
                       ) : (
-                        "Print audit"
+                        "Send Audit"
+                      )}
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="min-h-[44px] px-4 text-sm border-0 drainer-button-accent"
+                      onClick={() => openReportModal("itr-all", {})}
+                      disabled={!sectionId || itrBlocks.length === 0 || printingAudit || printingAllItr}
+                    >
+                      {printingAllItr ? (
+                        <>
+                          <Loader2 className="h-3 w-3 animate-spin shrink-0 mr-1" />
+                          Sending…
+                        </>
+                      ) : (
+                        "Send All ITR"
                       )}
                     </Button>
                   </div>
@@ -665,7 +701,7 @@ export default function AdminPage() {
                               recordCount: block.recordCount,
                             })
                           }
-                          disabled={printingItrIndex !== null}
+                          disabled={printingItrIndex !== null || printingAllItr}
                         >
                           {printingItrIndex === block.index ? (
                             <>
@@ -673,7 +709,7 @@ export default function AdminPage() {
                               Sending…
                             </>
                           ) : (
-                            `Print ITR-${block.index}`
+                            "Send ITR"
                           )}
                         </Button>
                       ) : block.status === "OPEN" ? (
@@ -687,7 +723,7 @@ export default function AdminPage() {
                               recordCount: block.recordCount,
                             })
                           }
-                          disabled={printingItrIndex !== null}
+                          disabled={printingItrIndex !== null || printingAllItr}
                         >
                           {printingItrIndex === block.index ? (
                             <>
@@ -695,7 +731,7 @@ export default function AdminPage() {
                               Sending…
                             </>
                           ) : (
-                            `Print Open ITR (${block.recordCount} records)`
+                            "Send ITR"
                           )}
                         </Button>
                       ) : null}
@@ -866,11 +902,12 @@ export default function AdminPage() {
               disabled={
                 !reportEmail.trim() ||
                 printingItrIndex !== null ||
-                printingAudit
+                printingAudit ||
+                printingAllItr
               }
               className="bg-[#B8682A] text-white border-0 hover:bg-[#A35D26]"
             >
-              {(printingItrIndex !== null || printingAudit)
+              {(printingItrIndex !== null || printingAudit || printingAllItr)
                 ? "Sending…"
                 : "Send"}
             </Button>

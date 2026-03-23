@@ -295,6 +295,8 @@ export default function NotificationsPage() {
   ) => {
     const key = `${sec.section_id}:${inc.record_from_id}:${inc.record_to_id}`;
     setValidatingKey(key);
+    const ac = new AbortController();
+    const timeout = setTimeout(() => ac.abort(), 15000);
     try {
       const token = await getAccessToken();
       if (!token) throw new Error("Sign in required");
@@ -310,6 +312,7 @@ export default function NotificationsPage() {
           record_to_id: inc.record_to_id,
           issue_type: inc.type,
         }),
+        signal: ac.signal,
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "Validation failed");
@@ -317,18 +320,23 @@ export default function NotificationsPage() {
       setValidateConfirm(null);
       loadInconsistencies();
     } catch (err) {
+      const msg = err instanceof Error ? err.message : "Unknown error";
+      const isAbort = err instanceof Error && err.name === "AbortError";
       pushToast({
         type: "error",
         title: "Validation failed",
-        message: err instanceof Error ? err.message : "Unknown error",
+        message: isAbort ? "Request timed out. Please try again." : msg,
       });
     } finally {
+      clearTimeout(timeout);
       setValidatingKey(null);
     }
   };
 
   const handleValidateFitting = async (sec: FittingsSection, r: FittingRecord) => {
     setValidatingFittingKey(r.id);
+    const ac = new AbortController();
+    const timeout = setTimeout(() => ac.abort(), 15000);
     try {
       const token = await getAccessToken();
       if (!token) throw new Error("Sign in required");
@@ -339,6 +347,7 @@ export default function NotificationsPage() {
           Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify({ record_id: r.id }),
+        signal: ac.signal,
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "Validation failed");
@@ -346,12 +355,15 @@ export default function NotificationsPage() {
       setValidateFittingConfirm(null);
       loadFittings();
     } catch (err) {
+      const msg = err instanceof Error ? err.message : "Unknown error";
+      const isAbort = err instanceof Error && err.name === "AbortError";
       pushToast({
         type: "error",
         title: "Validation failed",
-        message: err instanceof Error ? err.message : "Unknown error",
+        message: isAbort ? "Request timed out. Please try again." : msg,
       });
     } finally {
+      clearTimeout(timeout);
       setValidatingFittingKey(null);
     }
   };
@@ -361,6 +373,8 @@ export default function NotificationsPage() {
     r: NearToleranceRecord
   ) => {
     setValidatingNearKey(r.id);
+    const ac = new AbortController();
+    const timeout = setTimeout(() => ac.abort(), 15000);
     try {
       const token = await getAccessToken();
       if (!token) throw new Error("Sign in required");
@@ -371,6 +385,7 @@ export default function NotificationsPage() {
           Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify({ record_id: r.id }),
+        signal: ac.signal,
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "Validation failed");
@@ -378,12 +393,15 @@ export default function NotificationsPage() {
       setValidateNearConfirm(null);
       loadNearTolerance();
     } catch (err) {
+      const msg = err instanceof Error ? err.message : "Unknown error";
+      const isAbort = err instanceof Error && err.name === "AbortError";
       pushToast({
         type: "error",
         title: "Validation failed",
-        message: err instanceof Error ? err.message : "Unknown error",
+        message: isAbort ? "Request timed out. Please try again." : msg,
       });
     } finally {
+      clearTimeout(timeout);
       setValidatingNearKey(null);
     }
   };

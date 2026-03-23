@@ -1,6 +1,7 @@
 {
   "functions": {
     "app/api/drainer/report/itr-pla-001/route.tsx": { "memory": 1024 },
-    "app/api/drainer/report/itr-pla-001/email/route.ts": { "memory": 1024 }
+    "app/api/drainer/report/itr-pla-001/email/route.ts": { "memory": 1024 },
+    "app/api/drainer/report/itr-pla-001/email-all/route.ts": { "memory": 1024 }
   }
 }

@@ -24,7 +24,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Missing record_id" }, { status: 400 });
   }
 
-  const supabase = getSupabaseServer({ accessToken: token });
+  const supabase = getSupabaseServer({ useServiceRole: true });
 
   const { error } = await supabase.from("drainer_validated_near_tolerance").insert({
     record_id,
