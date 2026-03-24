@@ -1,12 +1,13 @@
 /**
  * Puppeteer launch config for ITR PDF.
- * - Vercel/serverless: @sparticuz/chromium
+ * - Vercel/serverless: @sparticuz/chromium (serverless-compatible, no libnss3)
  * - Local Windows: PUPPETEER_EXECUTABLE_PATH or system Chrome
  */
 
 import * as fs from "fs";
 import * as path from "path";
 import chromium from "@sparticuz/chromium";
+import puppeteer, { Browser } from "puppeteer-core";
 
 const DEFAULT_ARGS = [
   "--no-sandbox",
@@ -37,6 +38,8 @@ function findLocalChrome(): string | undefined {
 export async function getPuppeteerLaunchConfig(): Promise<{
   executablePath: string;
   args: string[];
+  defaultViewport?: { width: number; height: number; deviceScaleFactor?: number };
+  headless?: boolean | "shell";
 }> {
   const useChromium = !!process.env.VERCEL || !!process.env.AWS_LAMBDA_FUNCTION_VERSION;
   if (useChromium) {
@@ -44,6 +47,8 @@ export async function getPuppeteerLaunchConfig(): Promise<{
     return {
       executablePath: await chromium.executablePath(),
       args: chromium.args,
+      defaultViewport: chromium.defaultViewport,
+      headless: chromium.headless,
     };
   }
   const localChrome = findLocalChrome();
@@ -53,4 +58,15 @@ export async function getPuppeteerLaunchConfig(): Promise<{
   throw new Error(
     "Chrome not found. Set PUPPETEER_EXECUTABLE_PATH to your Chrome path, or install Chrome. On Vercel this uses @sparticuz/chromium."
   );
+}
+
+/** Launch browser for PDF generation. Uses @sparticuz/chromium on Vercel (no libnss3). */
+export async function launchBrowser(): Promise<Browser> {
+  const config = await getPuppeteerLaunchConfig();
+  return puppeteer.launch({
+    args: config.args,
+    defaultViewport: config.defaultViewport,
+    executablePath: config.executablePath,
+    headless: config.headless ?? true,
+  });
 }

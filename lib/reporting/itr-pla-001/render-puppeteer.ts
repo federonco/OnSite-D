@@ -3,8 +3,7 @@
  * Uses puppeteer-launch for Vercel/local Chromium.
  */
 
-import puppeteer from "puppeteer-core";
-import { getPuppeteerLaunchConfig } from "./puppeteer-launch";
+import { launchBrowser } from "./puppeteer-launch";
 import type { PreparedITRData } from "./prepare-data";
 import { buildITRHtml } from "./template";
 import { getTimeoutMs } from "./thresholds";
@@ -17,15 +16,10 @@ export async function generateWithPuppeteer(
   const safeName = (data.section.name ?? "section").replace(/\s+/g, "-");
   const fileName = `ITR-PLA-001_${safeName}_ITR-${data.pageNumber}_${Date.now()}.pdf`;
 
-  const { executablePath, args } = await getPuppeteerLaunchConfig();
   let browser;
   let page;
   try {
-    browser = await puppeteer.launch({
-      args,
-      executablePath,
-      headless: true,
-    });
+    browser = await launchBrowser();
 
     page = await browser.newPage();
 

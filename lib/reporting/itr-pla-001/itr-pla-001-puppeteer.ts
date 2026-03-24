@@ -5,8 +5,8 @@
 
 import * as fs from "fs";
 import * as path from "path";
-import puppeteer, { Browser } from "puppeteer-core";
-import { getPuppeteerLaunchConfig } from "./puppeteer-launch";
+import { Browser } from "puppeteer-core";
+import { launchBrowser } from "./puppeteer-launch";
 import type { SectionInfo } from "./types";
 import type { RecordRow } from "./mapper";
 import { mapRecordToCells } from "./mapper";
@@ -16,12 +16,7 @@ let _browser: Browser | null = null;
 
 async function getBrowser(): Promise<Browser> {
   if (_browser && _browser.connected) return _browser;
-  const { executablePath, args } = await getPuppeteerLaunchConfig();
-  _browser = await puppeteer.launch({
-    headless: true,
-    args,
-    executablePath,
-  });
+  _browser = await launchBrowser();
   return _browser;
 }
 
