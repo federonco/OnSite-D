@@ -46,6 +46,7 @@ export async function generateITRPla001PdfHTML(
 ): Promise<{ buffer: Buffer; contentType: string; fileName: string }> {
   console.log("[ITR PUPPETEER] step 1: starting");
   const pageNoLabel = options?.isOpenITR ? "In Progress" : "1 of 1";
+  const reportNoLabel = `ITR-${pageNumber}`;
   const dataRows = records.map((r) => mapRecordToCells(r));
   const logoSrc = getLogoDataUrl();
   if (!logoSrc) {
@@ -62,7 +63,7 @@ export async function generateITRPla001PdfHTML(
       itp_number: section.itp_number,
     },
     dataRows,
-    { pageNoLabel, logoSrc }
+    { pageNoLabel, reportNoLabel, logoSrc }
   );
   console.log("[ITR PUPPETEER] step 3: HTML built, length=", html.length);
 

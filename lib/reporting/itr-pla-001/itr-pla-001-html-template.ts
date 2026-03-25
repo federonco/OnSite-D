@@ -9,6 +9,7 @@ import {
   REVISION_NO,
   COLORS,
   COL_WIDTHS_PT,
+  ITR_MAX_ROWS,
   CATEGORIES,
   COLUMN_HEADERS,
   ASTERISK_ROW,
@@ -33,6 +34,7 @@ export type TemplateSection = {
 
 export type TemplateOptions = {
   pageNoLabel: string;
+  reportNoLabel?: string;
   /** Logo src: data URL (embedded) or URL. Falls back to external if not provided. */
   logoSrc?: string;
 };
@@ -52,7 +54,10 @@ export function buildItrPla001Html(
     const display = c ?? "";
     return `<td class="data-cell" style="width: ${COL_WIDTHS_PT[i]}pt; border: ${BORDER}; padding: 1pt 2pt;">${escapeHtml(display)}</td>`;
   }
-  const dataRowsHtml = dataRows
+  const normalizedRows = [...dataRows];
+  while (normalizedRows.length < ITR_MAX_ROWS) normalizedRows.push([]);
+
+  const dataRowsHtml = normalizedRows
     .map(
       (cells) => {
         const row = cells.slice(0, 14);
@@ -95,6 +100,8 @@ export function buildItrPla001Html(
     .pipe-records-title { padding: 3pt 4pt; font-size: 9pt; font-weight: bold; text-align: center; border-bottom: 0.5pt solid ${COLORS.BLACK}; background: ${COLORS.WHITE}; }
     table.pipe-table { width: 100%; border-collapse: collapse; table-layout: fixed; margin: 0; }
     table.pipe-table td, table.pipe-table th { border: 0.5pt solid ${COLORS.BLACK}; padding: 1pt 2pt; font-size: 6pt; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    /* Pipe No Stamp or Fitting ID (data rows): show full value, no ellipsis */
+    table.pipe-table td.data-cell:nth-child(3) { white-space: normal; text-overflow: clip; overflow: visible; word-break: break-word; }
     table.pipe-table th.category-cell { padding: 0.5pt 1pt; height: 9pt; font-size: 6pt; font-weight: bold; background: ${COLORS.BLUE}; color: ${COLORS.WHITE}; text-align: center; vertical-align: middle; }
     table.pipe-table th.col-header-cell { padding: 0.5pt 1pt; height: 20pt; font-size: 4.5pt; font-weight: bold; background: ${COLORS.BLUE}; color: ${COLORS.WHITE}; text-align: center; white-space: normal; vertical-align: middle; }
     table.pipe-table th.asterisk-cell { padding: 0.5pt 1pt; height: 7pt; font-size: 5pt; background: ${COLORS.GREY}; vertical-align: middle; }
@@ -111,6 +118,7 @@ export function buildItrPla001Html(
           <tr><td class="header-meta-label">Doc No:</td><td>${escapeHtml(DOC_NO)}</td></tr>
           <tr><td class="header-meta-label">Effective Date:</td><td>${escapeHtml(EFFECTIVE_DATE)}</td></tr>
           <tr><td class="header-meta-label">Revision No:</td><td>${escapeHtml(REVISION_NO)}</td></tr>
+          <tr><td class="header-meta-label">Report No:</td><td>${escapeHtml(options.reportNoLabel ?? "")}</td></tr>
           <tr><td class="header-meta-label">Page No:</td><td>${escapeHtml(options.pageNoLabel)}</td></tr>
         </table>
       </td>
