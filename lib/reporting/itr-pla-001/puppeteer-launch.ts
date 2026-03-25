@@ -6,7 +6,6 @@
 
 import * as fs from "fs";
 import * as path from "path";
-import chromium from "@sparticuz/chromium";
 import puppeteer, { Browser } from "puppeteer-core";
 
 const DEFAULT_ARGS = [
@@ -43,6 +42,16 @@ export async function getPuppeteerLaunchConfig(): Promise<{
 }> {
   const useChromium = !!process.env.VERCEL || !!process.env.AWS_LAMBDA_FUNCTION_VERSION;
   if (useChromium) {
+    // Vercel Fluid Compute sometimes requires this to be set BEFORE chromium loads,
+    // otherwise Chromium can error due to missing system libs (e.g. libnss3.so).
+    // Setting it here only works because we dynamically import chromium below.
+    if (process.env.VERCEL) {
+      process.env.AWS_LAMBDA_JS_RUNTIME ??= "nodejs22.x";
+    }
+
+    const chromiumModule = await import("@sparticuz/chromium");
+    const chromium = (chromiumModule as unknown as { default: typeof import("@sparticuz/chromium") }).default;
+
     chromium.setGraphicsMode = false;
     return {
       executablePath: await chromium.executablePath(),
