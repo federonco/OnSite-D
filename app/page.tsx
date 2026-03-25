@@ -50,7 +50,7 @@ export default function Home() {
       <div className="drainer-shell">
         <div className="drainer-header flex flex-col gap-3">
           <div className="flex items-center justify-between">
-            <h1 className="drainer-title text-xl">Pipe Records</h1>
+            <h1 className="drainer-title text-xl">Pipe Laying Tracker</h1>
             <Link href="/admin">
               <Button
                 variant="ghost"

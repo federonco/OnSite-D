@@ -49,21 +49,26 @@ export default function RootLayout({
           <div className="flex min-h-screen flex-col">
             <div className="flex-1">{children}</div>
             <footer className="px-6 pb-6 pt-2 text-center text-xs text-[var(--muted-foreground)]">
-              <div>
-                Created by{" "}
-                <a
-                  href="https://www.readx.com.au"
-                  target="_blank"
-                  rel="noreferrer"
-                  className="inline-flex items-center gap-1 align-middle -translate-y-[2px]"
-                >
-                  <img
-                    src="/readx-logo.png"
-                    alt="readX"
-                    className="h-[10px]"
-                  />
-                </a>{" "}
-                — APA Quality Management Systems — All Rights Reserved
+              <div className="space-y-1">
+                <div>
+                  OnSite-D- Alkimos Pileline Alliance
+                </div>
+                <div>
+                  Created by{" "}
+                  <a
+                    href="https://www.readx.com.au"
+                    target="_blank"
+                    rel="noreferrer"
+                    className="inline-flex items-center gap-1 align-middle -translate-y-[2px]"
+                  >
+                    <img
+                      src="/readx-logo.png"
+                      alt="readX"
+                      className="h-[10px]"
+                    />
+                  </a>
+                </div>
+                <div>All Rights Reserved.</div>
               </div>
             </footer>
           </div>
