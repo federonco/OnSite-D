@@ -2,7 +2,6 @@ import { NextRequest, NextResponse } from "next/server";
 import { getUserFromRequest } from "@/lib/api-auth";
 import { isAdminEmail } from "@/lib/admin";
 import { getSupabaseServer } from "@/lib/supabase/server";
-import { generateITRPla001PdfWithFallback } from "@/lib/reporting/itr-pla-001/generate-with-fallback";
 import { ITR_PAGE_SIZE, groupRecordsIntoITRs } from "@/lib/drainer";
 import {
   createEmailTransporter,
@@ -67,6 +66,7 @@ export async function POST(request: NextRequest) {
 
   const records = allRecords ?? [];
   const pages = groupRecordsIntoITRs(records);
+  const origin = new URL(request.url).origin;
 
   if (pages.length === 0) {
     return NextResponse.json(
@@ -76,29 +76,49 @@ export async function POST(request: NextRequest) {
   }
 
   const pdfBuffers: Buffer[] = [];
+  const failed: Array<{ itrIndex: number; error: string }> = [];
   for (let i = 0; i < pages.length; i++) {
-    const pageRecords = pages[i];
     const itrIndex = i + 1;
-    const totalPages = pages.length;
-    const isOpenITR = pageRecords.length < ITR_PAGE_SIZE;
-
+    const key = `${sectionId}:itr-${itrIndex}`;
+    const start = Date.now();
+    console.log(`[ITR-ALL] start ${key}`);
+    console.log("[ITR-ALL] mem", process.memoryUsage());
     try {
-      const result = await generateITRPla001PdfWithFallback(
-        section,
-        pageRecords,
-        itrIndex,
-        totalPages,
-        { isOpenITR }
-      );
-      pdfBuffers.push(result.buffer);
+      // IMPORTANT: use the existing single-ITR download route handler (known-good in prod)
+      // to avoid altering Puppeteer/rendering logic inside this batch route.
+      const res = await fetch(`${origin}/api/drainer/report/itr-pla-001`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ sectionId, itrIndex }),
+      });
+
+      if (!res.ok) {
+        const maybeJson = await res.json().catch(() => ({}));
+        const msg = (maybeJson as { error?: string })?.error ?? `HTTP ${res.status}`;
+        throw new Error(msg);
+      }
+
+      const ab = await res.arrayBuffer();
+      pdfBuffers.push(Buffer.from(ab));
+      console.log(`[ITR-ALL] done ${key} ms=${Date.now() - start} size=${ab.byteLength}`);
     } catch (error) {
-      console.error(`[ITR-PLA-001] PDF generation failed for ITR-${itrIndex}:`, error);
       const msg = (error as Error)?.message ?? String(error ?? "");
-      return NextResponse.json(
-        { error: `ITR-${itrIndex} PDF failed: ${msg}` },
-        { status: 500 }
-      );
+      console.error(`[ITR-ALL] fail ${key} ms=${Date.now() - start} err=${msg}`);
+      failed.push({ itrIndex, error: msg });
     }
+
+    // Small delay to avoid overlapping launches in serverless.
+    await new Promise((r) => setTimeout(r, 150));
+  }
+
+  if (pdfBuffers.length === 0) {
+    return NextResponse.json(
+      { error: `All ITR PDFs failed: ${failed.map((f) => `ITR-${f.itrIndex}: ${f.error}`).join(" | ")}` },
+      { status: 500 }
+    );
   }
 
   let mergedBuffer: Buffer;
@@ -162,7 +182,12 @@ export async function POST(request: NextRequest) {
       html: htmlBody,
       attachments,
     });
-    return NextResponse.json({ ok: true, message: "Email sent" });
+    return NextResponse.json({
+      ok: true,
+      message: "Email sent",
+      skipped: failed.length,
+      skippedDetails: failed.length ? failed : undefined,
+    });
   } catch (err) {
     const msg = err instanceof Error ? err.message : "Email send failed";
     console.error("[ITR-PLA-001] sendMail failed:", { message: msg, error: err });
