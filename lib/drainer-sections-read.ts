@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { unwrapProjectsEmbed, type ProjectEmbed } from "@/lib/embed-projects";
+import type { SectionInfo } from "@/lib/reporting/itr-pla-001/types";
 
 /** Columns always available on drainer_sections (no FK embed). */
 export const DRAINER_SECTION_BASE =
@@ -73,4 +74,193 @@ export async function listDrainerSectionsWithProjectFallback(
   }));
 
   return { data: normalized, error: null, projectEmbedOk: false };
+}
+
+/** Audit PDF metadata (matches generateAuditReportPdf section shape). */
+export type AuditSectionForPdf = {
+  name: string;
+  direction: string | null;
+  start_ch: number | null;
+  end_ch: number | null;
+  project: ProjectEmbed | null;
+};
+
+/**
+ * Single section for ITR PDF/email: try project embed; on PostgREST embed error, load base columns only.
+ * Avoids false "Section not found" when the row exists but embed (e.g. projects.number) is broken.
+ */
+export async function fetchItrSectionById(
+  supabase: SupabaseClient,
+  sectionId: string
+): Promise<{ section: SectionInfo | null; error: { message: string } | null }> {
+  const embed = await supabase
+    .from("drainer_sections")
+    .select("id,name,itp_number,projects!project_id(name,number)")
+    .eq("id", sectionId)
+    .single();
+
+  if (!embed.error && embed.data) {
+    const row = embed.data as {
+      name: string;
+      itp_number: string | null;
+      projects?: ProjectEmbed | ProjectEmbed[] | null;
+    };
+    return {
+      section: {
+        name: row.name,
+        itp_number: row.itp_number,
+        project: unwrapProjectsEmbed(row.projects),
+      },
+      error: null,
+    };
+  }
+
+  console.error(
+    "[fetchItrSectionById] projects embed failed — fallback:",
+    embed.error?.message,
+    embed.error?.details ?? ""
+  );
+
+  const base = await supabase
+    .from("drainer_sections")
+    .select("id,name,itp_number")
+    .eq("id", sectionId)
+    .single();
+
+  if (base.error || !base.data) {
+    return {
+      section: null,
+      error: { message: base.error?.message ?? embed.error?.message ?? "Section not found" },
+    };
+  }
+
+  const row = base.data as { name: string; itp_number: string | null };
+  return {
+    section: {
+      name: row.name,
+      itp_number: row.itp_number,
+      project: null,
+    },
+    error: null,
+  };
+}
+
+export async function fetchAuditSectionById(
+  supabase: SupabaseClient,
+  sectionId: string
+): Promise<{ section: AuditSectionForPdf | null; error: { message: string } | null }> {
+  const embed = await supabase
+    .from("drainer_sections")
+    .select("id,name,direction,start_ch,end_ch,projects!project_id(name,number)")
+    .eq("id", sectionId)
+    .single();
+
+  if (!embed.error && embed.data) {
+    const row = embed.data as {
+      name: string;
+      direction: string | null;
+      start_ch: number | null;
+      end_ch: number | null;
+      projects?: ProjectEmbed | ProjectEmbed[] | null;
+    };
+    return {
+      section: {
+        name: row.name,
+        direction: row.direction,
+        start_ch: row.start_ch,
+        end_ch: row.end_ch,
+        project: unwrapProjectsEmbed(row.projects),
+      },
+      error: null,
+    };
+  }
+
+  console.error(
+    "[fetchAuditSectionById] projects embed failed — fallback:",
+    embed.error?.message,
+    embed.error?.details ?? ""
+  );
+
+  const base = await supabase
+    .from("drainer_sections")
+    .select("id,name,direction,start_ch,end_ch")
+    .eq("id", sectionId)
+    .single();
+
+  if (base.error || !base.data) {
+    return {
+      section: null,
+      error: { message: base.error?.message ?? embed.error?.message ?? "Section not found" },
+    };
+  }
+
+  const row = base.data as {
+    name: string;
+    direction: string | null;
+    start_ch: number | null;
+    end_ch: number | null;
+  };
+  return {
+    section: {
+      name: row.name,
+      direction: row.direction,
+      start_ch: row.start_ch,
+      end_ch: row.end_ch,
+      project: null,
+    },
+    error: null,
+  };
+}
+
+export async function fetchCheckpointPrintSectionById(
+  supabase: SupabaseClient,
+  sectionId: string
+): Promise<{
+  section: { name: string; project: ProjectEmbed | null } | null;
+  error: { message: string } | null;
+}> {
+  const embed = await supabase
+    .from("drainer_sections")
+    .select("id,name,projects!project_id(name,number)")
+    .eq("id", sectionId)
+    .single();
+
+  if (!embed.error && embed.data) {
+    const row = embed.data as {
+      name: string;
+      projects?: ProjectEmbed | ProjectEmbed[] | null;
+    };
+    return {
+      section: {
+        name: row.name,
+        project: unwrapProjectsEmbed(row.projects),
+      },
+      error: null,
+    };
+  }
+
+  console.error(
+    "[fetchCheckpointPrintSectionById] projects embed failed — fallback:",
+    embed.error?.message,
+    embed.error?.details ?? ""
+  );
+
+  const base = await supabase
+    .from("drainer_sections")
+    .select("id,name")
+    .eq("id", sectionId)
+    .single();
+
+  if (base.error || !base.data) {
+    return {
+      section: null,
+      error: { message: base.error?.message ?? embed.error?.message ?? "Section not found" },
+    };
+  }
+
+  const row = base.data as { name: string };
+  return {
+    section: { name: row.name, project: null },
+    error: null,
+  };
 }

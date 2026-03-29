@@ -3,7 +3,7 @@ import { getUserFromRequest } from "@/lib/api-auth";
 import { isAdminEmail } from "@/lib/admin";
 import { getSupabaseServer } from "@/lib/supabase/server";
 import { generateCheckpointRecordPdf } from "@/lib/reporting/checkpoint-record-pdf";
-import { unwrapProjectsEmbed } from "@/lib/embed-projects";
+import { fetchCheckpointPrintSectionById } from "@/lib/drainer-sections-read";
 
 export async function POST(request: NextRequest) {
   const { user, token } = await getUserFromRequest(request);
@@ -34,23 +34,17 @@ export async function POST(request: NextRequest) {
   }>;
 
   if (sectionId) {
-    const { data: sectionData, error: sectionError } = await supabase
-      .from("drainer_sections")
-      .select("id,name,projects!project_id(name,number)")
-      .eq("id", sectionId)
-      .single();
-
-    if (sectionError || !sectionData) {
-      return NextResponse.json({ error: "Section not found" }, { status: 404 });
+    const { section: sec, error: sectionErr } = await fetchCheckpointPrintSectionById(
+      supabase,
+      sectionId
+    );
+    if (!sec) {
+      return NextResponse.json(
+        { error: sectionErr?.message ?? "Section not found" },
+        { status: 404 }
+      );
     }
-    const row = sectionData as {
-      name: string;
-      projects: Parameters<typeof unwrapProjectsEmbed>[0];
-    };
-    section = {
-      name: row.name,
-      project: unwrapProjectsEmbed(row.projects),
-    };
+    section = sec;
 
     const { data: historyData, error: historyError } = await supabase
       .from("checkpoint_history")

@@ -3,7 +3,7 @@ import { getUserFromRequest } from "@/lib/api-auth";
 import { isAdminEmail } from "@/lib/admin";
 import { getSupabaseServer } from "@/lib/supabase/server";
 import { generateAuditReportPdf } from "@/lib/reporting/audit-report-pdf";
-import { unwrapProjectsEmbed } from "@/lib/embed-projects";
+import { fetchAuditSectionById } from "@/lib/drainer-sections-read";
 
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
@@ -22,25 +22,13 @@ export async function GET(request: NextRequest) {
 
   const supabase = getSupabaseServer({ accessToken: token });
 
-  const { data: sectionRow, error: sectionError } = await supabase
-    .from("drainer_sections")
-    .select("id,name,direction,start_ch,end_ch,projects!project_id(name,number)")
-    .eq("id", sectionId)
-    .single();
-
-  if (sectionError || !sectionRow) {
-    return NextResponse.json({ error: "Section not found" }, { status: 404 });
+  const { section, error: sectionErr } = await fetchAuditSectionById(supabase, sectionId);
+  if (!section) {
+    return NextResponse.json(
+      { error: sectionErr?.message ?? "Section not found" },
+      { status: 404 }
+    );
   }
-
-  const section = {
-    name: sectionRow.name,
-    direction: sectionRow.direction,
-    start_ch: sectionRow.start_ch,
-    end_ch: sectionRow.end_ch,
-    project: unwrapProjectsEmbed(
-      (sectionRow as { projects: Parameters<typeof unwrapProjectsEmbed>[0] }).projects
-    ),
-  };
 
   const { data: records, error: recordsError } = await supabase
     .from("drainer_pipe_records")
