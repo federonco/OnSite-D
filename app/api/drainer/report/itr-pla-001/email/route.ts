@@ -3,6 +3,8 @@ import { getUserFromRequest } from "@/lib/api-auth";
 import { isAdminEmail } from "@/lib/admin";
 import { getSupabaseServer } from "@/lib/supabase/server";
 import { generateITRPla001PdfWithFallback } from "@/lib/reporting/itr-pla-001/generate-with-fallback";
+import type { SectionInfo } from "@/lib/reporting/itr-pla-001/types";
+import { unwrapProjectsEmbed } from "@/lib/embed-projects";
 import { ITR_PAGE_SIZE } from "@/lib/drainer";
 import { createEmailTransporter, getEmailFrom, getEmailSignatureHtml, getLogoAttachment, hasEmailConfig, LOGO_CID } from "@/lib/email-config";
 
@@ -40,15 +42,23 @@ export async function POST(request: NextRequest) {
 
   const supabase = getSupabaseServer({ accessToken: token });
 
-  const { data: section, error: sectionError } = await supabase
+  const { data: sectionRow, error: sectionError } = await supabase
     .from("drainer_sections")
-    .select("id,name,project_name,project_number,itp_number")
+    .select("id,name,itp_number,projects!project_id(name,number)")
     .eq("id", sectionId)
     .single();
 
-  if (sectionError || !section) {
+  if (sectionError || !sectionRow) {
     return NextResponse.json({ error: "Section not found" }, { status: 404 });
   }
+
+  const section: SectionInfo = {
+    name: sectionRow.name,
+    itp_number: sectionRow.itp_number,
+    project: unwrapProjectsEmbed(
+      (sectionRow as { projects: Parameters<typeof unwrapProjectsEmbed>[0] }).projects
+    ),
+  };
 
   const { data: allRecords, error: recordsError } = await supabase
     .from("drainer_pipe_records")

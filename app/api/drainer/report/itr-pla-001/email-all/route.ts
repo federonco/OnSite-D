@@ -46,7 +46,7 @@ export async function POST(request: NextRequest) {
 
   const { data: section, error: sectionError } = await supabase
     .from("drainer_sections")
-    .select("id,name,project_name,project_number,itp_number")
+    .select("id,name,itp_number")
     .eq("id", sectionId)
     .single();
 

@@ -17,6 +17,7 @@ export default function Home() {
   const [sections, setSections] = useState<Section[]>([]);
   const [sectionId, setSectionId] = useState("");
   const [loading, setLoading] = useState(true);
+  const [sectionsError, setSectionsError] = useState<string | null>(null);
   const [lastPipesRefresh, setLastPipesRefresh] = useState(0);
 
   const urlSection = searchParams.get("section");
@@ -24,15 +25,24 @@ export default function Home() {
 
   const loadSections = useCallback(async () => {
     const res = await fetch("/api/drainer/sections");
-    const data = await res.json();
-    if (data.sections) {
-      setSections(data.sections);
-      setSectionId((prev) => {
-        const fromUrl = urlSection && data.sections.find((s: Section) => s.id === urlSection)?.id;
-        const next = fromUrl ?? data.sections.find((s: Section) => s.id === prev)?.id;
-        return next ?? (data.sections[0]?.id ?? "");
-      });
+    const data = (await res.json()) as { sections?: Section[]; error?: string };
+    if (!res.ok) {
+      setSectionsError(data.error ?? res.statusText);
+      return;
     }
+    setSectionsError(null);
+    if (!Array.isArray(data.sections)) {
+      setSectionsError("Invalid response from server.");
+      return;
+    }
+    setSections(data.sections);
+    setSectionId((prev) => {
+      const fromUrl =
+        urlSection && data.sections!.find((s: Section) => s.id === urlSection)?.id;
+      const next =
+        fromUrl ?? data.sections!.find((s: Section) => s.id === prev)?.id;
+      return next ?? (data.sections![0]?.id ?? "");
+    });
   }, [urlSection]);
 
   useEffect(() => {
@@ -64,6 +74,10 @@ export default function Home() {
 
         {loading ? (
           <p className="text-sm text-[var(--muted-foreground)]">Loading...</p>
+        ) : sectionsError ? (
+          <p className="text-sm text-destructive">
+            Could not load sections: {sectionsError}
+          </p>
         ) : sections.length === 0 ? (
           <p className="text-sm text-[var(--muted-foreground)]">
             No sections yet. Create one in Admin.

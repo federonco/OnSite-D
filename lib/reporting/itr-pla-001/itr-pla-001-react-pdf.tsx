@@ -218,9 +218,9 @@ export async function generateITRPla001PdfReact(
           <Text style={styles.projHeader}>PROJECT INFORMATION</Text>
           <View style={styles.projRow}>
             <Text style={[styles.projCell, { flex: 3 }]}>PROJECT NAME:</Text>
-            <Text style={[styles.projCell, { flex: 4 }]}>{section.project_name ?? "—"}</Text>
+            <Text style={[styles.projCell, { flex: 4 }]}>{section.project?.name ?? "—"}</Text>
             <Text style={[styles.projCell, { flex: 2 }]}>PROJECT NUMBER:</Text>
-            <Text style={[styles.projCell, { flex: 5, borderRightWidth: 0 }]}>{section.project_number ?? "—"}</Text>
+            <Text style={[styles.projCell, { flex: 5, borderRightWidth: 0 }]}>{section.project?.number ?? "—"}</Text>
           </View>
           <View style={styles.projRow}>
             <Text style={[styles.projCell, { flex: 3 }]}>SECTION-SUBLOT:</Text>

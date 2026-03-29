@@ -75,17 +75,16 @@ const styles = StyleSheet.create({
 type CheckpointHistoryRow = {
   id: string;
   name: string;
-  ch: number;
+  chainage: number;
   type: string;
   alert_email: string | null;
-  notified_at: string;
+  last_notified: string;
   expired_at: string;
 };
 
 type SectionInfo = {
   name: string;
-  project_name: string | null;
-  project_number: string | null;
+  project: { name: string | null; number: string | null } | null;
 };
 
 function formatDate(d: string) {
@@ -116,7 +115,9 @@ export async function generateCheckpointRecordPdf(
   records: CheckpointHistoryRow[],
   datePrinted: string
 ) {
-  const sorted = [...records].sort((a, b) => Number(b.ch) - Number(a.ch));
+  const sorted = [...records].sort(
+    (a, b) => Number(b.chainage) - Number(a.chainage)
+  );
 
   const doc = (
     <Document>
@@ -127,7 +128,8 @@ export async function generateCheckpointRecordPdf(
           </Text>
           <Text style={styles.meta}>
             Date printed: {formatDate(datePrinted)} | Project:{" "}
-            {section.project_name ?? "—"} {section.project_number ? `(${section.project_number})` : ""}
+            {section.project?.name ?? "—"}{" "}
+            {section.project?.number ? `(${section.project.number})` : ""}
           </Text>
         </View>
 
@@ -179,13 +181,13 @@ export async function generateCheckpointRecordPdf(
                   {r.name}
                 </Text>
                 <Text style={[styles.cell, { width: COL_WIDTHS[1] }]}>
-                  {formatCh(Number(r.ch))}
+                  {formatCh(Number(r.chainage))}
                 </Text>
                 <Text style={[styles.cell, { width: COL_WIDTHS[2] }]}>
                   {r.type}
                 </Text>
                 <Text style={[styles.cell, { width: COL_WIDTHS[3] }]}>
-                  {formatDate(r.notified_at)}
+                  {formatDate(r.last_notified)}
                 </Text>
                 <Text style={[styles.cell, { width: COL_WIDTHS[4] }]}>
                   {r.alert_email ?? "—"}

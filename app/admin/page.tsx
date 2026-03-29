@@ -44,8 +44,8 @@ type Section = {
   start_ch: number | null;
   end_ch: number | null;
   direction: string | null;
-  project_name: string | null;
-  project_number: string | null;
+  project_id: string | null;
+  projects: { name: string | null; number: string | null } | null;
   itp_number: string | null;
 };
 
@@ -90,8 +90,7 @@ export default function AdminPage() {
   const [startCh, setStartCh] = useState("");
   const [endCh, setEndCh] = useState("");
   const [direction, setDirection] = useState<string>("onwards");
-  const [projectName, setProjectName] = useState("");
-  const [projectNumber, setProjectNumber] = useState("");
+  const [projectIdInput, setProjectIdInput] = useState("");
   const [itpNumber, setItpNumber] = useState("");
   const [loading, setLoading] = useState(false);
   const [printingItrIndex, setPrintingItrIndex] = useState<number | null>(null);
@@ -125,15 +124,38 @@ export default function AdminPage() {
     const res = await fetch("/api/drainer/sections", {
       headers: token ? { Authorization: `Bearer ${token}` } : {},
     });
-    const data = await res.json();
-    if (data.sections) {
-      setSections(data.sections);
-      setSectionId((prev) => {
-        const next = data.sections.find((s: Section) => s.id === prev)?.id;
-        return next ?? (data.sections[0]?.id ?? "");
+    const data = (await res.json()) as {
+      sections?: Section[];
+      error?: string;
+      sectionsMeta?: { projectEmbedOk?: boolean };
+    };
+    if (!res.ok) {
+      pushToast({
+        type: "error",
+        title: "Could not load sections",
+        message: data.error ?? res.statusText,
       });
+      return;
     }
-  }, [getAccessToken]);
+    if (!Array.isArray(data.sections)) {
+      pushToast({
+        type: "error",
+        title: "Invalid sections response",
+        message: "Expected a sections array from the server.",
+      });
+      return;
+    }
+    setSections(data.sections);
+    setSectionId((prev) => {
+      const next = data.sections!.find((s: Section) => s.id === prev)?.id;
+      return next ?? (data.sections![0]?.id ?? "");
+    });
+    if (data.sectionsMeta?.projectEmbedOk === false) {
+      console.warn(
+        "[admin] drainer_sections: project embed unavailable; listing sections without joined project name/number."
+      );
+    }
+  }, [getAccessToken, pushToast]);
 
   const loadRecords = useCallback(async () => {
     if (!sectionId) return;
@@ -227,8 +249,7 @@ export default function AdminPage() {
     setStartCh("");
     setEndCh("");
     setDirection("onwards");
-    setProjectName("");
-    setProjectNumber("");
+    setProjectIdInput("");
     setItpNumber("");
     setModalOpen(true);
   };
@@ -240,8 +261,7 @@ export default function AdminPage() {
     setStartCh(s.start_ch != null ? String(s.start_ch) : "");
     setEndCh(s.end_ch != null ? String(s.end_ch) : "");
     setDirection(s.direction ?? "onwards");
-    setProjectName(s.project_name ?? "");
-    setProjectNumber(s.project_number ?? "");
+    setProjectIdInput(s.project_id ?? "");
     setItpNumber(s.itp_number ?? "");
     setModalOpen(true);
   };
@@ -264,8 +284,7 @@ export default function AdminPage() {
         start_ch: startCh ? Number(startCh) : null,
         end_ch: endCh ? Number(endCh) : null,
         direction: direction || null,
-        project_name: projectName || null,
-        project_number: projectNumber || null,
+        project_id: projectIdInput.trim() || null,
         itp_number: itpNumber || null,
       };
       const url =
@@ -798,20 +817,16 @@ export default function AdminPage() {
               </Select>
             </div>
             <div>
-              <label className="drainer-label block mb-1">Project name</label>
+              <label className="drainer-label block mb-1">Project ID (UUID)</label>
               <Input
-                value={projectName}
-                onChange={(e) => setProjectName(e.target.value)}
+                value={projectIdInput}
+                onChange={(e) => setProjectIdInput(e.target.value)}
+                placeholder="Optional — link to row in projects table"
                 className="drainer-input"
               />
-            </div>
-            <div>
-              <label className="drainer-label block mb-1">Project number</label>
-              <Input
-                value={projectNumber}
-                onChange={(e) => setProjectNumber(e.target.value)}
-                className="drainer-input"
-              />
+              <p className="text-[11px] text-[var(--muted-foreground)] mt-1">
+                Name and number come from the linked project after save.
+              </p>
             </div>
             <div>
               <label className="drainer-label block mb-1">ITP number</label>

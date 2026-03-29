@@ -29,11 +29,11 @@ export async function GET(request: NextRequest) {
 
   const { data: missed, error } = await supabase
     .from("checkpoints")
-    .select("id,name,ch")
-    .eq("active", true)
+    .select("id,name,chainage")
+    .eq("is_active", true)
     .eq("notified", false)
-    .lt("ch", maxChainage)
-    .order("ch", { ascending: false });
+    .lt("chainage", maxChainage)
+    .order("chainage", { ascending: false });
 
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 });
@@ -43,7 +43,7 @@ export async function GET(request: NextRequest) {
     missed: (missed ?? []).map((m) => ({
       id: m.id,
       name: m.name,
-      ch: Number(m.ch),
+      chainage: Number(m.chainage),
       detected_at_ch: maxChainage,
     })),
   });

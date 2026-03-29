@@ -30,11 +30,11 @@ const EXPIRED_DAYS = 14;
 type Checkpoint = {
   id: string;
   name: string;
-  ch: number;
+  chainage: number;
   type: string;
-  active: boolean;
+  is_active: boolean;
   notified: boolean;
-  notified_at: string | null;
+  last_notified: string | null;
   alert_email: string | null;
 };
 
@@ -80,14 +80,31 @@ export default function CheckpointsPage() {
     const res = await fetch("/api/drainer/sections", {
       headers: token ? { Authorization: `Bearer ${token}` } : {},
     });
-    const data = await res.json();
-    if (data.sections) {
-      setSections(data.sections);
-      setPrintSectionId((prev) =>
-        data.sections.find((s: Section) => s.id === prev)?.id ?? ""
-      );
+    const data = (await res.json()) as {
+      sections?: Section[];
+      error?: string;
+    };
+    if (!res.ok) {
+      pushToast({
+        type: "error",
+        title: "Could not load sections",
+        message: data.error ?? res.statusText,
+      });
+      return;
     }
-  }, [getAccessToken]);
+    if (!Array.isArray(data.sections)) {
+      pushToast({
+        type: "error",
+        title: "Invalid sections response",
+        message: "Expected a sections array from the server.",
+      });
+      return;
+    }
+    setSections(data.sections);
+    setPrintSectionId((prev) =>
+      data.sections!.find((s: Section) => s.id === prev)?.id ?? ""
+    );
+  }, [getAccessToken, pushToast]);
 
   const loadCheckpoints = useCallback(async () => {
     const token = await getAccessToken();
@@ -101,8 +118,8 @@ export default function CheckpointsPage() {
     for (const cp of list) {
       if (
         cp.notified &&
-        cp.notified_at &&
-        isNotifiedOlderThanDays(cp.notified_at, EXPIRED_DAYS)
+        cp.last_notified &&
+        isNotifiedOlderThanDays(cp.last_notified, EXPIRED_DAYS)
       ) {
         try {
           const archiveRes = await fetch("/api/drainer/checkpoints/archive", {
@@ -115,10 +132,10 @@ export default function CheckpointsPage() {
               checkpoint_id: cp.id,
               section_id: null,
               name: cp.name,
-              ch: cp.ch,
+              chainage: cp.chainage,
               type: cp.type,
               alert_email: cp.alert_email,
-              notified_at: cp.notified_at,
+              last_notified: cp.last_notified,
             }),
           });
           if (!archiveRes.ok) {
@@ -136,9 +153,9 @@ export default function CheckpointsPage() {
             Authorization: `Bearer ${token}`,
           },
           body: JSON.stringify({
-            active: false,
+            is_active: false,
             notified: false,
-            notified_at: null,
+            last_notified: null,
           }),
         });
         if (putRes.ok) expiredIds.add(cp.id);
@@ -200,9 +217,9 @@ export default function CheckpointsPage() {
     setModalMode("edit");
     setEditId(cp.id);
     setName(cp.name);
-    setCh(String(cp.ch));
+    setCh(String(cp.chainage));
     setType(cp.type);
-    setActive(cp.active);
+    setActive(cp.is_active);
     setAlertEmail(cp.alert_email ?? "");
     setModalOpen(true);
   };
@@ -221,7 +238,13 @@ export default function CheckpointsPage() {
     try {
       const token = await getAccessToken();
       if (!token) throw new Error("Sign in required");
-      const payload = { name: name.trim(), ch: chNum, type, active, alert_email: alertEmail.trim() || null };
+      const payload = {
+        name: name.trim(),
+        chainage: chNum,
+        type,
+        is_active: active,
+        alert_email: alertEmail.trim() || null,
+      };
       const url =
         modalMode === "edit" && editId
           ? `/api/drainer/checkpoints/${editId}`
@@ -406,14 +429,14 @@ export default function CheckpointsPage() {
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 {checkpoints.map((cp) => {
                   const statusBadge =
-                    cp.active === false
+                    cp.is_active === false
                       ? (
                           <span className="drainer-badge-inactive shrink-0">
                             <span className="drainer-badge-inactive-dot" aria-hidden />
                             Inactive
                           </span>
                         )
-                      : cp.active && cp.notified
+                      : cp.is_active && cp.notified
                         ? <span className="drainer-badge-orange shrink-0">Notified ✓</span>
                         : <span className="drainer-badge-orange shrink-0">Active</span>;
                   return (
@@ -426,7 +449,7 @@ export default function CheckpointsPage() {
                         {statusBadge}
                       </div>
                       <div className="flex items-center gap-2 mb-3">
-                        <span className="text-sm font-semibold">CH {Number(cp.ch).toLocaleString("en-AU", { minimumFractionDigits: 2 })}</span>
+                        <span className="text-sm font-semibold">CH {Number(cp.chainage).toLocaleString("en-AU", { minimumFractionDigits: 2 })}</span>
                         <span className="drainer-badge-orange">
                           {cp.type}
                         </span>

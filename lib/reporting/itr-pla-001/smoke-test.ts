@@ -10,8 +10,7 @@ import { generateITRPla001PdfWithFallback } from "./generate-with-fallback";
 
 const SECTION: SectionInfo = {
   name: "Section A",
-  project_name: "Test Project",
-  project_number: "PRJ-001",
+  project: { name: "Test Project", number: "PRJ-001" },
   itp_number: "ITP-001",
 };
 

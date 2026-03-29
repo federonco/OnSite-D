@@ -9,7 +9,7 @@ import { mapRecordToCells } from "./mapper";
 
 /** Minimal render payload — only what template needs */
 export type PreparedITRData = {
-  section: Pick<SectionInfo, "name" | "project_name" | "project_number" | "itp_number">;
+  section: Pick<SectionInfo, "name" | "project" | "itp_number">;
   dataRows: string[][];
   pageNumber: number;
   pageNoLabel: string;
@@ -26,7 +26,11 @@ export function prepareITRData(
   const pageNoLabel = isOpenITR ? "In Progress" : "1 of 1";
   const dataRows = records.map((r) => mapRecordToCells(r));
   return {
-    section: { name: section.name, project_name: section.project_name, project_number: section.project_number, itp_number: section.itp_number },
+    section: {
+      name: section.name,
+      project: section.project,
+      itp_number: section.itp_number,
+    },
     dataRows,
     pageNumber,
     pageNoLabel,

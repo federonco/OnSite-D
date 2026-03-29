@@ -27,8 +27,7 @@ function escapeHtml(s: string): string {
 
 export type TemplateSection = {
   name: string;
-  project_name: string | null;
-  project_number: string | null;
+  project: { name: string | null; number: string | null } | null;
   itp_number: string | null;
 };
 
@@ -44,8 +43,8 @@ export function buildItrPla001Html(
   dataRows: string[][],
   options: TemplateOptions
 ): string {
-  const projectName = escapeHtml(section.project_name ?? "—");
-  const projectNumber = escapeHtml(section.project_number ?? "—");
+  const projectName = escapeHtml(section.project?.name ?? "—");
+  const projectNumber = escapeHtml(section.project?.number ?? "—");
   const sectionName = escapeHtml(section.name);
   const itpNumber = escapeHtml(section.itp_number ?? "—");
 

@@ -3,6 +3,7 @@ import { getUserFromRequest } from "@/lib/api-auth";
 import { isAdminEmail } from "@/lib/admin";
 import { getSupabaseServer } from "@/lib/supabase/server";
 import { generateCheckpointRecordPdf } from "@/lib/reporting/checkpoint-record-pdf";
+import { unwrapProjectsEmbed } from "@/lib/embed-projects";
 
 export async function POST(request: NextRequest) {
   const { user, token } = await getUserFromRequest(request);
@@ -18,32 +19,42 @@ export async function POST(request: NextRequest) {
 
   const supabase = getSupabaseServer({ useServiceRole: true });
 
-  let section: { name: string; project_name: string | null; project_number: string | null };
+  let section: {
+    name: string;
+    project: { name: string | null; number: string | null } | null;
+  };
   let history: Array<{
     id: string;
     name: string;
-    ch: number;
+    chainage: number;
     type: string;
     alert_email: string | null;
-    notified_at: string;
+    last_notified: string;
     expired_at: string;
   }>;
 
   if (sectionId) {
     const { data: sectionData, error: sectionError } = await supabase
       .from("drainer_sections")
-      .select("id,name,project_name,project_number")
+      .select("id,name,projects!project_id(name,number)")
       .eq("id", sectionId)
       .single();
 
     if (sectionError || !sectionData) {
       return NextResponse.json({ error: "Section not found" }, { status: 404 });
     }
-    section = sectionData;
+    const row = sectionData as {
+      name: string;
+      projects: Parameters<typeof unwrapProjectsEmbed>[0];
+    };
+    section = {
+      name: row.name,
+      project: unwrapProjectsEmbed(row.projects),
+    };
 
     const { data: historyData, error: historyError } = await supabase
       .from("checkpoint_history")
-      .select("id,name,ch,type,alert_email,notified_at,expired_at")
+      .select("id,name,chainage,type,alert_email,last_notified,expired_at")
       .eq("section_id", sectionId)
       .order("expired_at", { ascending: false });
 
@@ -57,13 +68,12 @@ export async function POST(request: NextRequest) {
   } else {
     section = {
       name: "All Sections",
-      project_name: null,
-      project_number: null,
+      project: null,
     };
 
     const { data: historyData, error: historyError } = await supabase
       .from("checkpoint_history")
-      .select("id,name,ch,type,alert_email,notified_at,expired_at")
+      .select("id,name,chainage,type,alert_email,last_notified,expired_at")
       .order("expired_at", { ascending: false });
 
     if (historyError) {

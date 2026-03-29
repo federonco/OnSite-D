@@ -36,26 +36,41 @@ export async function processCheckpointAlerts(
   const chFront = frontRow?.chainage != null ? Number(frontRow.chainage) : null;
   if (chFront == null) return;
 
-  let candidates: { id: string; name: string; ch: number; alert_email: string | null }[] = [];
+  let candidates: {
+    id: string;
+    name: string;
+    chainage: number;
+    alert_email: string | null;
+  }[] = [];
 
   if (isBackwards) {
     const { data } = await supabase
       .from("checkpoints")
-      .select("id,name,ch,alert_email")
-      .eq("active", true)
+      .select("id,name,chainage,alert_email")
+      .eq("is_active", true)
       .eq("notified", false)
-      .lt("ch", chFront)
-      .gte("ch", chFront - PROXIMITY_METERS);
-    candidates = (data ?? []) as { id: string; name: string; ch: number; alert_email: string | null }[];
+      .lt("chainage", chFront)
+      .gte("chainage", chFront - PROXIMITY_METERS);
+    candidates = (data ?? []) as {
+      id: string;
+      name: string;
+      chainage: number;
+      alert_email: string | null;
+    }[];
   } else {
     const { data } = await supabase
       .from("checkpoints")
-      .select("id,name,ch,alert_email")
-      .eq("active", true)
+      .select("id,name,chainage,alert_email")
+      .eq("is_active", true)
       .eq("notified", false)
-      .gt("ch", chFront)
-      .lte("ch", chFront + PROXIMITY_METERS);
-    candidates = (data ?? []) as { id: string; name: string; ch: number; alert_email: string | null }[];
+      .gt("chainage", chFront)
+      .lte("chainage", chFront + PROXIMITY_METERS);
+    candidates = (data ?? []) as {
+      id: string;
+      name: string;
+      chainage: number;
+      alert_email: string | null;
+    }[];
   }
 
   if (!candidates?.length) return;
@@ -66,7 +81,7 @@ export async function processCheckpointAlerts(
   const logoSrc = logoAttachment ? `cid:${LOGO_CID}` : `${process.env.NEXT_PUBLIC_SITE_URL || "https://onsite-d.vercel.app"}/readx-logo.png`;
 
   for (const cp of candidates) {
-    const ch = Number(cp.ch);
+    const ch = Number(cp.chainage);
     const dist = isBackwards ? chFront - ch : ch - chFront;
     if (dist <= 0 || dist > PROXIMITY_METERS) continue;
 
@@ -108,7 +123,7 @@ export async function processCheckpointAlerts(
         .from("checkpoints")
         .update({
           notified: true,
-          notified_at: new Date().toISOString(),
+          last_notified: new Date().toISOString(),
         })
         .eq("id", cp.id);
     } catch (err) {

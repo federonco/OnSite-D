@@ -1,6 +1,5 @@
 export type SectionInfo = {
   name: string;
-  project_name: string | null;
-  project_number: string | null;
+  project: { name: string | null; number: string | null } | null;
   itp_number: string | null;
 };

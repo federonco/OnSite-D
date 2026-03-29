@@ -16,7 +16,7 @@ export async function GET(request: NextRequest) {
   const { data, error } = await supabase
     .from("checkpoints")
     .select("*")
-    .order("ch", { ascending: true });
+    .order("chainage", { ascending: true });
 
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 });
@@ -35,11 +35,11 @@ export async function POST(request: NextRequest) {
   }
 
   const body = await request.json();
-  const { name, ch, type, active, alert_email } = body;
+  const { name, chainage, type, is_active, alert_email } = body;
 
-  if (!name || ch == null) {
+  if (!name || chainage == null) {
     return NextResponse.json(
-      { error: "Missing name or ch" },
+      { error: "Missing name or chainage" },
       { status: 400 }
     );
   }
@@ -52,9 +52,9 @@ export async function POST(request: NextRequest) {
     .from("checkpoints")
     .insert({
       name: String(name).trim(),
-      ch: Number(ch),
+      chainage: Number(chainage),
       type: typeVal,
-      active: active !== false,
+      is_active: is_active !== false,
       alert_email: alert_email?.trim() || null,
     })
     .select()

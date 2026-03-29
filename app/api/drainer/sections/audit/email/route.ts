@@ -3,6 +3,7 @@ import { getUserFromRequest } from "@/lib/api-auth";
 import { isAdminEmail } from "@/lib/admin";
 import { getSupabaseServer } from "@/lib/supabase/server";
 import { generateAuditReportPdf } from "@/lib/reporting/audit-report-pdf";
+import { unwrapProjectsEmbed } from "@/lib/embed-projects";
 import { createEmailTransporter, getEmailFrom, getEmailSignatureHtml, getLogoAttachment, hasEmailConfig, LOGO_CID } from "@/lib/email-config";
 
 export const runtime = "nodejs";
@@ -39,15 +40,25 @@ export async function POST(request: NextRequest) {
 
   const supabase = getSupabaseServer({ accessToken: token });
 
-  const { data: section, error: sectionError } = await supabase
+  const { data: sectionRow, error: sectionError } = await supabase
     .from("drainer_sections")
-    .select("id,name,project_name,project_number,direction,start_ch,end_ch")
+    .select("id,name,direction,start_ch,end_ch,projects!project_id(name,number)")
     .eq("id", sectionId)
     .single();
 
-  if (sectionError || !section) {
+  if (sectionError || !sectionRow) {
     return NextResponse.json({ error: "Section not found" }, { status: 404 });
   }
+
+  const section = {
+    name: sectionRow.name,
+    direction: sectionRow.direction,
+    start_ch: sectionRow.start_ch,
+    end_ch: sectionRow.end_ch,
+    project: unwrapProjectsEmbed(
+      (sectionRow as { projects: Parameters<typeof unwrapProjectsEmbed>[0] }).projects
+    ),
+  };
 
   const { data: records, error: recordsError } = await supabase
     .from("drainer_pipe_records")

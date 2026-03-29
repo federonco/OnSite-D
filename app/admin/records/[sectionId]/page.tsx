@@ -12,6 +12,7 @@ import { SectionRecords } from "@/components/admin/section-records";
 import { RecordEditForm } from "@/components/admin/record-edit-form";
 import { getSupabaseBrowser } from "@/lib/supabase/browser";
 import type { PipeRecord } from "@/components/admin/record-edit-form";
+import { useToast } from "@/components/toast";
 
 export default function AdminRecordsPage() {
   const params = useParams();
@@ -23,6 +24,7 @@ export default function AdminRecordsPage() {
   const recordToId = searchParams.get("recordToId");
 
   const supabase = getSupabaseBrowser();
+  const { pushToast } = useToast();
   const [authEmail, setAuthEmail] = useState<string | null>(null);
   const [isAdmin, setIsAdmin] = useState<boolean | null>(null);
   const [sections, setSections] = useState<{ id: string; name: string; start_ch?: number | null; end_ch?: number | null }[]>([]);
@@ -47,9 +49,28 @@ export default function AdminRecordsPage() {
     const res = await fetch("/api/drainer/sections", {
       headers: token ? { Authorization: `Bearer ${token}` } : {},
     });
-    const data = await res.json();
-    if (data.sections) setSections(data.sections);
-  }, [getAccessToken]);
+    const data = (await res.json()) as {
+      sections?: { id: string; name: string; start_ch?: number | null; end_ch?: number | null }[];
+      error?: string;
+    };
+    if (!res.ok) {
+      pushToast({
+        type: "error",
+        title: "Could not load sections",
+        message: data.error ?? res.statusText,
+      });
+      return;
+    }
+    if (!Array.isArray(data.sections)) {
+      pushToast({
+        type: "error",
+        title: "Invalid sections response",
+        message: "Expected a sections array from the server.",
+      });
+      return;
+    }
+    setSections(data.sections);
+  }, [getAccessToken, pushToast]);
 
   const loadRecords = useCallback(async () => {
     if (!sectionId) return;

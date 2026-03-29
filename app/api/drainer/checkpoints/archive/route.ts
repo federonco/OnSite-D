@@ -17,21 +17,21 @@ export async function POST(request: NextRequest) {
     checkpoint_id,
     section_id,
     name,
-    ch,
+    chainage,
     type,
     alert_email,
-    notified_at,
+    last_notified,
   } = body;
 
   if (
     !checkpoint_id ||
     !name ||
-    ch == null ||
+    chainage == null ||
     !type ||
-    !notified_at
+    !last_notified
   ) {
     return NextResponse.json(
-      { error: "Missing required fields: checkpoint_id, name, ch, type, notified_at" },
+      { error: "Missing required fields: checkpoint_id, name, chainage, type, last_notified" },
       { status: 400 }
     );
   }
@@ -41,10 +41,10 @@ export async function POST(request: NextRequest) {
     checkpoint_id,
     section_id: section_id || null,
     name: String(name).trim(),
-    ch: Number(ch),
+    chainage: Number(chainage),
     type: String(type),
     alert_email: alert_email?.trim() || null,
-    notified_at: notified_at,
+    last_notified: last_notified,
     expired_at: new Date().toISOString(),
     reason: "auto-expired after 14 days",
   });

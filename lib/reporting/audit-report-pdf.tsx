@@ -219,8 +219,7 @@ const styles = StyleSheet.create({
 
 type SectionInfo = {
   name: string;
-  project_name: string | null;
-  project_number: string | null;
+  project: { name: string | null; number: string | null } | null;
   direction?: string | null;
   start_ch?: number | null;
   end_ch?: number | null;
@@ -336,8 +335,8 @@ export async function generateAuditReportPdf(params: AuditReportParams) {
             <View style={styles.metaItem}>
               <Text style={styles.metaLabel}>Project</Text>
               <Text style={styles.metaValue}>
-                {section.project_name ?? "—"}
-                {section.project_number ? ` (${section.project_number})` : ""}
+                {section.project?.name ?? "—"}
+                {section.project?.number ? ` (${section.project.number})` : ""}
               </Text>
             </View>
             <View style={styles.metaItem}>

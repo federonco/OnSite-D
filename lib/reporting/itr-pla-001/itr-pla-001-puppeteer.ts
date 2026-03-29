@@ -58,8 +58,7 @@ export async function generateITRPla001PdfHTML(
   const html = buildItrPla001Html(
     {
       name: section.name,
-      project_name: section.project_name,
-      project_number: section.project_number,
+      project: section.project,
       itp_number: section.itp_number,
     },
     dataRows,
