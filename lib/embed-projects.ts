@@ -1,4 +1,7 @@
-/** PostgREST/Supabase FK embed may be typed or returned as a single object or one-element array. */
+/**
+ * Shape of `projects` row fields selected in embeds: `projects!project_id(name,number)`.
+ * Requires public.projects columns `name` and `number` (not `code`).
+ */
 export type ProjectEmbed = { name: string | null; number: string | null };
 
 export function unwrapProjectsEmbed(
