@@ -1,6 +1,10 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  normalizeGuideXmlFromJsonb,
+  type GuideXmlEntry,
+} from "@/lib/installation-guide-xml";
 import { ConfirmButton } from "@/components/confirm-button";
 import { SectionKebabMenu } from "@/components/section-kebab-menu";
 import { useToast } from "@/components/toast";
@@ -21,11 +25,16 @@ const JOINT_TYPES = [
   { value: "RRJ", label: "RRJ (Rubber Ring Joint)" },
   { value: "WR", label: "WR (Weld Restrained)" },
   { value: "Transition", label: "Transition" },
+  { value: "WB", label: "WB (Weld Band)" },
 ] as const;
 
 type Section = {
   id: string;
   name: string;
+  /** Allowed joint types for this section (null/empty = all types). */
+  joint_types?: string[] | null;
+  guide_enabled?: boolean;
+  guide_xml?: { sequence_number: number; item_id: string }[] | null;
 };
 
 type LodgeFormProps = {
@@ -89,6 +98,109 @@ export function LodgeForm({
   const [cementLiner, setCementLiner] = useState(false);
   const [sparkTesting, setSparkTesting] = useState(false);
   const [cpLugs, setCpLugs] = useState(false);
+  const [guideRefreshKey, setGuideRefreshKey] = useState(0);
+  const [guideRefLoading, setGuideRefLoading] = useState(false);
+  const [guideRefData, setGuideRefData] = useState<{
+    nextSequence: number;
+    item: GuideXmlEntry | null;
+  } | null>(null);
+
+  const selectedSection = useMemo(
+    () => sections.find((s) => s.id === sectionId),
+    [sections, sectionId]
+  );
+
+  const jointTypeSyncedForSectionId = useRef<string | null>(null);
+
+  const lodgeJointSelectOptions = useMemo(() => {
+    const raw = selectedSection?.joint_types;
+    const catalog = JOINT_TYPES.map((j) => ({ value: j.value, label: j.label }));
+    if (!raw || raw.length === 0) return catalog;
+    const set = new Set(raw);
+    const fromCatalog = catalog.filter((j) => set.has(j.value));
+    const known = new Set<string>(JOINT_TYPES.map((j) => j.value));
+    const extras = raw
+      .filter((x) => x && !known.has(x))
+      .map((x) => ({ value: x, label: x }));
+    return [...fromCatalog, ...extras];
+  }, [selectedSection]);
+
+  const defaultJointTypeForSection = useMemo(
+    () => lodgeJointSelectOptions[0]?.value ?? "",
+    [lodgeJointSelectOptions]
+  );
+
+  /** Prefill joint type when the section changes or section list first loads. */
+  useEffect(() => {
+    if (!sectionId) {
+      setJointType("");
+      jointTypeSyncedForSectionId.current = null;
+      return;
+    }
+    if (!selectedSection) return;
+    if (jointTypeSyncedForSectionId.current === sectionId) return;
+    jointTypeSyncedForSectionId.current = sectionId;
+    setJointType(defaultJointTypeForSection);
+  }, [sectionId, selectedSection, defaultJointTypeForSection]);
+
+  useEffect(() => {
+    if (!jointType || lodgeJointSelectOptions.length === 0) return;
+    if (!lodgeJointSelectOptions.some((o) => o.value === jointType)) {
+      setJointType(lodgeJointSelectOptions[0].value);
+    }
+  }, [lodgeJointSelectOptions, jointType]);
+
+  useEffect(() => {
+    if (!sectionId) {
+      setGuideRefData(null);
+      setGuideRefLoading(false);
+      return;
+    }
+    const sec = selectedSection;
+    if (
+      !sec?.guide_enabled ||
+      sec.guide_xml == null
+    ) {
+      setGuideRefData(null);
+      setGuideRefLoading(false);
+      return;
+    }
+    const list = normalizeGuideXmlFromJsonb(sec.guide_xml);
+    if (!list?.length) {
+      setGuideRefData(null);
+      setGuideRefLoading(false);
+      return;
+    }
+    let cancelled = false;
+    setGuideRefLoading(true);
+    setGuideRefData(null);
+    (async () => {
+      const supabase = getSupabaseBrowser();
+      const { data } = await supabase
+        .from("drainer_pipe_records")
+        .select("counter")
+        .eq("section_id", sectionId)
+        .order("counter", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      if (cancelled) return;
+      let nextSequence = 1;
+      if (
+        data != null &&
+        data.counter != null &&
+        Number.isFinite(Number(data.counter))
+      ) {
+        nextSequence = Number(data.counter) + 1;
+      }
+      const item =
+        list.find((x) => x.sequence_number === nextSequence) ?? null;
+      setGuideRefData({ nextSequence, item });
+      setGuideRefLoading(false);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [sectionId, selectedSection, guideRefreshKey]);
 
   const getAccessToken = useCallback(async () => {
     const { data } = await supabase.auth.getSession();
@@ -170,6 +282,10 @@ export function LodgeForm({
     sparkTesting &&
     (showCpLugs ? cpLugs : true);
 
+  const jointTypeAllowed = lodgeJointSelectOptions.some(
+    (o) => o.value === jointType
+  );
+
   const isFormValid =
     !!sectionId &&
     !!chainage &&
@@ -177,6 +293,7 @@ export function LodgeForm({
     Number.isFinite(Number(chainage)) &&
     !!pipeFittingId.trim() &&
     !!jointType &&
+    jointTypeAllowed &&
     !vInvalid &&
     !hInvalid &&
     chainageStatus !== "checking" &&
@@ -189,7 +306,16 @@ export function LodgeForm({
     setChainageError(null);
     setIsDuplicate(false);
     setPipeFittingId("");
-    setJointType("");
+    const sec = sections.find((s) => s.id === sectionId);
+    const raw = sec?.joint_types;
+    const catalog = JOINT_TYPES.map((j) => j.value);
+    if (!raw || raw.length === 0) {
+      setJointType(catalog[0] ?? "");
+    } else {
+      const first =
+        JOINT_TYPES.find((j) => raw.includes(j.value))?.value ?? raw[0] ?? "";
+      setJointType(first);
+    }
     setDeflectionVSign("+");
     setDeflectionVMm("");
     setDeflectionHSide("L");
@@ -200,7 +326,7 @@ export function LodgeForm({
     setCementLiner(false);
     setSparkTesting(false);
     setCpLugs(false);
-  }, []);
+  }, [sections, sectionId]);
 
   const handleSubmit = async () => {
     const submitError = validateChainage(chainage);
@@ -246,6 +372,7 @@ export function LodgeForm({
 
       pushToast({ type: "success", title: "Record lodged successfully" });
       resetForm();
+      setGuideRefreshKey((k) => k + 1);
       onSuccess?.();
     } catch (err) {
       pushToast({
@@ -257,11 +384,6 @@ export function LodgeForm({
       setLoading(false);
     }
   };
-
-  const selectedSection = useMemo(
-    () => sections.find((s) => s.id === sectionId),
-    [sections, sectionId]
-  );
 
   return (
     <>
@@ -382,8 +504,42 @@ export function LodgeForm({
 
       <Card className="drainer-card">
         <CardContent className="pt-0">
-          <div className="drainer-title">Pipe ID / fitting</div>
-          <div className="mt-2">
+          <div className="drainer-title mb-2">Pipe ID / fitting</div>
+          {sectionId &&
+            selectedSection?.guide_enabled === true &&
+            selectedSection.guide_xml != null &&
+            !guideRefLoading &&
+            guideRefData &&
+            (guideRefData.item ? (
+              <div className="rounded-lg bg-stone-50 border border-stone-200 px-4 py-3 mb-2">
+                <p className="text-[10px] font-semibold uppercase tracking-widest text-stone-400 mb-1">
+                  Expected
+                </p>
+                <div className="flex flex-wrap items-start justify-between gap-2 gap-y-1">
+                  <p className="text-sm font-semibold text-stone-700 min-w-0">
+                    Item — {guideRefData.item.item_id}
+                  </p>
+                  <p className="text-[11px] text-stone-500 text-right shrink-0 whitespace-nowrap leading-snug">
+                    Write Item reference + pipe number below
+                  </p>
+                </div>
+              </div>
+            ) : (
+              <div className="rounded-lg bg-stone-50 border border-stone-200 px-4 py-3 mb-2">
+                <p className="text-[10px] font-semibold uppercase tracking-widest text-stone-400 mb-1">
+                  Expected
+                </p>
+                <div className="flex flex-wrap items-start justify-between gap-2 gap-y-1">
+                  <p className="text-sm text-stone-400 min-w-0">
+                    Item — no reference for this position
+                  </p>
+                  <p className="text-[11px] text-stone-500 text-right shrink-0 whitespace-nowrap leading-snug">
+                    Write Item reference + pipe number below
+                  </p>
+                </div>
+              </div>
+            ))}
+          <div className="mt-0">
           <Input
             type="text"
             placeholder="e.g. 000615 / 45d Bend"
@@ -405,7 +561,7 @@ export function LodgeForm({
                 <SelectValue placeholder="Select joint type" />
               </SelectTrigger>
               <SelectContent>
-                {JOINT_TYPES.map((j) => (
+                {lodgeJointSelectOptions.map((j) => (
                   <SelectItem key={j.value} value={j.value}>
                     {j.label}
                   </SelectItem>

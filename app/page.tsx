@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
-import { useSearchParams } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { LodgeForm } from "@/components/lodge-form";
 import { LastPipesView } from "@/components/last-pipes-view";
 import { Button } from "@/components/ui/button";
@@ -10,9 +10,14 @@ import { Button } from "@/components/ui/button";
 type Section = {
   id: string;
   name: string;
+  joint_types?: string[] | null;
+  guide_enabled?: boolean;
+  guide_xml?: { sequence_number: number; item_id: string }[] | null;
 };
 
 export default function Home() {
+  const router = useRouter();
+  const pathname = usePathname();
   const searchParams = useSearchParams();
   const [sections, setSections] = useState<Section[]>([]);
   const [sectionId, setSectionId] = useState("");
@@ -48,6 +53,16 @@ export default function Home() {
   useEffect(() => {
     loadSections().finally(() => setLoading(false));
   }, [loadSections, urlSection]);
+
+  const setSectionAndUrl = useCallback(
+    (id: string) => {
+      setSectionId(id);
+      const params = new URLSearchParams(searchParams.toString());
+      params.set("section", id);
+      router.replace(`${pathname}?${params.toString()}`, { scroll: false });
+    },
+    [pathname, router, searchParams]
+  );
 
   useEffect(() => {
     const onFocus = () => loadSections();
@@ -87,7 +102,7 @@ export default function Home() {
             <LodgeForm
               sections={sections}
               sectionId={sectionId}
-              onSectionChange={setSectionId}
+              onSectionChange={setSectionAndUrl}
               initialCh={urlCh}
               onSuccess={() => setLastPipesRefresh((k) => k + 1)}
             />

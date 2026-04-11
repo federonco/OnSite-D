@@ -28,6 +28,39 @@ export async function PUT(
     project_id: project_id ?? null,
     itp_number: itp_number || null,
   };
+  if ("joint_types" in body) {
+    const raw = body.joint_types;
+    if (Array.isArray(raw)) {
+      const cleaned = raw
+        .map((x: unknown) => String(x).trim())
+        .filter(Boolean);
+      updates.joint_types = cleaned.length > 0 ? cleaned : null;
+    } else if (raw === null) {
+      updates.joint_types = null;
+    }
+  }
+  if ("guide_enabled" in body) {
+    updates.guide_enabled = Boolean(body.guide_enabled);
+  }
+  if ("guide_xml" in body) {
+    const gx = body.guide_xml;
+    if (gx === null) {
+      updates.guide_xml = null;
+    } else if (Array.isArray(gx)) {
+      const rows: { sequence_number: number; item_id: string }[] = [];
+      for (const row of gx) {
+        if (!row || typeof row !== "object") continue;
+        const o = row as Record<string, unknown>;
+        const id = o.item_id;
+        if (typeof id !== "string" || id.trim() === "") continue;
+        const n = Number(o.sequence_number);
+        if (!Number.isFinite(n)) continue;
+        rows.push({ sequence_number: n, item_id: id.trim() });
+      }
+      rows.sort((a, b) => a.sequence_number - b.sequence_number);
+      updates.guide_xml = rows.length > 0 ? rows : null;
+    }
+  }
 
   const supabase = getSupabaseServer({ accessToken: token });
   const { data, error } = await supabase

@@ -37,6 +37,31 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Loader2 } from "lucide-react";
+import {
+  normalizeGuideXmlFromJsonb,
+  parseGuideXLSX,
+  type GuideItem,
+} from "@/lib/installation-guide-xml";
+
+/** Stable row id for React keys when reordering by sequence (not persisted). */
+type GuideTableRow = GuideItem & { _rowId: string };
+
+function withStableRowIds(items: GuideItem[]): GuideTableRow[] {
+  return items.map((item) => ({
+    ...item,
+    _rowId:
+      typeof crypto !== "undefined" && "randomUUID" in crypto
+        ? crypto.randomUUID()
+        : `${item.sequence_number}-${item.item_id}-${Math.random().toString(36).slice(2)}`,
+  }));
+}
+
+function stripRowIds(rows: GuideTableRow[]): GuideItem[] {
+  return rows.map(({ sequence_number, item_id }) => ({
+    sequence_number,
+    item_id,
+  }));
+}
 
 type Section = {
   id: string;
@@ -47,7 +72,18 @@ type Section = {
   project_id: string | null;
   projects: { name: string | null; number: string | null } | null;
   itp_number: string | null;
+  joint_types: string[] | null;
+  guide_enabled?: boolean;
+  guide_xml?: GuideItem[] | null;
 };
+
+/** Which joint types are available on site for this section (Edit Section). */
+const SECTION_JOINT_TYPES = [
+  { value: "RRJ", label: "RRJ (Rubber Ring Joint)" },
+  { value: "WR", label: "WR (Weld Restrained)" },
+  { value: "Transition", label: "Transition" },
+  { value: "WB", label: "WB (Weld Band)" },
+] as const;
 
 /** Pipe: digits-hyphen-digits, PP+digits-hyphen-digits, or just digits. Fitting: anything else. */
 const PIPE_REGEX = /^((PP)?\d+-\d+|\d+)$/;
@@ -90,8 +126,12 @@ export default function AdminPage() {
   const [startCh, setStartCh] = useState("");
   const [endCh, setEndCh] = useState("");
   const [direction, setDirection] = useState<string>("onwards");
-  const [projectIdInput, setProjectIdInput] = useState("");
-  const [itpNumber, setItpNumber] = useState("");
+  const [sectionJointTypesAllowed, setSectionJointTypesAllowed] = useState<string[]>(
+    []
+  );
+  const [guideEnabled, setGuideEnabled] = useState(false);
+  const [guideItems, setGuideItems] = useState<GuideTableRow[]>([]);
+  const [guideXlsxInputKey, setGuideXlsxInputKey] = useState(0);
   const [loading, setLoading] = useState(false);
   const [printingItrIndex, setPrintingItrIndex] = useState<number | null>(null);
   const [printingAudit, setPrintingAudit] = useState(false);
@@ -242,6 +282,44 @@ export default function AdminPage() {
 
   const reportsPending = progress.currentOpenCount > 0 ? 1 : 0;
 
+  const handleGuideXLSXUpload = async (
+    e: React.ChangeEvent<HTMLInputElement>
+  ) => {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file) return;
+    try {
+      const buffer = await file.arrayBuffer();
+      const parsed = await parseGuideXLSX(buffer);
+      if (parsed.length === 0) {
+        pushToast({
+          type: "error",
+          title: "No rows",
+          message:
+            "Use a header row with columns sequence_number and item_id.",
+        });
+        return;
+      }
+      setGuideItems(withStableRowIds(parsed));
+      pushToast({
+        type: "success",
+        title: "Excel loaded",
+        message: `${parsed.length} item(s).`,
+      });
+    } catch (err) {
+      pushToast({
+        type: "error",
+        title: "Invalid spreadsheet",
+        message: err instanceof Error ? err.message : "Could not read file",
+      });
+    }
+  };
+
+  const clearGuideSheet = () => {
+    setGuideItems([]);
+    setGuideXlsxInputKey((k) => k + 1);
+  };
+
   const openCreate = () => {
     setModalMode("create");
     setEditId(null);
@@ -249,8 +327,10 @@ export default function AdminPage() {
     setStartCh("");
     setEndCh("");
     setDirection("onwards");
-    setProjectIdInput("");
-    setItpNumber("");
+    setSectionJointTypesAllowed([]);
+    setGuideEnabled(false);
+    setGuideItems([]);
+    setGuideXlsxInputKey((k) => k + 1);
     setModalOpen(true);
   };
 
@@ -261,8 +341,15 @@ export default function AdminPage() {
     setStartCh(s.start_ch != null ? String(s.start_ch) : "");
     setEndCh(s.end_ch != null ? String(s.end_ch) : "");
     setDirection(s.direction ?? "onwards");
-    setProjectIdInput(s.project_id ?? "");
-    setItpNumber(s.itp_number ?? "");
+    const allowed = Array.isArray(s.joint_types) ? s.joint_types : [];
+    setSectionJointTypesAllowed(
+      SECTION_JOINT_TYPES.map((j) => j.value).filter((v) => allowed.includes(v))
+    );
+    setGuideEnabled(!!s.guide_enabled);
+    setGuideItems(
+      withStableRowIds(normalizeGuideXmlFromJsonb(s.guide_xml) ?? [])
+    );
+    setGuideXlsxInputKey((k) => k + 1);
     setModalOpen(true);
   };
 
@@ -279,13 +366,32 @@ export default function AdminPage() {
         setLoading(false);
         return;
       }
+      const existingSection =
+        modalMode === "edit" && editId
+          ? sections.find((s) => s.id === editId)
+          : undefined;
+      const existingProjectId = existingSection?.project_id ?? null;
+      const existingItpNumber = existingSection?.itp_number ?? null;
       const payload = {
         name,
         start_ch: startCh ? Number(startCh) : null,
         end_ch: endCh ? Number(endCh) : null,
         direction: direction || null,
-        project_id: projectIdInput.trim() || null,
-        itp_number: itpNumber || null,
+        project_id: existingProjectId,
+        itp_number: existingItpNumber,
+        ...(modalMode === "edit"
+          ? {
+              joint_types:
+                sectionJointTypesAllowed.length > 0
+                  ? sectionJointTypesAllowed
+                  : null,
+              guide_enabled: guideEnabled,
+              guide_xml:
+                guideEnabled && guideItems.length > 0
+                  ? stripRowIds(guideItems)
+                  : null,
+            }
+          : {}),
       };
       const url =
         modalMode === "edit" && editId
@@ -505,7 +611,7 @@ export default function AdminPage() {
             <h1 className="drainer-title text-xl">Drainer Admin Center</h1>
             <Link href="/">
               <Button variant="ghost" size="sm" className="h-9 text-xs">
-                Back to Lodge
+                Back to User
               </Button>
             </Link>
           </div>
@@ -816,26 +922,181 @@ export default function AdminPage() {
                 </SelectContent>
               </Select>
             </div>
-            <div>
-              <label className="drainer-label block mb-1">Project ID (UUID)</label>
-              <Input
-                value={projectIdInput}
-                onChange={(e) => setProjectIdInput(e.target.value)}
-                placeholder="Optional — link to row in projects table"
-                className="drainer-input"
-              />
-              <p className="text-[11px] text-[var(--muted-foreground)] mt-1">
-                Name and number come from the linked project after save.
-              </p>
-            </div>
-            <div>
-              <label className="drainer-label block mb-1">ITP number</label>
-              <Input
-                value={itpNumber}
-                onChange={(e) => setItpNumber(e.target.value)}
-                className="drainer-input"
-              />
-            </div>
+            {modalMode === "edit" && (
+              <div className="space-y-2">
+                <span className="drainer-label block mb-1">
+                  Joint types available on site
+                </span>
+                <p className="text-[11px] text-[var(--muted-foreground)] mb-2">
+                  Leave all unchecked to allow every type. Tick only the types
+                  users may lodge in this section.
+                </p>
+                <div className="flex flex-col gap-2">
+                  {SECTION_JOINT_TYPES.map((j) => (
+                    <label
+                      key={j.value}
+                      className="flex items-center gap-2 text-sm cursor-pointer"
+                    >
+                      <input
+                        type="checkbox"
+                        className="rounded border-[var(--card-border)]"
+                        checked={sectionJointTypesAllowed.includes(j.value)}
+                        onChange={() => {
+                          setSectionJointTypesAllowed((prev) =>
+                            prev.includes(j.value)
+                              ? prev.filter((x) => x !== j.value)
+                              : [...prev, j.value]
+                          );
+                        }}
+                      />
+                      {j.label}
+                    </label>
+                  ))}
+                </div>
+              </div>
+            )}
+            {modalMode === "edit" && (
+              <div className="space-y-3 pt-3 border-t border-[var(--card-border)]">
+                <label className="flex items-center gap-2 text-sm font-medium text-gray-700">
+                  <input
+                    type="checkbox"
+                    checked={guideEnabled}
+                    onChange={(e) => {
+                      const c = e.target.checked;
+                      setGuideEnabled(c);
+                      if (!c) {
+                        setGuideItems([]);
+                        setGuideXlsxInputKey((k) => k + 1);
+                      }
+                    }}
+                    className="h-4 w-4 rounded border-gray-300"
+                  />
+                  Enable Installation Guide for this section
+                </label>
+                {guideEnabled && (
+                  <div className="space-y-2 pl-0.5">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <input
+                        key={guideXlsxInputKey}
+                        type="file"
+                        accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                        onChange={handleGuideXLSXUpload}
+                        className="block text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded file:border-0 file:text-sm file:font-medium file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
+                      />
+                      {guideItems.length > 0 && (
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          className="h-8 text-xs"
+                          onClick={clearGuideSheet}
+                        >
+                          Clear sheet
+                        </Button>
+                      )}
+                    </div>
+                    {guideItems.length > 0 && (
+                      <div className="mt-3 max-h-64 overflow-y-auto border border-gray-200 rounded-lg">
+                        <table className="w-full text-sm">
+                          <thead className="bg-gray-50 sticky top-0">
+                            <tr>
+                              <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 w-28">
+                                Sequence order
+                              </th>
+                              <th className="px-3 py-2 text-left text-xs font-medium text-gray-500">
+                                Item ID
+                              </th>
+                              <th className="px-3 py-2 w-10"></th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-gray-100">
+                            {guideItems.map((item) => (
+                              <tr
+                                key={item._rowId}
+                                className="hover:bg-gray-50"
+                              >
+                                <td className="px-3 py-1.5">
+                                  <input
+                                    type="number"
+                                    min={1}
+                                    step={1}
+                                    value={item.sequence_number}
+                                    onChange={(e) => {
+                                      const raw = e.target.value;
+                                      const n = parseInt(raw, 10);
+                                      setGuideItems((prev) =>
+                                        prev.map((row) =>
+                                          row._rowId === item._rowId
+                                            ? {
+                                                ...row,
+                                                sequence_number:
+                                                  raw === "" || !Number.isFinite(n)
+                                                    ? row.sequence_number
+                                                    : n,
+                                              }
+                                            : row
+                                        )
+                                      );
+                                    }}
+                                    onBlur={() => {
+                                      setGuideItems((prev) =>
+                                        [...prev].sort(
+                                          (a, b) =>
+                                            a.sequence_number - b.sequence_number
+                                        )
+                                      );
+                                    }}
+                                    className="w-full min-w-[4rem] text-sm bg-transparent border-0 focus:ring-1 focus:ring-blue-300 rounded px-1 py-0.5 text-gray-700"
+                                  />
+                                </td>
+                                <td className="px-3 py-1.5">
+                                  <input
+                                    type="text"
+                                    value={item.item_id}
+                                    onChange={(e) => {
+                                      setGuideItems((prev) =>
+                                        prev.map((row) =>
+                                          row._rowId === item._rowId
+                                            ? {
+                                                ...row,
+                                                item_id: e.target.value,
+                                              }
+                                            : row
+                                        )
+                                      );
+                                    }}
+                                    className="w-full text-sm bg-transparent border-0 focus:ring-1 focus:ring-blue-300 rounded px-1 py-0.5"
+                                  />
+                                </td>
+                                <td className="px-3 py-1.5 text-center">
+                                  <button
+                                    type="button"
+                                    onClick={() =>
+                                      setGuideItems((prev) =>
+                                        prev.filter(
+                                          (row) => row._rowId !== item._rowId
+                                        )
+                                      )
+                                    }
+                                    className="text-red-400 hover:text-red-600 text-xs font-bold"
+                                  >
+                                    ✕
+                                  </button>
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                        <div className="px-3 py-2 bg-gray-50 border-t border-gray-100 text-xs text-gray-400">
+                          {guideItems.length} items · Edit sequence order and
+                          item ID inline · ✕ to remove a row
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
           </div>
           <DialogFooter>
             <Button

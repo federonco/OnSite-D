@@ -4,7 +4,7 @@ import type { SectionInfo } from "@/lib/reporting/itr-pla-001/types";
 
 /** Columns always available on drainer_sections (no FK embed). */
 export const DRAINER_SECTION_BASE =
-  "id,name,start_ch,end_ch,direction,itp_number,project_id";
+  "id,name,start_ch,end_ch,direction,itp_number,project_id,joint_types,guide_enabled,guide_xml";
 
 /** Optional embed; PostgREST fails the whole query if hint/FK/relationship is wrong. */
 export const DRAINER_SECTION_WITH_PROJECT_EMBED =
@@ -18,6 +18,9 @@ export type DrainerSectionRow = {
   direction: string | null;
   itp_number: string | null;
   project_id: string | null;
+  joint_types: string[] | null;
+  guide_enabled: boolean;
+  guide_xml: { sequence_number: number; item_id: string }[] | null;
   projects?: { name: string | null; number: string | null } | null;
 };
 

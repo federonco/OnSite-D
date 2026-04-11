@@ -5,8 +5,7 @@ import { isAdminEmail } from "@/lib/admin";
 import { getSupabaseServer } from "@/lib/supabase/server";
 import { generateSectionQRPdf } from "@/lib/reporting/section-qr-pdf";
 import { createEmailTransporter, getEmailFrom, getEmailSignatureHtml, getLogoAttachment, hasEmailConfig, LOGO_CID } from "@/lib/email-config";
-
-const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || "https://onsite-d.vercel.app";
+import { getPublicSiteUrlFromRequest } from "@/lib/site-url";
 
 export async function POST(request: NextRequest) {
   const { user, token } = await getUserFromRequest(request);
@@ -41,7 +40,8 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Section not found" }, { status: 404 });
   }
 
-  const qrUrl = `${SITE_URL}/?section=${encodeURIComponent(sectionId)}`;
+  const siteUrl = getPublicSiteUrlFromRequest(request);
+  const qrUrl = `${siteUrl}/?section=${encodeURIComponent(sectionId)}`;
   const qrDataUrl = await QRCode.toDataURL(qrUrl, {
     width: 400,
     margin: 2,
@@ -77,7 +77,7 @@ export async function POST(request: NextRequest) {
     const transporter = createEmailTransporter();
 
     const logoAtt = getLogoAttachment();
-    const logoSrc = logoAtt ? `cid:${LOGO_CID}` : `${process.env.NEXT_PUBLIC_SITE_URL || "https://onsite-d.vercel.app"}/readx-logo.png`;
+    const logoSrc = logoAtt ? `cid:${LOGO_CID}` : `${siteUrl}/readx-logo.png`;
     const attachments: Array<{ filename: string; content: Buffer; cid?: string }> = [
       { filename: fileName, content: buffer },
     ];
@@ -87,7 +87,8 @@ export async function POST(request: NextRequest) {
 <div style="font-family: Arial, sans-serif; color: #333; padding: 24px;">
   <h2 style="color: #1a5276;">Section QR Code</h2>
   <p>Attached: QR code for <strong>${section.name}</strong></p>
-  <p>Scan to open in the app.</p>
+  <p>Scan to open the user home with this section selected.</p>
+  <p style="margin-top:12px;font-size:12px;word-break:break-all;"><a href="${qrUrl}">${qrUrl}</a></p>
   ${getEmailSignatureHtml(logoSrc)}
 </div>`;
 

@@ -1,7 +1,6 @@
 import QRCode from "qrcode";
 import { createEmailTransporter, getEmailFrom, getEmailSignatureHtml, getLogoAttachment, hasEmailConfig, LOGO_CID } from "./email-config";
-
-const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || "https://onsite-d.vercel.app";
+import { getPublicSiteUrlFromEnv } from "./site-url";
 
 export async function sendSectionQREmail(params: {
   sectionId: string;
@@ -14,7 +13,8 @@ export async function sendSectionQREmail(params: {
     return;
   }
 
-  const qrUrl = `${SITE_URL}/?section=${encodeURIComponent(sectionId)}`;
+  const siteUrl = getPublicSiteUrlFromEnv();
+  const qrUrl = `${siteUrl}/?section=${encodeURIComponent(sectionId)}`;
   const qrDataUrl = await QRCode.toDataURL(qrUrl, {
     width: 280,
     margin: 2,
@@ -24,7 +24,7 @@ export async function sendSectionQREmail(params: {
   const transporter = createEmailTransporter();
 
   const logoAtt = getLogoAttachment();
-  const logoSrc = logoAtt ? `cid:${LOGO_CID}` : `${process.env.NEXT_PUBLIC_SITE_URL || "https://onsite-d.vercel.app"}/readx-logo.png`;
+  const logoSrc = logoAtt ? `cid:${LOGO_CID}` : `${siteUrl}/readx-logo.png`;
   const attachments = logoAtt ? [logoAtt] : [];
 
   const htmlWithSig = `

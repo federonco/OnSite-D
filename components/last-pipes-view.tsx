@@ -49,7 +49,7 @@ export function LastPipesView({
   return (
     <Card className="drainer-card">
       <CardContent className="pt-0">
-        <div className="drainer-title">Last 3 pipes lodged</div>
+        <div className="drainer-title">Last 3 records lodged</div>
         {loading ? (
           <p className="text-xs text-[var(--muted-foreground)] mt-2">Loading…</p>
         ) : records.length === 0 ? (
