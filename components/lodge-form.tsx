@@ -44,6 +44,8 @@ type LodgeFormProps = {
   onSuccess?: () => void;
   /** Initial chainage from QR/deep-link (triggers validation on load) */
   initialCh?: string | null;
+  /** When set, hides section selector and locks to this section (e.g. QR entry). */
+  lockedSectionId?: string;
   /** Show kebab menu (Create/Edit/Audit/Print) - admin only */
   showKebabMenu?: boolean;
   onCreateSection?: () => void;
@@ -70,6 +72,7 @@ export function LodgeForm({
   onSectionChange,
   onSuccess,
   initialCh,
+  lockedSectionId,
   showKebabMenu = false,
   onCreateSection,
   onEditSection,
@@ -109,6 +112,9 @@ export function LodgeForm({
     () => sections.find((s) => s.id === sectionId),
     [sections, sectionId]
   );
+
+  const isSectionLocked =
+    !!lockedSectionId && lockedSectionId === sectionId;
 
   const jointTypeSyncedForSectionId = useRef<string | null>(null);
 
@@ -391,26 +397,32 @@ export function LodgeForm({
         <CardContent className="pt-0">
           <div className="drainer-title">Location</div>
           <div className="flex gap-2 items-center mt-[14px] mb-[2px]">
-            <Select
-              value={sectionId}
-              onValueChange={(v) => {
-                onSectionChange(v);
-                setChainageStatus("idle");
-                setIsDuplicate(false);
-              }}
-            >
-              <SelectTrigger className="drainer-input flex-1">
-                <SelectValue placeholder="Select section" />
-              </SelectTrigger>
-              <SelectContent>
-                {sections.map((s) => (
-                  <SelectItem key={s.id} value={s.id}>
-                    {s.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            {showKebabMenu && (
+            {isSectionLocked ? (
+              <p className="drainer-input flex-1 min-h-9 py-2 px-3 mb-0 rounded-md border border-[var(--border)] bg-[var(--surface-alt)] text-sm font-semibold text-[var(--foreground)]">
+                {selectedSection?.name ?? "Section"}
+              </p>
+            ) : (
+              <Select
+                value={sectionId}
+                onValueChange={(v) => {
+                  onSectionChange(v);
+                  setChainageStatus("idle");
+                  setIsDuplicate(false);
+                }}
+              >
+                <SelectTrigger className="drainer-input flex-1">
+                  <SelectValue placeholder="Select section" />
+                </SelectTrigger>
+                <SelectContent>
+                  {sections.map((s) => (
+                    <SelectItem key={s.id} value={s.id}>
+                      {s.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
+            {showKebabMenu && !isSectionLocked && (
               <SectionKebabMenu
                 sectionId={sectionId}
                 sectionName={selectedSection?.name ?? ""}

@@ -22,26 +22,31 @@ export type DrainerSectionRow = {
   guide_enabled: boolean;
   guide_xml: { sequence_number: number; item_id: string }[] | null;
   projects?: { name: string | null; number: string | null } | null;
+  /** Present when listing as admin (includeQrFields). */
+  qr_token?: string | null;
+  qr_token_issued_at?: string | null;
 };
 
 /**
  * List sections: try embed first; on failure log and retry without embed so rows still load.
  */
 export async function listDrainerSectionsWithProjectFallback(
-  supabase: SupabaseClient
+  supabase: SupabaseClient,
+  options?: { includeQrFields?: boolean }
 ): Promise<{
   data: DrainerSectionRow[] | null;
   error: { message: string } | null;
   projectEmbedOk: boolean;
 }> {
+  const qrSuffix = options?.includeQrFields ? ",qr_token,qr_token_issued_at" : "";
   const withEmbed = await supabase
     .from("drainer_sections")
-    .select(DRAINER_SECTION_WITH_PROJECT_EMBED)
+    .select(`${DRAINER_SECTION_WITH_PROJECT_EMBED}${qrSuffix}`)
     .order("name");
 
   if (!withEmbed.error && withEmbed.data) {
     const normalized: DrainerSectionRow[] = withEmbed.data.map((row) => ({
-      ...(row as Omit<DrainerSectionRow, "projects">),
+      ...(row as unknown as Omit<DrainerSectionRow, "projects">),
       projects: unwrapProjectsEmbed(
         (row as { projects?: ProjectEmbed | ProjectEmbed[] | null }).projects
       ),
@@ -58,7 +63,7 @@ export async function listDrainerSectionsWithProjectFallback(
 
   const baseOnly = await supabase
     .from("drainer_sections")
-    .select(DRAINER_SECTION_BASE)
+    .select(`${DRAINER_SECTION_BASE}${qrSuffix}`)
     .order("name");
 
   if (baseOnly.error) {
@@ -72,7 +77,7 @@ export async function listDrainerSectionsWithProjectFallback(
   }
 
   const normalized: DrainerSectionRow[] = (baseOnly.data ?? []).map((row) => ({
-    ...(row as DrainerSectionRow),
+    ...(row as unknown as DrainerSectionRow),
     projects: null,
   }));
 

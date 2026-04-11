@@ -28,3 +28,12 @@ export function getPublicSiteUrlFromEnv(): string {
 
   return "https://onsite-d.vercel.app";
 }
+
+/**
+ * QR / deep link URL for field entry. Prefer NEXT_PUBLIC_SITE_URL (same as server QR response).
+ */
+export function buildEnterUrlFromQrToken(token: string): string {
+  const explicit = process.env.NEXT_PUBLIC_SITE_URL?.replace(/\/$/, "");
+  const base = explicit || getPublicSiteUrlFromEnv();
+  return `${base}/enter?token=${encodeURIComponent(token)}`;
+}

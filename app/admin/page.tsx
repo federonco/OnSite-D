@@ -42,6 +42,7 @@ import {
   parseGuideXLSX,
   type GuideItem,
 } from "@/lib/installation-guide-xml";
+import { SectionQrRow } from "@/components/admin/section-qr-row";
 
 /** Stable row id for React keys when reordering by sequence (not persisted). */
 type GuideTableRow = GuideItem & { _rowId: string };
@@ -75,6 +76,8 @@ type Section = {
   joint_types: string[] | null;
   guide_enabled?: boolean;
   guide_xml?: GuideItem[] | null;
+  qr_token?: string | null;
+  qr_token_issued_at?: string | null;
 };
 
 /** Which joint types are available on site for this section (Edit Section). */
@@ -669,6 +672,27 @@ export default function AdminPage() {
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="drainer-card">
+          <CardContent className="pt-0">
+            <div className="drainer-title">Section QR (field access)</div>
+            <p className="text-[11px] text-[var(--muted-foreground)] mt-1 mb-3">
+              Generate a QR for each section. Field users open the link to lodge with
+              that section locked—no sign-in.
+            </p>
+            <div className="space-y-3 max-h-[min(70vh,520px)] overflow-y-auto pr-1">
+              {sections.map((s) => (
+                <SectionQrRow
+                  key={s.id}
+                  section={s}
+                  getAccessToken={getAccessToken}
+                  defaultReportEmail={reportDefaultEmail || authEmail || ""}
+                  onQrUpdated={loadSections}
+                />
+              ))}
             </div>
           </CardContent>
         </Card>
