@@ -14,9 +14,12 @@ type PipeRecord = {
 export function LastPipesView({
   sectionId,
   refreshTrigger,
+  qrToken,
 }: {
   sectionId: string;
   refreshTrigger?: number;
+  /** When set (e.g. /enter?token=…), sent so the API can authorize without login. */
+  qrToken?: string | null;
 }) {
   const [records, setRecords] = useState<PipeRecord[]>([]);
   const [loading, setLoading] = useState(false);
@@ -28,7 +31,14 @@ export function LastPipesView({
     }
     setLoading(true);
     try {
-      const res = await fetch(`/api/drainer/records?sectionId=${sectionId}&limit=3`);
+      const qs = new URLSearchParams({
+        sectionId,
+        limit: "3",
+      });
+      if (qrToken?.trim()) {
+        qs.set("qr_token", qrToken.trim());
+      }
+      const res = await fetch(`/api/drainer/records?${qs.toString()}`);
       const data = await res.json();
       const list = (data.records ?? []).slice(0, 3);
       list.sort((a: PipeRecord, b: PipeRecord) => Number(a.chainage) - Number(b.chainage));
@@ -38,7 +48,7 @@ export function LastPipesView({
     } finally {
       setLoading(false);
     }
-  }, [sectionId]);
+  }, [sectionId, qrToken]);
 
   useEffect(() => {
     load();

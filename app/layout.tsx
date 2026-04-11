@@ -31,7 +31,7 @@ const codeFont = DM_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Drainer Lodge",
+  title: "Pipe Laying Tracker",
   description: "Pipe laying inspection and ITR reporting",
 };
 

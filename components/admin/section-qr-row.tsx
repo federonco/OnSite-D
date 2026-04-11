@@ -1,7 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import QRCode from "qrcode";
+import { useState } from "react";
 import { Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -13,7 +12,6 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/components/toast";
-import { buildEnterUrlFromQrToken } from "@/lib/site-url";
 
 export type SectionQrListItem = {
   id: string;
@@ -30,14 +28,6 @@ type Props = {
   onQrUpdated?: () => void;
 };
 
-function sanitizeFilename(name: string) {
-  const s = name
-    .replace(/[<>:"/\\|?*\u0000-\u001f]/g, "_")
-    .trim()
-    .replace(/\s+/g, "_");
-  return s || "section";
-}
-
 export function SectionQrRow({
   section,
   getAccessToken,
@@ -48,41 +38,6 @@ export function SectionQrRow({
   const [sendOpen, setSendOpen] = useState(false);
   const [sendEmail, setSendEmail] = useState("");
   const [sending, setSending] = useState(false);
-  const [url, setUrl] = useState<string | null>(() =>
-    section.qr_token ? buildEnterUrlFromQrToken(section.qr_token) : null
-  );
-  const [dataUrl, setDataUrl] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (section.qr_token) {
-      setUrl(buildEnterUrlFromQrToken(section.qr_token));
-    } else {
-      setUrl(null);
-      setDataUrl(null);
-    }
-  }, [section.qr_token, section.id]);
-
-  useEffect(() => {
-    if (!url) {
-      setDataUrl(null);
-      return;
-    }
-    let cancelled = false;
-    QRCode.toDataURL(url, {
-      width: 220,
-      margin: 2,
-      errorCorrectionLevel: "M",
-    })
-      .then((u) => {
-        if (!cancelled) setDataUrl(u);
-      })
-      .catch(() => {
-        if (!cancelled) setDataUrl(null);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [url]);
 
   const openSendDialog = () => {
     setSendEmail((defaultReportEmail || "").trim());
@@ -144,18 +99,9 @@ export function SectionQrRow({
     }
   };
 
-  const downloadPng = () => {
-    if (!dataUrl) return;
-    const a = document.createElement("a");
-    a.href = dataUrl;
-    a.download = `${sanitizeFilename(section.name)}-qr.png`;
-    a.rel = "noopener";
-    a.click();
-  };
-
   return (
     <>
-      <div className="rounded-xl border border-[var(--border)] bg-white p-3 space-y-2">
+      <div className="rounded-xl border border-[var(--border)] bg-white p-3">
         <div className="flex items-center justify-between gap-2 flex-wrap">
           <span className="text-sm font-medium text-[var(--ink)] truncate min-w-0">
             {section.name}
@@ -170,37 +116,6 @@ export function SectionQrRow({
             Send QR
           </Button>
         </div>
-        {url && (
-          <div className="space-y-2 pt-1 border-t border-[var(--border)]">
-            {dataUrl ? (
-              <img
-                src={dataUrl}
-                alt=""
-                width={220}
-                height={220}
-                className="mx-auto rounded-lg border border-[var(--border)] bg-white"
-              />
-            ) : (
-              <p className="text-xs text-[var(--muted-foreground)] text-center py-2">
-                Rendering QR…
-              </p>
-            )}
-            <p className="text-[11px] break-all text-[var(--muted-foreground)] font-mono">
-              {url}
-            </p>
-            {dataUrl && (
-              <Button
-                type="button"
-                variant="secondary"
-                size="sm"
-                className="w-full min-h-9"
-                onClick={downloadPng}
-              >
-                Download QR
-              </Button>
-            )}
-          </div>
-        )}
       </div>
 
       <Dialog open={sendOpen} onOpenChange={setSendOpen}>

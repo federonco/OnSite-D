@@ -679,11 +679,7 @@ export default function AdminPage() {
         <Card className="drainer-card">
           <CardContent className="pt-0">
             <div className="drainer-title">Section QR (field access)</div>
-            <p className="text-[11px] text-[var(--muted-foreground)] mt-1 mb-3">
-              Generate a QR for each section. Field users open the link to lodge with
-              that section locked—no sign-in.
-            </p>
-            <div className="space-y-3 max-h-[min(70vh,520px)] overflow-y-auto pr-1">
+            <div className="space-y-3 max-h-[min(70vh,520px)] overflow-y-auto pr-1 mt-2">
               {sections.map((s) => (
                 <SectionQrRow
                   key={s.id}

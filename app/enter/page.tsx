@@ -3,6 +3,7 @@
 import { Suspense, useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { LodgeForm } from "@/components/lodge-form";
+import { LastPipesView } from "@/components/last-pipes-view";
 
 type Section = {
   id: string;
@@ -17,6 +18,7 @@ function EnterContent() {
   const token = searchParams.get("token");
   const [status, setStatus] = useState<"loading" | "error" | "ok">("loading");
   const [section, setSection] = useState<Section | null>(null);
+  const [lastPipesRefresh, setLastPipesRefresh] = useState(0);
 
   useEffect(() => {
     if (!token?.trim()) {
@@ -57,13 +59,20 @@ function EnterContent() {
   }
 
   return (
-    <LodgeForm
-      sections={[section]}
-      sectionId={section.id}
-      onSectionChange={() => {}}
-      lockedSectionId={section.id}
-      onSuccess={() => {}}
-    />
+    <>
+      <LodgeForm
+        sections={[section]}
+        sectionId={section.id}
+        onSectionChange={() => {}}
+        lockedSectionId={section.id}
+        onSuccess={() => setLastPipesRefresh((k) => k + 1)}
+      />
+      <LastPipesView
+        sectionId={section.id}
+        qrToken={token?.trim() ?? null}
+        refreshTrigger={lastPipesRefresh}
+      />
+    </>
   );
 }
 
@@ -71,11 +80,8 @@ export default function EnterPage() {
   return (
     <div className="drainer-page">
       <div className="drainer-shell">
-        <div className="drainer-header flex flex-col gap-2 mb-4">
+        <div className="drainer-header flex flex-col gap-3 mb-4">
           <h1 className="drainer-title text-xl">Pipe Laying Tracker</h1>
-          <p className="text-xs text-[var(--muted-foreground)]">
-            Field entry — section is fixed for this link.
-          </p>
         </div>
         <Suspense
           fallback={

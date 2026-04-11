@@ -18,6 +18,24 @@ export async function GET(request: NextRequest) {
   const limit = limitParam ? Math.min(100, Math.max(1, parseInt(limitParam, 10))) : null;
 
   const { token } = await getUserFromRequest(request);
+  const qrTokenParam = searchParams.get("qr_token")?.trim() ?? null;
+
+  if (!token && qrTokenParam) {
+    const verify = getSupabaseServer({ useServiceRole: true });
+    const { data: secRow, error: verifyErr } = await verify
+      .from("drainer_sections")
+      .select("id")
+      .eq("id", sectionId)
+      .eq("qr_token", qrTokenParam)
+      .maybeSingle();
+    if (verifyErr) {
+      return NextResponse.json({ error: verifyErr.message }, { status: 500 });
+    }
+    if (!secRow) {
+      return NextResponse.json({ error: "Invalid QR token" }, { status: 403 });
+    }
+  }
+
   const supabase = token
     ? getSupabaseServer({ accessToken: token })
     : getSupabaseServer({ useServiceRole: true });
