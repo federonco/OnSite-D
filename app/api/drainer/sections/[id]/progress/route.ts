@@ -22,7 +22,6 @@ export async function GET(
 
   const supabase = getSupabaseServer({ accessToken: token });
 
-  // Section metadata from drainer_sections (start_ch, end_ch, direction)
   const { data: section, error: sectionError } = await supabase
     .from("drainer_sections")
     .select("start_ch,end_ch,direction")
@@ -52,9 +51,9 @@ export async function GET(
   let currentCh = isBackward ? minCh : maxCh;
   let progressPercent = 0;
 
-  // Compute progress along the configured start->end vector.
-  // This project installs two parallel pipes per section (line 1, then line 2),
-  // so we expose section progress as average completion of both passes.
+  // Progress = how far lodged chainages have advanced along the configured
+  // start_ch → end_ch span (section size). Single metric — no dual-pipe / duplicate-CH heuristic
+  // (air cushion and similar phases can lodge duplicate chainages without meaning “second line”).
   if (
     startCh != null &&
     endCh != null &&
@@ -65,30 +64,18 @@ export async function GET(
     const clamp01 = (x: number) => Math.min(1, Math.max(0, x));
     const ratioFor = (ch: number) => clamp01((ch - startCh) / denom);
 
-    const countsByChainage = new Map<number, number>();
-    for (const ch of chainages) {
-      countsByChainage.set(ch, (countsByChainage.get(ch) ?? 0) + 1);
-    }
-
-    let line1Ratio = 0;
-    let line2Ratio = 0;
+    let bestRatio = -Infinity;
     let bestChainage: number | null = null;
-
-    for (const [ch, count] of countsByChainage.entries()) {
+    for (const ch of chainages) {
       const ratio = ratioFor(ch);
-      if (ratio > line1Ratio) {
-        line1Ratio = ratio;
+      if (ratio > bestRatio) {
+        bestRatio = ratio;
         bestChainage = ch;
-      }
-      // A duplicate chainage means the second parallel pipe reached this point.
-      if (count >= 2 && ratio > line2Ratio) {
-        line2Ratio = ratio;
       }
     }
 
     currentCh = bestChainage;
-    progressPercent = ((line1Ratio + line2Ratio) / 2) * 100;
-    progressPercent = Math.round(progressPercent * 10) / 10;
+    progressPercent = Math.round(bestRatio * 100 * 10) / 10;
   }
 
   console.log("[sections/progress]", {
@@ -103,7 +90,7 @@ export async function GET(
 
   return NextResponse.json({
     currentCh,
-    endCh, // destination (where we're heading): always section.end_ch
+    endCh,
     progressPercent,
     configured: startCh != null && endCh != null,
     hasRecords: chainages.length > 0,
