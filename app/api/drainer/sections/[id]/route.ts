@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { createClient } from "@supabase/supabase-js";
 import { getUserFromRequest } from "@/lib/api-auth";
 import { getSupabaseServer } from "@/lib/supabase/server";
 import { DRAINER_SECTION_BASE } from "@/lib/drainer-sections-read";
@@ -73,6 +74,36 @@ export async function PUT(
   if (error) {
     console.error("[drainer_sections PUT] update failed:", error.message, error.details, error.hint);
     return NextResponse.json({ error: error.message }, { status: 500 });
+  }
+
+  // Sync shared fields to unified sections table.
+  const sectionSyncUpdates: Record<string, unknown> = {};
+  if ("name" in body && body.name !== undefined) {
+    sectionSyncUpdates.name = String(body.name);
+  }
+  if ("start_ch" in body && body.start_ch !== undefined) {
+    sectionSyncUpdates.start_ch = body.start_ch != null ? Number(body.start_ch) : null;
+  }
+  if ("end_ch" in body && body.end_ch !== undefined) {
+    sectionSyncUpdates.end_ch = body.end_ch != null ? Number(body.end_ch) : null;
+  }
+  if ("direction" in body && body.direction !== undefined) {
+    sectionSyncUpdates.direction = body.direction || null;
+  }
+
+  if (Object.keys(sectionSyncUpdates).length > 0) {
+    const supabaseAdmin = createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.SUPABASE_SERVICE_ROLE_KEY!
+    );
+    const { error: syncError } = await supabaseAdmin
+      .from("sections")
+      .update(sectionSyncUpdates)
+      .eq("app_config->>legacy_id", id);
+    if (syncError) {
+      console.error("[sections sync PUT] update failed:", syncError.message, syncError.details, syncError.hint);
+      return NextResponse.json({ error: syncError.message }, { status: 500 });
+    }
   }
 
   return NextResponse.json({
