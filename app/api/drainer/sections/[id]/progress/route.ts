@@ -38,31 +38,57 @@ export async function GET(
     .select("chainage")
     .eq("section_id", id);
 
-  const chainages = (records ?? []).map((r) => Number(r.chainage));
+  const chainages = (records ?? [])
+    .map((r) => Number(r.chainage))
+    .filter((n) => Number.isFinite(n));
   const minCh = chainages.length > 0 ? Math.min(...chainages) : null;
   const maxCh = chainages.length > 0 ? Math.max(...chainages) : null;
   const direction = String(section.direction ?? "forward").toLowerCase();
   const isBackward = direction === "backward" || direction === "backwards";
 
-  const currentCh = isBackward ? minCh : maxCh;
-
   const startCh = section.start_ch != null ? Number(section.start_ch) : null;
   const endCh = section.end_ch != null ? Number(section.end_ch) : null;
 
+  let currentCh = isBackward ? minCh : maxCh;
   let progressPercent = 0;
-  if (startCh != null && endCh != null && currentCh != null) {
-    const start = Math.min(startCh, endCh);
-    const end = Math.max(startCh, endCh);
-    const totalRange = end - start;
-    if (totalRange > 0) {
-      if (isBackward) {
-        progressPercent = ((startCh - currentCh) / (startCh - endCh)) * 100;
-      } else {
-        progressPercent = ((currentCh - startCh) / (endCh - startCh)) * 100;
-      }
-      progressPercent = Math.min(100, Math.max(0, progressPercent));
-      progressPercent = Math.round(progressPercent * 10) / 10;
+
+  // Compute progress along the configured start->end vector.
+  // This project installs two parallel pipes per section (line 1, then line 2),
+  // so we expose section progress as average completion of both passes.
+  if (
+    startCh != null &&
+    endCh != null &&
+    chainages.length > 0 &&
+    startCh !== endCh
+  ) {
+    const denom = endCh - startCh;
+    const clamp01 = (x: number) => Math.min(1, Math.max(0, x));
+    const ratioFor = (ch: number) => clamp01((ch - startCh) / denom);
+
+    const countsByChainage = new Map<number, number>();
+    for (const ch of chainages) {
+      countsByChainage.set(ch, (countsByChainage.get(ch) ?? 0) + 1);
     }
+
+    let line1Ratio = 0;
+    let line2Ratio = 0;
+    let bestChainage: number | null = null;
+
+    for (const [ch, count] of countsByChainage.entries()) {
+      const ratio = ratioFor(ch);
+      if (ratio > line1Ratio) {
+        line1Ratio = ratio;
+        bestChainage = ch;
+      }
+      // A duplicate chainage means the second parallel pipe reached this point.
+      if (count >= 2 && ratio > line2Ratio) {
+        line2Ratio = ratio;
+      }
+    }
+
+    currentCh = bestChainage;
+    progressPercent = ((line1Ratio + line2Ratio) / 2) * 100;
+    progressPercent = Math.round(progressPercent * 10) / 10;
   }
 
   console.log("[sections/progress]", {

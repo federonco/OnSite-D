@@ -64,6 +64,53 @@ function stripRowIds(rows: GuideTableRow[]): GuideItem[] {
   }));
 }
 
+function resequenceGuideRowsKeepingRowPosition(
+  rows: GuideTableRow[],
+  movedRowId: string
+): GuideTableRow[] {
+  const normalized = rows.map((row) => ({
+    ...row,
+    sequence_number: Math.max(1, Math.trunc(Number(row.sequence_number) || 1)),
+  }));
+
+  const moved = normalized.find((row) => row._rowId === movedRowId);
+  if (!moved) {
+    return [...normalized]
+      .sort((a, b) => a.sequence_number - b.sequence_number)
+      .map((row, idx) => ({ ...row, sequence_number: idx + 1 }));
+  }
+
+  const desiredPos = Math.max(1, moved.sequence_number);
+  const indexedOthers = normalized
+    .map((row, idx) => ({ row, idx }))
+    .filter((x) => x.row._rowId !== movedRowId)
+    .sort((a, b) =>
+      a.row.sequence_number === b.row.sequence_number
+        ? a.idx - b.idx
+        : a.row.sequence_number - b.row.sequence_number
+    );
+
+  const result: GuideTableRow[] = [];
+  let seq = 1;
+  let inserted = false;
+
+  for (const { row } of indexedOthers) {
+    if (!inserted && seq === desiredPos) {
+      result.push({ ...moved, sequence_number: seq });
+      inserted = true;
+      seq += 1;
+    }
+    result.push({ ...row, sequence_number: seq });
+    seq += 1;
+  }
+
+  if (!inserted) {
+    result.push({ ...moved, sequence_number: seq });
+  }
+
+  return result;
+}
+
 type Section = {
   id: string;
   name: string;
@@ -135,6 +182,8 @@ export default function AdminPage() {
   const [guideEnabled, setGuideEnabled] = useState(false);
   const [guideItems, setGuideItems] = useState<GuideTableRow[]>([]);
   const [guideXlsxInputKey, setGuideXlsxInputKey] = useState(0);
+  const [guideCurrentNextSequence, setGuideCurrentNextSequence] = useState<number | null>(null);
+  const [guideCurrentPositionLoading, setGuideCurrentPositionLoading] = useState(false);
   const [loading, setLoading] = useState(false);
   const [printingItrIndex, setPrintingItrIndex] = useState<number | null>(null);
   const [printingAudit, setPrintingAudit] = useState(false);
@@ -323,6 +372,25 @@ export default function AdminPage() {
     setGuideXlsxInputKey((k) => k + 1);
   };
 
+  const addManualGuideRow = () => {
+    setGuideItems((prev) => {
+      const maxSeq = prev.reduce((m, x) => Math.max(m, Number(x.sequence_number) || 0), 0);
+      const nextSeq = maxSeq > 0 ? maxSeq + 1 : (guideCurrentNextSequence ?? 1);
+      const [row] = withStableRowIds([{ sequence_number: nextSeq, item_id: "" }]);
+      const hasCollision = prev.some((x) => Number(x.sequence_number) === nextSeq);
+      if (!hasCollision) {
+        return [...prev, row];
+      }
+      // If the inserted row sequence already exists, push existing rows down.
+      const shifted = prev.map((x) =>
+        Number(x.sequence_number) >= nextSeq
+          ? { ...x, sequence_number: Number(x.sequence_number) + 1 }
+          : x
+      );
+      return [...shifted, row].sort((a, b) => a.sequence_number - b.sequence_number);
+    });
+  };
+
   const openCreate = () => {
     setModalMode("create");
     setEditId(null);
@@ -333,6 +401,8 @@ export default function AdminPage() {
     setSectionJointTypesAllowed([]);
     setGuideEnabled(false);
     setGuideItems([]);
+    setGuideCurrentNextSequence(null);
+    setGuideCurrentPositionLoading(false);
     setGuideXlsxInputKey((k) => k + 1);
     setModalOpen(true);
   };
@@ -352,9 +422,43 @@ export default function AdminPage() {
     setGuideItems(
       withStableRowIds(normalizeGuideXmlFromJsonb(s.guide_xml) ?? [])
     );
+    setGuideCurrentNextSequence(null);
     setGuideXlsxInputKey((k) => k + 1);
     setModalOpen(true);
   };
+
+  useEffect(() => {
+    if (!modalOpen || modalMode !== "edit" || !editId || !guideEnabled) {
+      setGuideCurrentPositionLoading(false);
+      setGuideCurrentNextSequence(null);
+      return;
+    }
+    let cancelled = false;
+    setGuideCurrentPositionLoading(true);
+    (async () => {
+      const { data, error } = await supabase
+        .from("drainer_pipe_records")
+        .select("counter")
+        .eq("section_id", editId)
+        .order("counter", { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (cancelled) return;
+      if (error) {
+        setGuideCurrentPositionLoading(false);
+        setGuideCurrentNextSequence(null);
+        return;
+      }
+      const current = Number(data?.counter);
+      const next = Number.isFinite(current) ? current + 1 : 1;
+      setGuideCurrentNextSequence(next);
+      setGuideCurrentPositionLoading(false);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [modalOpen, modalMode, editId, guideEnabled, supabase]);
 
   const handleSave = async () => {
     if (!name) {
@@ -995,6 +1099,27 @@ export default function AdminPage() {
                 </label>
                 {guideEnabled && (
                   <div className="space-y-2 pl-0.5">
+                    <div className="rounded-md border border-gray-200 bg-gray-50 px-3 py-2 text-xs text-gray-600">
+                      {guideCurrentPositionLoading ? (
+                        <span>Current position: calculating…</span>
+                      ) : (
+                        <span>
+                          Current position on site:{" "}
+                          <strong>
+                            #{guideCurrentNextSequence ?? 1}
+                          </strong>
+                          {" · "}
+                          Expected item:{" "}
+                          <strong>
+                            {guideItems.find(
+                              (x) =>
+                                x.sequence_number === (guideCurrentNextSequence ?? 1) &&
+                                x.item_id.trim() !== ""
+                            )?.item_id ?? "no guide for this position"}
+                          </strong>
+                        </span>
+                      )}
+                    </div>
                     <div className="flex flex-wrap items-center gap-2">
                       <input
                         key={guideXlsxInputKey}
@@ -1014,6 +1139,15 @@ export default function AdminPage() {
                           Clear sheet
                         </Button>
                       )}
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className="h-8 text-xs"
+                        onClick={addManualGuideRow}
+                      >
+                        Add row
+                      </Button>
                     </div>
                     {guideItems.length > 0 && (
                       <div className="mt-3 max-h-64 overflow-y-auto border border-gray-200 rounded-lg">
@@ -1060,9 +1194,9 @@ export default function AdminPage() {
                                     }}
                                     onBlur={() => {
                                       setGuideItems((prev) =>
-                                        [...prev].sort(
-                                          (a, b) =>
-                                            a.sequence_number - b.sequence_number
+                                        resequenceGuideRowsKeepingRowPosition(
+                                          prev,
+                                          item._rowId
                                         )
                                       );
                                     }}
