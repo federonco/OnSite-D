@@ -6,7 +6,8 @@ import { usePathname } from "next/navigation";
 import { getSupabaseBrowser } from "@/lib/supabase/browser";
 
 const links = [
-  { href: "/admin", label: "Sections" },
+  { href: "/admin/sections", label: "Sections" },
+  { href: "/admin", label: "Admin center" },
   { href: "/admin/checkpoints", label: "Checkpoints" },
   { href: "/admin/notifications", label: "Data Analysis" },
 ];
@@ -44,6 +45,8 @@ export function AdminNav() {
         const isActive =
           href === "/admin"
             ? pathname === "/admin"
+            : href === "/admin/sections"
+            ? pathname === "/admin/sections"
             : pathname?.startsWith(href);
         const showBadge = href === "/admin/notifications" && alertsCount !== null && alertsCount > 0;
         return (
