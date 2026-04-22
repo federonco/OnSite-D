@@ -40,6 +40,7 @@ export async function PUT(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params;
+  console.log("[subsections PUT] params.id:", id);
   const { user, token } = await getUserFromRequest(request);
   if (!user || !token) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -98,16 +99,52 @@ export async function PUT(
   }
 
   const supabase = getSupabaseServer({ accessToken: token });
-  const { data, error } = await supabase
+  console.log("[subsections PUT] updates payload:", JSON.stringify(updates, null, 2));
+  const { data: existsByIdOnly, error: existsByIdOnlyError } = await supabase
+    .from("subsections")
+    .select("id,app_id")
+    .eq("id", id)
+    .maybeSingle();
+  console.log("[subsections PUT] exists by id (no app filter):", {
+    id,
+    data: existsByIdOnly,
+    error: existsByIdOnlyError?.message ?? null,
+  });
+
+  const { data: existsByIdAndApp, error: existsByIdAndAppError } = await supabase
+    .from("subsections")
+    .select("id,app_id")
+    .eq("id", id)
+    .eq("app_id", "onsite-d")
+    .maybeSingle();
+  console.log("[subsections PUT] exists by id + app_id=onsite-d:", {
+    id,
+    data: existsByIdAndApp,
+    error: existsByIdAndAppError?.message ?? null,
+  });
+
+  const supabaseAdmin = getSupabaseServer({ useServiceRole: true });
+  const { data, error } = await supabaseAdmin
     .from("subsections")
     .update(updates)
     .eq("id", id)
     .eq("app_id", "onsite-d")
     .select()
-    .single();
+    .maybeSingle();
 
   if (error) {
+    console.log("[subsections PUT] update error:", {
+      id,
+      message: error.message ?? null,
+      code: error.code ?? null,
+      details: error.details ?? null,
+      hint: error.hint ?? null,
+    });
     return NextResponse.json({ error: error.message }, { status: 500 });
+  }
+  if (!data) {
+    console.log("[subsections PUT] update returned null", { id });
+    return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
 
   return NextResponse.json({ subsection: data });

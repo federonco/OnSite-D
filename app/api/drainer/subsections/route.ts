@@ -14,11 +14,13 @@ export async function GET(request: NextRequest) {
   }
 
   const supabase = getSupabaseServer({ accessToken: token });
-  const { data, error } = await supabase
+  const sectionId = request.nextUrl.searchParams.get("section_id")?.trim();
+  let query = supabase
     .from("subsections")
     .select("*")
-    .eq("app_id", "onsite-d")
-    .order("name", { ascending: true });
+    .eq("app_id", "onsite-d");
+  if (sectionId) query = query.eq("section_id", sectionId);
+  const { data, error } = await query.order("name", { ascending: true });
 
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 });

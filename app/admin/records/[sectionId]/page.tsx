@@ -14,6 +14,16 @@ import { getSupabaseBrowser } from "@/lib/supabase/browser";
 import type { PipeRecord } from "@/components/admin/record-edit-form";
 import { useToast } from "@/components/toast";
 
+type GuideItem = { sequence_number: number; item_id: string };
+
+function formatDateForSearch(dateValue: string | null | undefined) {
+  if (!dateValue) return "";
+  const raw = String(dateValue);
+  const parsed = new Date(raw);
+  if (Number.isNaN(parsed.getTime())) return raw.toLowerCase();
+  return parsed.toLocaleDateString("en-AU").toLowerCase();
+}
+
 export default function AdminRecordsPage() {
   const params = useParams();
   const searchParams = useSearchParams();
@@ -27,8 +37,16 @@ export default function AdminRecordsPage() {
   const { pushToast } = useToast();
   const [authEmail, setAuthEmail] = useState<string | null>(null);
   const [isAdmin, setIsAdmin] = useState<boolean | null>(null);
-  const [sections, setSections] = useState<{ id: string; name: string; start_ch?: number | null; end_ch?: number | null }[]>([]);
+  const [sections, setSections] = useState<{
+    id: string;
+    name: string;
+    start_ch?: number | null;
+    end_ch?: number | null;
+    guide_enabled?: boolean;
+    guide_xml?: { sequence_number: number; item_id: string }[] | null;
+  }[]>([]);
   const [records, setRecords] = useState<PipeRecord[]>([]);
+  const [subsectionGuide, setSubsectionGuide] = useState<GuideItem[] | null>(null);
   const [editId, setEditId] = useState<string | null>(null);
   const [editOpen, setEditOpen] = useState(false);
   const [pipeSearch, setPipeSearch] = useState("");
@@ -50,7 +68,14 @@ export default function AdminRecordsPage() {
       headers: token ? { Authorization: `Bearer ${token}` } : {},
     });
     const data = (await res.json()) as {
-      sections?: { id: string; name: string; start_ch?: number | null; end_ch?: number | null }[];
+      sections?: {
+        id: string;
+        name: string;
+        start_ch?: number | null;
+        end_ch?: number | null;
+        guide_enabled?: boolean;
+        guide_xml?: { sequence_number: number; item_id: string }[] | null;
+      }[];
       error?: string;
     };
     if (!res.ok) {
@@ -87,6 +112,65 @@ export default function AdminRecordsPage() {
     setRecords(recs);
   }, [sectionId, getAccessToken, recordFromId, recordToId]);
 
+  const loadSubsectionGuide = useCallback(async () => {
+    if (!sectionId) {
+      setSubsectionGuide(null);
+      return;
+    }
+    const token = await getAccessToken();
+    const res = await fetch(
+      `/api/drainer/subsections?section_id=${encodeURIComponent(sectionId)}`,
+      {
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      }
+    );
+    const data = (await res.json()) as {
+      subsections?: { app_config?: unknown }[];
+      error?: string;
+    };
+    console.log("SUBSECTIONS DATA:", JSON.stringify(data, null, 2));
+    console.log("subsections response:", JSON.stringify(data, null, 2));
+    if (!res.ok || !Array.isArray(data.subsections)) {
+      setSubsectionGuide(null);
+      return;
+    }
+    const firstWithGuide = data.subsections.find((row) => {
+      if (!row || typeof row !== "object") return false;
+      const appConfig =
+        row.app_config &&
+        typeof row.app_config === "object" &&
+        !Array.isArray(row.app_config)
+          ? (row.app_config as Record<string, unknown>)
+          : null;
+      if (!appConfig || appConfig.guide_enabled !== true) return false;
+      return Array.isArray(appConfig.guide_xml) && appConfig.guide_xml.length > 0;
+    });
+    if (!firstWithGuide) {
+      const guideEnabled = false;
+      const guideXml: GuideItem[] | null = null;
+      console.log(
+        "guide_enabled:",
+        guideEnabled,
+        "guide_xml length:",
+        guideXml?.length
+      );
+      console.log("GUIDE ENABLED:", guideEnabled, "GUIDE XML LENGTH:", guideXml?.length ?? 0);
+      setSubsectionGuide(null);
+      return;
+    }
+    const appConfig = firstWithGuide.app_config as Record<string, unknown>;
+    const guideEnabled = appConfig.guide_enabled === true;
+    const guideXml = appConfig.guide_xml as GuideItem[];
+    console.log(
+      "guide_enabled:",
+      guideEnabled,
+      "guide_xml length:",
+      guideXml?.length
+    );
+    console.log("GUIDE ENABLED:", guideEnabled, "GUIDE XML LENGTH:", guideXml?.length ?? 0);
+    setSubsectionGuide(guideXml);
+  }, [sectionId, getAccessToken]);
+
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => {
       setAuthEmail(data.session?.user.email ?? null);
@@ -110,10 +194,12 @@ export default function AdminRecordsPage() {
   useEffect(() => {
     if (sectionId && isAdmin) {
       loadRecords();
+      loadSubsectionGuide();
     } else {
       setRecords([]);
+      setSubsectionGuide(null);
     }
-  }, [sectionId, isAdmin, loadRecords]);
+  }, [sectionId, isAdmin, loadRecords, loadSubsectionGuide]);
 
   const filteredRecords = useMemo(() => {
     let list = records;
@@ -131,11 +217,26 @@ export default function AdminRecordsPage() {
     if (!q) return list;
     return list.filter((r) => {
       const pf = (r.pipe_fitting_id ?? "").toLowerCase();
-      return pf.includes(q);
+      const ch = String(r.chainage ?? "").toLowerCase();
+      const dateRaw = (r.date_installed ?? "").toLowerCase();
+      const dateFormatted = formatDateForSearch(r.date_installed);
+      return (
+        pf.includes(q) ||
+        ch.includes(q) ||
+        dateRaw.includes(q) ||
+        dateFormatted.includes(q)
+      );
     });
   }, [records, chMin, chMax, recordFromId, recordToId, pipeSearch]);
 
   const selectedSection = sections.find((s) => s.id === sectionId);
+  const sectionGuideSource = subsectionGuide
+    ? {
+        ...selectedSection,
+        guide_enabled: true,
+        guide_xml: subsectionGuide,
+      }
+    : selectedSection;
   const sectionName = selectedSection?.name ?? sectionId ?? "Records";
 
   const handleEditRecord = (id: string) => {
@@ -226,7 +327,7 @@ export default function AdminRecordsPage() {
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-[var(--muted-foreground)] pointer-events-none" />
           <Input
             type="text"
-            placeholder="Search Pipe #..."
+            placeholder="Search Pipe #, Date, CH..."
             value={pipeSearch}
             onChange={(e) => setPipeSearch(e.target.value)}
             className="pl-9 max-w-xs"
@@ -237,10 +338,12 @@ export default function AdminRecordsPage() {
           sectionName={sectionName}
           sectionId={sectionId}
           records={filteredRecords}
+          totalInstalledCount={records.length}
           onEditRecord={handleEditRecord}
           getAccessToken={getAccessToken}
           emptyMessage={pipeSearch.trim() && filteredRecords.length === 0 ? "No records found" : undefined}
           progressRefreshTrigger={progressRefreshTrigger}
+          selectedSection={sectionGuideSource}
         />
       </div>
 

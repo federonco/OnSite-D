@@ -6,6 +6,7 @@ import { getSupabaseServer } from "@/lib/supabase/server";
 export type TrendRecord = {
   counter: number | null;
   chainage: number;
+  date_installed: string | null;
   deflection_v_sign: string | null;
   deflection_v_mm: number | null;
   deflection_h_side: string | null;
@@ -29,11 +30,26 @@ export async function GET(request: NextRequest) {
 
   const { searchParams } = new URL(request.url);
   const sectionId = searchParams.get("section_id");
+  const subsectionId = searchParams.get("subsection_id");
 
   const supabase = getSupabaseServer({ useServiceRole: true });
 
-  if (sectionId) {
-    const result = await getDeflectionTrendForSection(supabase, sectionId);
+  let resolvedSectionId = sectionId;
+  if (!resolvedSectionId && subsectionId) {
+    const { data: subsection } = await supabase
+      .from("subsections")
+      .select("section_id")
+      .eq("id", subsectionId)
+      .maybeSingle();
+    resolvedSectionId = subsection?.section_id ?? null;
+  }
+
+  if (resolvedSectionId) {
+    const result = await getDeflectionTrendForSection(
+      supabase,
+      resolvedSectionId,
+      subsectionId ?? undefined
+    );
     return NextResponse.json(result);
   }
 
@@ -65,7 +81,8 @@ export async function GET(request: NextRequest) {
 
 async function getDeflectionTrendForSection(
   supabase: ReturnType<typeof getSupabaseServer>,
-  sectionId: string
+  sectionId: string,
+  subsectionId?: string
 ): Promise<{ section_id: string; trends: DeflectionTrendEntry[] }> {
   const { data: section } = await supabase
     .from("drainer_sections")
@@ -75,11 +92,15 @@ async function getDeflectionTrendForSection(
 
   const ascending = section?.direction !== "backwards";
 
-  const { data: records, error } = await supabase
+  let query = supabase
     .from("drainer_pipe_records")
-    .select("id,counter,chainage,deflection_v_sign,deflection_v_mm,deflection_h_side,deflection_h_mm")
+    .select("id,counter,chainage,date_installed,deflection_v_sign,deflection_v_mm,deflection_h_side,deflection_h_mm")
     .eq("section_id", sectionId)
     .order("chainage", { ascending });
+  if (subsectionId) {
+    query = query.eq("subsection_id", subsectionId);
+  }
+  const { data: records, error } = await query;
 
   if (error || !records?.length) {
     return { section_id: sectionId, trends: [] };
@@ -89,6 +110,7 @@ async function getDeflectionTrendForSection(
     id: r.id,
     counter: r.counter ?? null,
     chainage: Number(r.chainage),
+    date_installed: r.date_installed ?? null,
     deflection_v_sign: r.deflection_v_sign ?? null,
     deflection_v_mm: r.deflection_v_mm != null ? Number(r.deflection_v_mm) : null,
     deflection_h_side: r.deflection_h_side ?? null,

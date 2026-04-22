@@ -13,6 +13,7 @@ type Section = {
   joint_types?: string[] | null;
   guide_enabled?: boolean;
   guide_xml?: { sequence_number: number; item_id: string }[] | null;
+  subsection_id?: string;
 };
 
 export default function Home() {
@@ -25,11 +26,15 @@ export default function Home() {
   const [sectionsError, setSectionsError] = useState<string | null>(null);
   const [lastPipesRefresh, setLastPipesRefresh] = useState(0);
 
-  const urlSection = searchParams.get("section");
+  const urlSection = searchParams.get("section_id") ?? searchParams.get("section");
+  const urlSubsectionId = searchParams.get("subsection_id");
   const urlCh = searchParams.get("ch");
 
   const loadSections = useCallback(async () => {
-    const res = await fetch("/api/drainer/sections");
+    const params = new URLSearchParams();
+    if (urlSubsectionId) params.set("subsection_id", urlSubsectionId);
+    const qs = params.toString();
+    const res = await fetch(`/api/drainer/sections${qs ? `?${qs}` : ""}`);
     const data = (await res.json()) as { sections?: Section[]; error?: string };
     if (!res.ok) {
       setSectionsError(data.error ?? res.statusText);
@@ -42,23 +47,29 @@ export default function Home() {
     }
     setSections(data.sections);
     setSectionId((prev) => {
+      const fromSubsection =
+        urlSubsectionId &&
+        data.sections!.find((s: Section) => s.subsection_id === urlSubsectionId)?.id;
       const fromUrl =
         urlSection && data.sections!.find((s: Section) => s.id === urlSection)?.id;
       const next =
-        fromUrl ?? data.sections!.find((s: Section) => s.id === prev)?.id;
+        fromUrl ??
+        fromSubsection ??
+        data.sections!.find((s: Section) => s.id === prev)?.id;
       return next ?? (data.sections![0]?.id ?? "");
     });
-  }, [urlSection]);
+  }, [urlSection, urlSubsectionId]);
 
   useEffect(() => {
     loadSections().finally(() => setLoading(false));
-  }, [loadSections, urlSection]);
+  }, [loadSections, urlSection, urlSubsectionId]);
 
   const setSectionAndUrl = useCallback(
     (id: string) => {
       setSectionId(id);
       const params = new URLSearchParams(searchParams.toString());
-      params.set("section", id);
+      params.set("section_id", id);
+      params.delete("section");
       router.replace(`${pathname}?${params.toString()}`, { scroll: false });
     },
     [pathname, router, searchParams]
@@ -102,6 +113,7 @@ export default function Home() {
             <LodgeForm
               sections={sections}
               sectionId={sectionId}
+              subsectionId={urlSubsectionId ?? undefined}
               onSectionChange={setSectionAndUrl}
               initialCh={urlCh}
               onSuccess={() => setLastPipesRefresh((k) => k + 1)}

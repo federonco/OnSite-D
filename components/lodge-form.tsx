@@ -35,11 +35,13 @@ type Section = {
   joint_types?: string[] | null;
   guide_enabled?: boolean;
   guide_xml?: { sequence_number: number; item_id: string }[] | null;
+  subsection_id?: string;
 };
 
 type LodgeFormProps = {
   sections: Section[];
   sectionId: string;
+  subsectionId?: string;
   onSectionChange: (id: string) => void;
   onSuccess?: () => void;
   /** Initial chainage from QR/deep-link (triggers validation on load) */
@@ -69,6 +71,7 @@ function validateChainage(value: string): string | null {
 export function LodgeForm({
   sections,
   sectionId,
+  subsectionId,
   onSectionChange,
   onSuccess,
   initialCh,
@@ -112,6 +115,8 @@ export function LodgeForm({
     () => sections.find((s) => s.id === sectionId),
     [sections, sectionId]
   );
+  const effectiveGuideEnabled = selectedSection?.guide_enabled === true;
+  const effectiveGuideXml = selectedSection?.guide_xml ?? null;
 
   const isSectionLocked =
     !!lockedSectionId && lockedSectionId === sectionId;
@@ -162,16 +167,15 @@ export function LodgeForm({
       setGuideRefLoading(false);
       return;
     }
-    const sec = selectedSection;
     if (
-      !sec?.guide_enabled ||
-      sec.guide_xml == null
+      !effectiveGuideEnabled ||
+      effectiveGuideXml == null
     ) {
       setGuideRefData(null);
       setGuideRefLoading(false);
       return;
     }
-    const list = normalizeGuideXmlFromJsonb(sec.guide_xml);
+    const list = normalizeGuideXmlFromJsonb(effectiveGuideXml);
     if (!list?.length) {
       setGuideRefData(null);
       setGuideRefLoading(false);
@@ -206,7 +210,7 @@ export function LodgeForm({
     return () => {
       cancelled = true;
     };
-  }, [sectionId, selectedSection, guideRefreshKey]);
+  }, [sectionId, subsectionId, selectedSection, effectiveGuideEnabled, effectiveGuideXml, guideRefreshKey]);
 
   const getAccessToken = useCallback(async () => {
     const { data } = await supabase.auth.getSession();
@@ -355,6 +359,7 @@ export function LodgeForm({
         },
         body: JSON.stringify({
           section_id: sectionId,
+          ...(subsectionId ? { subsection_id: subsectionId } : {}),
           date_installed: dateInstalled,
           chainage: ch,
           pipe_fitting_id: pipeFittingId.trim(),
@@ -518,8 +523,8 @@ export function LodgeForm({
         <CardContent className="pt-0">
           <div className="drainer-title mb-2">Pipe ID / fitting</div>
           {sectionId &&
-            selectedSection?.guide_enabled === true &&
-            selectedSection.guide_xml != null &&
+            effectiveGuideEnabled &&
+            effectiveGuideXml != null &&
             !guideRefLoading &&
             guideRefData &&
             (guideRefData.item ? (

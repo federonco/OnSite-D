@@ -89,6 +89,7 @@ export async function POST(request: NextRequest) {
   const body = await request.json();
   const {
     section_id,
+    subsection_id,
     date_installed,
     time_installed,
     chainage,
@@ -134,6 +135,7 @@ export async function POST(request: NextRequest) {
 
   const record = {
     section_id,
+    ...(subsection_id ? { subsection_id } : {}),
     date_installed: date_installed || null,
     time_installed: time_installed || null,
     chainage: Number(chainage),
@@ -155,9 +157,30 @@ export async function POST(request: NextRequest) {
     ai_insight: ai_insight || null,
   };
 
+  const { data: maxCounterRow, error: maxCounterError } = await supabaseForInsert
+    .from("drainer_pipe_records")
+    .select("counter")
+    .eq("section_id", section_id)
+    .order("counter", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (maxCounterError) {
+    return NextResponse.json({ error: maxCounterError.message }, { status: 500 });
+  }
+
+  const currentMaxCounter =
+    maxCounterRow?.counter != null && Number.isFinite(Number(maxCounterRow.counter))
+      ? Number(maxCounterRow.counter)
+      : 0;
+  const nextCounter = currentMaxCounter + 1;
+
   const { data, error } = await supabaseForInsert
     .from("drainer_pipe_records")
-    .insert(record)
+    .insert({
+      ...record,
+      counter: nextCounter,
+    })
     .select("id,chainage,pipe_fitting_id,joint_type,date_installed")
     .single();
 

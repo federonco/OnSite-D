@@ -31,7 +31,6 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Loader2 } from "lucide-react";
-import { SectionQrRow } from "@/components/admin/section-qr-row";
 
 type Section = {
   id: string;
@@ -231,6 +230,14 @@ export default function AdminPage() {
   );
 
   const reportsPending = progress.currentOpenCount > 0 ? 1 : 0;
+  const reportModalDescription =
+    reportModalType === "audit"
+      ? "Audit report: This report contains all the raw data for the selected section."
+      : reportModalType === "itr-all"
+        ? "All ITRs report: This sends all ITR PDFs for the selected section."
+        : reportModalType === "itr-open"
+          ? "Open ITR report: This sends the current incomplete ITR for the selected section."
+          : "ITR report: This sends the selected ITR PDF for the selected section.";
 
   const handleSendQR = async () => {
     if (!sectionId || !sendQREmail.trim()) return;
@@ -465,23 +472,6 @@ export default function AdminPage() {
           </CardContent>
         </Card>
 
-        <Card className="drainer-card">
-          <CardContent className="pt-0">
-            <div className="drainer-title">Section QR (field access)</div>
-            <div className="space-y-3 max-h-[min(70vh,520px)] overflow-y-auto pr-1 mt-2">
-              {sections.map((s) => (
-                <SectionQrRow
-                  key={s.id}
-                  section={s}
-                  getAccessToken={getAccessToken}
-                  defaultReportEmail={reportDefaultEmail || authEmail || ""}
-                  onQrUpdated={loadSections}
-                />
-              ))}
-            </div>
-          </CardContent>
-        </Card>
-
         {selectedSection && (
           <Card className="drainer-card">
             <CardHeader className="pb-2">
@@ -574,7 +564,14 @@ export default function AdminPage() {
                   </div>
                 </div>
               </div>
-              <SectionProgressBar sectionId={sectionId} getAccessToken={getAccessToken} refreshTrigger={progressRefreshTrigger} />
+              <SectionProgressBar
+                sectionId={sectionId}
+                getAccessToken={getAccessToken}
+                refreshTrigger={progressRefreshTrigger}
+                installedCount={records.length}
+                guideEnabled={selectedSection?.guide_enabled}
+                guideXml={selectedSection?.guide_xml ?? null}
+              />
               {itrBlocks.length > 0 ? (
                 <div className="max-h-[280px] space-y-3 overflow-y-auto pr-1">
                   {itrBlocks.map((block) => (
@@ -723,6 +720,12 @@ export default function AdminPage() {
             <DialogTitle>Send report to</DialogTitle>
           </DialogHeader>
           <div className="space-y-3">
+            <p className="text-sm text-[var(--muted-foreground)]">
+              {reportModalDescription}
+            </p>
+            <p className="text-sm text-[var(--muted-foreground)]">
+              Enter the email address that should receive the selected report PDF.
+            </p>
             <Input
               type="email"
               placeholder="Email address"

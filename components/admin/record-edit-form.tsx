@@ -26,6 +26,8 @@ export type PipeRecord = {
   section_id: string | null;
   date_installed: string | null;
   time_installed: string | null;
+  lodged_at?: string | null;
+  updated_at?: string | null;
   chainage: number;
   pipe_fitting_id: string | null;
   joint_type: string | null;

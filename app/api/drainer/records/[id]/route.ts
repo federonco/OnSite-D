@@ -90,7 +90,9 @@ export async function PUT(
     .from("drainer_pipe_records")
     .update(updates)
     .eq("id", id)
-    .select()
+    .select(
+      "id,section_id,subsection_id,counter,date_installed,time_installed,lodged_at,updated_at,chainage,pipe_fitting_id,joint_type,witness_mark,internal_seal,deflection_v_sign,deflection_v_mm,deflection_h_side,deflection_h_mm,cp_lugs,ovality_check,joint_air_test,cement_liner,spark_testing,inspector_name,signature_data,ai_insight"
+    )
     .single();
 
   if (error) {

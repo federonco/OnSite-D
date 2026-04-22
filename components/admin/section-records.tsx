@@ -18,9 +18,19 @@ type SectionProgressBarProps = {
   sectionId: string;
   getAccessToken: () => Promise<string | null>;
   refreshTrigger?: number; // increment to refetch (e.g. after record edit)
+  installedCount: number;
+  guideEnabled?: boolean;
+  guideXml?: { sequence_number: number; item_id: string }[] | null;
 };
 
-export function SectionProgressBar({ sectionId, getAccessToken, refreshTrigger }: SectionProgressBarProps) {
+export function SectionProgressBar({
+  sectionId,
+  getAccessToken,
+  refreshTrigger,
+  installedCount,
+  guideEnabled,
+  guideXml,
+}: SectionProgressBarProps) {
   const [progress, setProgress] = useState<SectionChProgress | null>(null);
 
   useEffect(() => {
@@ -40,14 +50,28 @@ export function SectionProgressBar({ sectionId, getAccessToken, refreshTrigger }
     return () => { cancelled = true; };
   }, [sectionId, getAccessToken, refreshTrigger]);
 
-  const label = progress?.configured
+  const hasGuideProgress =
+    guideEnabled === true && Array.isArray(guideXml) && guideXml.length > 0;
+  const guideTotalItems = hasGuideProgress ? guideXml.length : 0;
+  const guidePercent =
+    hasGuideProgress && guideTotalItems > 0
+      ? Math.round((installedCount / guideTotalItems) * 100)
+      : 0;
+
+  const label = hasGuideProgress
+    ? `${installedCount} / ${guideTotalItems} items · ${guidePercent}%`
+    : progress?.configured
     ? progress?.hasRecords
       ? `CH ${(progress.currentCh ?? 0).toLocaleString("en-AU", { minimumFractionDigits: 2 })} → ${(progress.endCh ?? 0).toLocaleString("en-AU", { minimumFractionDigits: 2 })} · ${progress.progressPercent}%`
       : "No records yet"
     : progress
       ? "Configure section CH to see progress"
       : "Loading…";
-  const percent = progress?.configured && progress?.hasRecords ? progress.progressPercent : 0;
+  const percent = hasGuideProgress
+    ? guidePercent
+    : progress?.configured && progress?.hasRecords
+      ? progress.progressPercent
+      : 0;
 
   return (
     <div>
@@ -69,10 +93,15 @@ type SectionRecordsProps = {
   sectionName: string;
   sectionId: string;
   records: PipeRecord[];
+  totalInstalledCount?: number;
   onEditRecord: (id: string) => void;
   getAccessToken: () => Promise<string | null>;
   emptyMessage?: string;
   progressRefreshTrigger?: number;
+  selectedSection?: {
+    guide_enabled?: boolean;
+    guide_xml?: { sequence_number: number; item_id: string }[] | null;
+  } | null;
 };
 
 function formatDate(d: string | null) {
@@ -103,6 +132,32 @@ function formatTime(d: string | null, t: string | null) {
   }
 }
 
+function formatTimeFromTimestamp(ts: string | null | undefined) {
+  if (!ts) return "—";
+  try {
+    const date = new Date(ts);
+    if (isNaN(date.getTime())) return "—";
+    const hrs = date.getHours();
+    const mins = date.getMinutes();
+    return `${String(hrs).padStart(2, "0")}:${String(mins).padStart(2, "0")}`;
+  } catch {
+    return "—";
+  }
+}
+
+function formatLodgedTime(r: PipeRecord) {
+  return formatTime(r.date_installed, r.time_installed) !== "—"
+    ? formatTime(r.date_installed, r.time_installed)
+    : formatTimeFromTimestamp(r.lodged_at);
+}
+
+function formatEditedTime(r: PipeRecord) {
+  const edited = formatTimeFromTimestamp(r.updated_at);
+  if (edited === "—") return "—";
+  if (r.lodged_at && r.updated_at && r.lodged_at === r.updated_at) return "—";
+  return edited;
+}
+
 function formatAlignment(r: PipeRecord) {
   const vSign = r.deflection_v_sign ?? "+";
   const vMm = r.deflection_v_mm ?? 0;
@@ -115,19 +170,22 @@ export function SectionRecords({
   sectionName,
   sectionId,
   records,
+  totalInstalledCount,
   onEditRecord,
   getAccessToken,
   emptyMessage = "No records yet",
   progressRefreshTrigger,
+  selectedSection,
 }: SectionRecordsProps) {
   const itrProgress = useMemo(() => getITRProgress(records.length), [records.length]);
+  const installedCount = totalInstalledCount ?? records.length;
 
   return (
-    <Card className="drainer-card">
+    <Card className="drainer-card resize-y overflow-auto min-h-[420px] max-h-[90vh]">
       <CardHeader>
         <CardTitle className="drainer-title">{sectionName} — Records</CardTitle>
       </CardHeader>
-      <CardContent className="space-y-4">
+      <CardContent className="space-y-4 flex flex-col min-h-0">
         <div className="flex flex-wrap gap-2 items-center">
           <span className="drainer-badge-ready">
             <span className="drainer-badge-ready-dot" aria-hidden />
@@ -139,15 +197,23 @@ export function SectionRecords({
           </span>
         </div>
 
-        <SectionProgressBar sectionId={sectionId} getAccessToken={getAccessToken} refreshTrigger={progressRefreshTrigger} />
+        <SectionProgressBar
+          sectionId={sectionId}
+          getAccessToken={getAccessToken}
+          refreshTrigger={progressRefreshTrigger}
+          installedCount={installedCount}
+          guideEnabled={selectedSection?.guide_enabled}
+          guideXml={selectedSection?.guide_xml ?? null}
+        />
 
-        <div className="border border-[var(--border)] rounded-lg overflow-hidden bg-[#E8D2BF]">
-          <div className="overflow-x-auto max-h-64 overflow-y-auto">
+        <div className="border border-[var(--border)] rounded-lg overflow-hidden bg-[#E8D2BF] flex-1 min-h-[220px]">
+          <div className="overflow-x-auto overflow-y-auto h-full">
             <table className="w-full text-sm min-w-[400px] font-[var(--font-body)]">
               <thead className="bg-[#EEE4DA] sticky top-0">
                 <tr>
                   <th className="text-left px-3 py-2 font-semibold whitespace-nowrap">Date</th>
-                  <th className="text-left px-3 py-2 font-semibold whitespace-nowrap">Time</th>
+                  <th className="text-left px-3 py-2 font-semibold whitespace-nowrap">Time (lodged)</th>
+                  <th className="text-left px-3 py-2 font-semibold whitespace-nowrap">Edited time</th>
                   <th className="text-left px-3 py-2 font-semibold whitespace-nowrap">CH</th>
                   <th className="text-left px-3 py-2 font-semibold whitespace-nowrap">Pipe ID</th>
                   <th className="text-left px-3 py-2 font-semibold whitespace-nowrap">Joint</th>
@@ -157,7 +223,7 @@ export function SectionRecords({
               <tbody>
                 {records.length === 0 ? (
                   <tr>
-                    <td colSpan={6} className="px-3 py-4 text-center text-[var(--muted-foreground)]">
+                    <td colSpan={7} className="px-3 py-4 text-center text-[var(--muted-foreground)]">
                       {emptyMessage}
                     </td>
                   </tr>
@@ -168,7 +234,8 @@ export function SectionRecords({
                       className="border-t border-[var(--border)] hover:bg-[var(--surface-alt)]/50"
                     >
                       <td className="px-3 py-2 whitespace-nowrap">{formatDate(r.date_installed)}</td>
-                      <td className="px-3 py-2 whitespace-nowrap">{formatTime(r.date_installed, r.time_installed)}</td>
+                      <td className="px-3 py-2 whitespace-nowrap">{formatLodgedTime(r)}</td>
+                      <td className="px-3 py-2 whitespace-nowrap">{formatEditedTime(r)}</td>
                       <td className="px-3 py-2 whitespace-nowrap">{r.chainage}</td>
                       <td className="px-3 py-2 text-xs whitespace-nowrap">{r.pipe_fitting_id ?? "—"}</td>
                       <td className="px-3 py-2 whitespace-nowrap">{r.joint_type ?? "—"}</td>

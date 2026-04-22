@@ -42,11 +42,26 @@ export async function GET(request: NextRequest) {
 
   const { searchParams } = new URL(request.url);
   const sectionId = searchParams.get("section_id");
+  const subsectionId = searchParams.get("subsection_id");
 
   const supabase = getSupabaseServer({ useServiceRole: true });
 
-  if (sectionId) {
-    const result = await getNearToleranceForSection(supabase, sectionId);
+  let resolvedSectionId = sectionId;
+  if (!resolvedSectionId && subsectionId) {
+    const { data: subsection } = await supabase
+      .from("subsections")
+      .select("section_id")
+      .eq("id", subsectionId)
+      .maybeSingle();
+    resolvedSectionId = subsection?.section_id ?? null;
+  }
+
+  if (resolvedSectionId) {
+    const result = await getNearToleranceForSection(
+      supabase,
+      resolvedSectionId,
+      subsectionId ?? undefined
+    );
     return NextResponse.json(result);
   }
 
@@ -78,12 +93,17 @@ export async function GET(request: NextRequest) {
 
 async function getNearToleranceForSection(
   supabase: ReturnType<typeof getSupabaseServer>,
-  sectionId: string
+  sectionId: string,
+  subsectionId?: string
 ): Promise<{ section_id: string; records: NearToleranceRecord[] }> {
-  const { data: records, error } = await supabase
+  let query = supabase
     .from("drainer_pipe_records")
     .select("id,counter,chainage,pipe_fitting_id,deflection_v_sign,deflection_v_mm,deflection_h_side,deflection_h_mm")
     .eq("section_id", sectionId);
+  if (subsectionId) {
+    query = query.eq("subsection_id", subsectionId);
+  }
+  const { data: records, error } = await query;
 
   if (error) {
     throw new Error(error.message);

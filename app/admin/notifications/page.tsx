@@ -17,6 +17,13 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { RefreshCw } from "lucide-react";
 
 type InconsistencyItem = {
@@ -64,6 +71,7 @@ type NearToleranceSection = { section_id: string; section_name?: string; records
 type DeflectionTrendRecord = {
   counter: number | null;
   chainage: number;
+  date_installed?: string | null;
   deflection_v_sign?: string | null;
   deflection_v_mm?: number | null;
   deflection_h_side?: string | null;
@@ -87,6 +95,7 @@ type FittingRecord = {
   date_installed: string | null;
 };
 type FittingsSection = { section_id: string; section_name?: string; records: FittingRecord[] };
+type FilterSection = { id: string; name: string };
 
 export default function NotificationsPage() {
   const supabase = getSupabaseBrowser();
@@ -131,16 +140,28 @@ export default function NotificationsPage() {
     r: NearToleranceRecord;
   } | null>(null);
   const [validatingNearKey, setValidatingNearKey] = useState<string | null>(null);
+  const [filterSections, setFilterSections] = useState<FilterSection[]>([]);
+  const [selectedSectionId, setSelectedSectionId] = useState<string>("all");
   const getAccessToken = useCallback(async () => {
     const { data } = await supabase.auth.getSession();
     return data.session?.access_token ?? null;
   }, [supabase]);
 
+  const buildFilterQuery = useCallback(() => {
+    const params = new URLSearchParams();
+    if (selectedSectionId !== "all") {
+      params.set("section_id", selectedSectionId);
+    }
+    const query = params.toString();
+    return query ? `?${query}` : "";
+  }, [selectedSectionId]);
+
   const loadInconsistencies = useCallback(async () => {
     const token = await getAccessToken();
     setInconsistenciesLoading(true);
     try {
-      const res = await fetch("/api/drainer/records/inconsistencies", {
+      const res = await fetch(`/api/drainer/records/inconsistencies${buildFilterQuery()}`, {
+        cache: "no-store",
         headers: token ? { Authorization: `Bearer ${token}` } : {},
       });
       const data = await res.json();
@@ -150,13 +171,14 @@ export default function NotificationsPage() {
     } finally {
       setInconsistenciesLoading(false);
     }
-  }, [getAccessToken]);
+  }, [getAccessToken, buildFilterQuery]);
 
   const loadDuplicates = useCallback(async () => {
     const token = await getAccessToken();
     setDuplicatesLoading(true);
     try {
-      const res = await fetch("/api/drainer/records/duplicates", {
+      const res = await fetch(`/api/drainer/records/duplicates${buildFilterQuery()}`, {
+        cache: "no-store",
         headers: token ? { Authorization: `Bearer ${token}` } : {},
       });
       const data = await res.json();
@@ -167,13 +189,14 @@ export default function NotificationsPage() {
     } finally {
       setDuplicatesLoading(false);
     }
-  }, [getAccessToken]);
+  }, [getAccessToken, buildFilterQuery]);
 
   const loadNearTolerance = useCallback(async () => {
     const token = await getAccessToken();
     setNearToleranceLoading(true);
     try {
-      const res = await fetch("/api/drainer/records/near-tolerance", {
+      const res = await fetch(`/api/drainer/records/near-tolerance${buildFilterQuery()}`, {
+        cache: "no-store",
         headers: token ? { Authorization: `Bearer ${token}` } : {},
       });
       const data = await res.json();
@@ -184,13 +207,14 @@ export default function NotificationsPage() {
     } finally {
       setNearToleranceLoading(false);
     }
-  }, [getAccessToken]);
+  }, [getAccessToken, buildFilterQuery]);
 
   const loadFittings = useCallback(async () => {
     const token = await getAccessToken();
     setFittingsLoading(true);
     try {
-      const res = await fetch("/api/drainer/records/fittings", {
+      const res = await fetch(`/api/drainer/records/fittings${buildFilterQuery()}`, {
+        cache: "no-store",
         headers: token ? { Authorization: `Bearer ${token}` } : {},
       });
       const data = await res.json();
@@ -201,13 +225,14 @@ export default function NotificationsPage() {
     } finally {
       setFittingsLoading(false);
     }
-  }, [getAccessToken]);
+  }, [getAccessToken, buildFilterQuery]);
 
   const loadDeflectionTrend = useCallback(async () => {
     const token = await getAccessToken();
     setDeflectionTrendLoading(true);
     try {
-      const res = await fetch("/api/drainer/records/deflection-trend", {
+      const res = await fetch(`/api/drainer/records/deflection-trend${buildFilterQuery()}`, {
+        cache: "no-store",
         headers: token ? { Authorization: `Bearer ${token}` } : {},
       });
       const data = await res.json();
@@ -218,15 +243,45 @@ export default function NotificationsPage() {
     } finally {
       setDeflectionTrendLoading(false);
     }
-  }, [getAccessToken]);
+  }, [getAccessToken, buildFilterQuery]);
 
-  const loadAllValidation = useCallback(() => {
-    loadInconsistencies();
-    loadFittings();
-    loadDuplicates();
-    loadNearTolerance();
-    loadDeflectionTrend();
-  }, [loadInconsistencies, loadFittings, loadDuplicates, loadNearTolerance, loadDeflectionTrend]);
+  const loadAllValidation = useCallback(
+    async (showToast = false) => {
+      await Promise.all([
+        loadInconsistencies(),
+        loadFittings(),
+        loadDuplicates(),
+        loadNearTolerance(),
+        loadDeflectionTrend(),
+      ]);
+      if (showToast) {
+        pushToast({ type: "success", title: "Data refreshed" });
+      }
+    },
+    [
+      loadInconsistencies,
+      loadFittings,
+      loadDuplicates,
+      loadNearTolerance,
+      loadDeflectionTrend,
+      pushToast,
+    ]
+  );
+
+  const loadFilterOptions = useCallback(async () => {
+    const token = await getAccessToken();
+    const sectionsRes = await fetch("/api/drainer/sections", {
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    });
+    const sectionsJson = (await sectionsRes.json().catch(() => ({}))) as {
+      sections?: { id: string; name: string }[];
+    };
+    setFilterSections(
+      Array.isArray(sectionsJson.sections)
+        ? sectionsJson.sections.map((s) => ({ id: s.id, name: s.name }))
+        : []
+    );
+  }, [getAccessToken]);
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => {
@@ -244,15 +299,16 @@ export default function NotificationsPage() {
       const json = await res.json();
       setIsAdmin(json.isAdmin ?? false);
       if (json.isAdmin) {
-        loadInconsistencies();
-        loadFittings();
-        loadDuplicates();
-        loadNearTolerance();
-        loadDeflectionTrend();
+        loadFilterOptions();
       }
     };
     check();
-  }, [authEmail, getAccessToken, loadInconsistencies, loadFittings, loadDuplicates, loadNearTolerance, loadDeflectionTrend]);
+  }, [authEmail, getAccessToken, loadFilterOptions, loadAllValidation]);
+
+  useEffect(() => {
+    if (!authEmail || !isAdmin) return;
+    loadAllValidation();
+  }, [authEmail, isAdmin, selectedSectionId, loadAllValidation]);
 
   const openViewRecord = (inc: InconsistencyItem) => {
     const note =
@@ -436,7 +492,6 @@ export default function NotificationsPage() {
     sec.inconsistencies.map((inc) => ({ inc, sec }))
   );
   const hasInconsistencies = allInconsistencies.length > 0;
-
   if (authEmail === null || isAdmin === null) {
     return (
       <div className="drainer-page">
@@ -481,12 +536,32 @@ export default function NotificationsPage() {
         <Card className="drainer-card">
           <CardContent className="pt-0">
             <div className="flex items-start justify-between gap-4">
-              <div className="drainer-title">Data validation</div>
+              <div className="space-y-3 w-full">
+                <div className="drainer-title">Data validation</div>
+                <div className="grid grid-cols-1 md:grid-cols-1 gap-2 max-w-sm">
+                  <Select
+                    value={selectedSectionId}
+                    onValueChange={setSelectedSectionId}
+                  >
+                    <SelectTrigger className="drainer-input">
+                      <SelectValue placeholder="Section" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All sections</SelectItem>
+                      {filterSections.map((s) => (
+                        <SelectItem key={s.id} value={s.id}>
+                          {s.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
               <Button
                 variant="outline"
                 size="sm"
                 className="min-h-[44px] min-w-[44px] shrink-0 rounded-full bg-[var(--card-bg)] border-0 hover:bg-[var(--surface)]"
-                onClick={loadAllValidation}
+                onClick={() => void loadAllValidation(true)}
                 disabled={inconsistenciesLoading || duplicatesLoading || nearToleranceLoading || deflectionTrendLoading || fittingsLoading}
                 title="Refresh"
               >
@@ -755,12 +830,15 @@ export default function NotificationsPage() {
                           const chMin = Math.min(...t.records.map((r) => r.chainage));
                           const chMax = Math.max(...t.records.map((r) => r.chainage));
                           const formatRec = (r: DeflectionTrendRecord) => {
+                            const dateText = r.date_installed
+                              ? new Date(r.date_installed).toLocaleDateString("en-AU")
+                              : "No date";
                             if (t.type === "vertical") {
                               const v = `${r.deflection_v_sign ?? "+"}${Math.abs(r.deflection_v_mm ?? 0)}mm`;
-                              return `#${r.counter ?? "?"} CH ${r.chainage.toLocaleString("en-AU", { minimumFractionDigits: 2 })} (${v})`;
+                              return `Date ${dateText} · CH ${r.chainage.toLocaleString("en-AU", { minimumFractionDigits: 2 })} · Deflection ${v}`;
                             }
                             const h = `${r.deflection_h_side ?? "L"}${Math.abs(r.deflection_h_mm ?? 0)}mm`;
-                            return `#${r.counter ?? "?"} CH ${r.chainage.toLocaleString("en-AU", { minimumFractionDigits: 2 })} (${h})`;
+                            return `Date ${dateText} · CH ${r.chainage.toLocaleString("en-AU", { minimumFractionDigits: 2 })} · Deflection ${h}`;
                           };
                           return (
                             <div key={`${sec.section_id}-${t.type}-${idx}`} className="rounded-xl border border-[var(--border)] bg-white p-4 shadow-sm">
@@ -782,11 +860,7 @@ export default function NotificationsPage() {
                                   <li key={i}>{formatRec(r)}</li>
                                 ))}
                               </ul>
-                              {t.first_record_id && (
-                                <Button variant="outline" size="sm" className="min-h-[44px] w-full" onClick={() => openViewRecordById(t.first_record_id!, "Deflection trend — 4 consecutive records in same direction. Possible alignment issue in trench.", chMin, chMax)}>
-                                  View Record #{t.first_record_counter ?? "?"}
-                                </Button>
-                              )}
+                              {null}
                             </div>
                           );
                         })
