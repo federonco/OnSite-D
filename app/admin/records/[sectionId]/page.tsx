@@ -147,14 +147,14 @@ export default function AdminRecordsPage() {
     });
     if (!firstWithGuide) {
       const guideEnabled = false;
-      const guideXml: GuideItem[] | null = null;
+      const guideXmlLength = 0;
       console.log(
         "guide_enabled:",
         guideEnabled,
         "guide_xml length:",
-        guideXml?.length
+        guideXmlLength
       );
-      console.log("GUIDE ENABLED:", guideEnabled, "GUIDE XML LENGTH:", guideXml?.length ?? 0);
+      console.log("GUIDE ENABLED:", guideEnabled, "GUIDE XML LENGTH:", guideXmlLength);
       setSubsectionGuide(null);
       return;
     }
