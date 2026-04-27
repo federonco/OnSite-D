@@ -6,7 +6,6 @@ import { usePathname } from "next/navigation";
 import { getSupabaseBrowser } from "@/lib/supabase/browser";
 
 const links = [
-  { href: "/admin/sections", label: "Sections" },
   { href: "/admin", label: "Admin center" },
   { href: "/admin/checkpoints", label: "Checkpoints" },
   { href: "/admin/notifications", label: "Data Analysis" },
@@ -40,38 +39,36 @@ export function AdminNav() {
   }, [pathname]);
 
   return (
-    <nav className="flex flex-wrap gap-2 border-b border-[var(--border)] pb-2 mb-3">
-      {links.map(({ href, label }) => {
-        const isActive =
-          href === "/admin"
-            ? pathname === "/admin"
-            : href === "/admin/sections"
-            ? pathname === "/admin/sections"
-            : pathname?.startsWith(href);
-        const showBadge = href === "/admin/notifications" && alertsCount !== null && alertsCount > 0;
-        return (
-          <Link
-            key={href}
-            href={href}
-            className={`text-sm font-medium px-4 py-3 min-h-[44px] flex items-center gap-2 rounded-md ${
-              isActive
-                ? "bg-[#B8682A] text-white"
-                : "text-[var(--muted-foreground)] hover:bg-[var(--surface-alt)]"
-            }`}
-          >
-            {label}
-            {showBadge && (
-              <span
-                className={`inline-flex items-center justify-center min-w-[20px] h-5 px-1.5 rounded-full text-xs font-bold ${
-                  isActive ? "bg-white/25" : "bg-[#B8682A] text-white"
-                }`}
-              >
-                {alertsCount}
-              </span>
-            )}
-          </Link>
-        );
-      })}
+    <nav className="mb-3 border-b border-[var(--border)] pb-2">
+      <div className="flex flex-wrap gap-2">
+        {links.map(({ href, label }) => {
+          const isActive =
+            href === "/admin" ? pathname === "/admin" : pathname?.startsWith(href);
+          const showBadge = href === "/admin/notifications" && alertsCount !== null && alertsCount > 0;
+          return (
+            <Link
+              key={href}
+              href={href}
+              className={`text-sm font-medium px-4 py-3 min-h-[44px] flex items-center gap-2 rounded-md ${
+                isActive
+                  ? "bg-[#B8682A] text-white"
+                  : "text-[var(--muted-foreground)] hover:bg-[var(--surface-alt)]"
+              }`}
+            >
+              {label}
+              {showBadge && (
+                <span
+                  className={`inline-flex items-center justify-center min-w-[20px] h-5 px-1.5 rounded-full text-xs font-bold ${
+                    isActive ? "bg-white/25" : "bg-[#B8682A] text-white"
+                  }`}
+                >
+                  {alertsCount}
+                </span>
+              )}
+            </Link>
+          );
+        })}
+      </div>
     </nav>
   );
 }

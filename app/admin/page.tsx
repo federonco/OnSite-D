@@ -1,13 +1,13 @@
 "use client";
 
-import { RefreshCw } from "lucide-react";
+import { MoreVertical, RefreshCw } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { AdminNav } from "@/components/admin-nav";
 import { AuthPanel } from "@/components/auth-panel";
 import { useToast } from "@/components/toast";
 import { getSupabaseBrowser } from "@/lib/supabase/browser";
 import { SectionProgressBar } from "@/components/admin/section-records";
+import { WeldTrackingTable } from "@/components/weld-tracking/WeldTrackingTable";
 import {
   ITR_PAGE_SIZE,
   getITRProgress,
@@ -22,6 +22,12 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
 import {
   Select,
@@ -100,6 +106,7 @@ export default function AdminPage() {
   const [sendingQR, setSendingQR] = useState(false);
   const [recordsRefreshing, setRecordsRefreshing] = useState(false);
   const [progressRefreshTrigger, setProgressRefreshTrigger] = useState(0);
+  const [activeTab, setActiveTab] = useState<"admin" | "weld-wrap">("admin");
 
   const getAccessToken = useCallback(async () => {
     const { data } = await supabase.auth.getSession();
@@ -435,8 +442,56 @@ export default function AdminPage() {
           <AuthPanel onAuthChange={setAuthEmail} />
         </div>
 
-        <AdminNav />
+        <nav className="mb-3 border-b border-[var(--border)] pb-2">
+          <div className="flex flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={() => setActiveTab("admin")}
+              className={`text-sm font-medium px-4 py-3 min-h-[44px] flex items-center gap-2 rounded-md ${
+                activeTab === "admin"
+                  ? "bg-[#B8682A] text-white"
+                  : "text-[var(--muted-foreground)] hover:bg-[var(--surface-alt)]"
+              }`}
+            >
+              Admin center
+            </button>
+            <button
+              type="button"
+              onClick={() => setActiveTab("weld-wrap")}
+              className={`text-sm font-medium px-4 py-3 min-h-[44px] flex items-center gap-2 rounded-md ${
+                activeTab === "weld-wrap"
+                  ? "bg-[#B8682A] text-white"
+                  : "text-[var(--muted-foreground)] hover:bg-[var(--surface-alt)]"
+              }`}
+            >
+              Weld &amp; Wrap
+            </button>
+            <Link
+              href="/admin/checkpoints"
+              className="text-sm font-medium px-4 py-3 min-h-[44px] flex items-center gap-2 rounded-md text-[var(--muted-foreground)] hover:bg-[var(--surface-alt)]"
+            >
+              Checkpoints
+            </Link>
+            <Link
+              href="/admin/notifications"
+              className="text-sm font-medium px-4 py-3 min-h-[44px] flex items-center gap-2 rounded-md text-[var(--muted-foreground)] hover:bg-[var(--surface-alt)]"
+            >
+              Data Analysis
+            </Link>
+          </div>
+        </nav>
 
+        {activeTab === "weld-wrap" ? (
+          <Card className="drainer-card">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm">Weld &amp; Wrap Tracker</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <WeldTrackingTable />
+            </CardContent>
+          </Card>
+        ) : (
+          <>
         <Card className="drainer-card">
           <CardContent className="pt-0">
             <div className="drainer-title">Section</div>
@@ -468,6 +523,27 @@ export default function AdminPage() {
             >
               Send QR
             </Button>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="min-h-[44px] min-w-[44px] px-3 shrink-0"
+                  disabled={!sectionId}
+                  aria-label="Section options"
+                >
+                  <MoreVertical className="size-4" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem asChild>
+                  <Link href="/admin/sections">Manage subsections</Link>
+                </DropdownMenuItem>
+                <DropdownMenuItem asChild>
+                  <Link href={`/admin/records/${sectionId}`}>Open section records</Link>
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
             </div>
           </CardContent>
         </Card>
@@ -677,6 +753,9 @@ export default function AdminPage() {
             </CardContent>
           </Card>
         )}
+          </>
+        )}
+
       </div>
 
       <Dialog open={sendQROpen} onOpenChange={setSendQROpen}>

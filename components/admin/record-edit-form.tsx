@@ -19,7 +19,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 
-const JOINT_TYPES = ["RRJ", "WR", "Transition"] as const;
+const JOINT_TYPES = ["RRJ", "WR", "WB", "Transition"] as const;
 
 export type PipeRecord = {
   id: string;

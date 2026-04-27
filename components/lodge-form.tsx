@@ -186,13 +186,15 @@ export function LodgeForm({
     setGuideRefData(null);
     (async () => {
       const supabase = getSupabaseBrowser();
-      const { data } = await supabase
+      console.log("SECTION ID FOR COUNTER QUERY:", sectionId);
+      const { data, error } = await supabase
         .from("drainer_pipe_records")
         .select("counter")
         .eq("section_id", sectionId)
         .order("counter", { ascending: false })
         .limit(1)
         .maybeSingle();
+      console.log("MAX COUNTER RESULT:", JSON.stringify(data), JSON.stringify(error));
       if (cancelled) return;
       let nextSequence = 1;
       if (
@@ -202,8 +204,10 @@ export function LodgeForm({
       ) {
         nextSequence = Number(data.counter) + 1;
       }
-      const item =
-        list.find((x) => x.sequence_number === nextSequence) ?? null;
+      console.log("NEXT SEQUENCE:", nextSequence);
+      const foundItem = list.find((x) => x.sequence_number === nextSequence) ?? null;
+      console.log("FOUND ITEM:", foundItem);
+      const item = foundItem;
       setGuideRefData({ nextSequence, item });
       setGuideRefLoading(false);
     })();
