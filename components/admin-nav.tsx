@@ -3,16 +3,19 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useSearchParams } from "next/navigation";
 import { getSupabaseBrowser } from "@/lib/supabase/browser";
 
 const links = [
   { href: "/admin", label: "Admin center" },
+  { href: "/admin?tab=weld-wrap", label: "Weld & Wrap" },
   { href: "/admin/checkpoints", label: "Checkpoints" },
   { href: "/admin/notifications", label: "Data Analysis" },
 ];
 
 export function AdminNav() {
   const pathname = usePathname();
+  const searchParams = useSearchParams();
   const [alertsCount, setAlertsCount] = useState<number | null>(null);
 
   useEffect(() => {
@@ -42,8 +45,12 @@ export function AdminNav() {
     <nav className="mb-3 border-b border-[var(--border)] pb-2">
       <div className="flex flex-wrap gap-2">
         {links.map(({ href, label }) => {
-          const isActive =
-            href === "/admin" ? pathname === "/admin" : pathname?.startsWith(href);
+          const isWeldWrap = href.startsWith("/admin?tab=weld-wrap");
+          const isActive = isWeldWrap
+            ? pathname === "/admin" && searchParams.get("tab") === "weld-wrap"
+            : href === "/admin"
+              ? pathname === "/admin" && (searchParams.get("tab") ?? "admin") !== "weld-wrap"
+              : pathname?.startsWith(href);
           const showBadge = href === "/admin/notifications" && alertsCount !== null && alertsCount > 0;
           return (
             <Link

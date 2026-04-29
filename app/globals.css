@@ -455,6 +455,18 @@ body {
     font-variant-numeric: tabular-nums;
     font-feature-settings: "tnum" 1, "zero" 0;
   }
+
+  /* Keep scroll behavior while hiding native bars/arrows */
+  .drainer-scrollbar-none {
+    -ms-overflow-style: none; /* IE and old Edge */
+    scrollbar-width: none; /* Firefox */
+  }
+
+  .drainer-scrollbar-none::-webkit-scrollbar {
+    width: 0;
+    height: 0;
+    display: none; /* Chrome, Safari, Opera */
+  }
 }
 
 /* Lodge button - outside layer for higher specificity over Tailwind */

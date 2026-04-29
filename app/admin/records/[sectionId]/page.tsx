@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { useParams, useSearchParams } from "next/navigation";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { Search } from "lucide-react";
 import { AdminNav } from "@/components/admin-nav";
 import { AuthPanel } from "@/components/auth-panel";
@@ -26,6 +26,7 @@ function formatDateForSearch(dateValue: string | null | undefined) {
 
 export default function AdminRecordsPage() {
   const params = useParams();
+  const router = useRouter();
   const searchParams = useSearchParams();
   const sectionId = params.sectionId as string;
   const chMinParam = searchParams.get("chMin");
@@ -254,6 +255,11 @@ export default function AdminRecordsPage() {
     setEditId(null);
   };
 
+  const handleSectionChange = (nextSectionId: string) => {
+    const params = new URLSearchParams(searchParams.toString());
+    router.push(`/admin/records/${nextSectionId}?${params.toString()}`);
+  };
+
   if (authEmail === null || isAdmin === null) {
     return (
       <div className="drainer-page">
@@ -297,7 +303,7 @@ export default function AdminRecordsPage() {
 
   return (
     <div className="drainer-page">
-      <div className="drainer-shell max-w-4xl">
+      <div className="drainer-shell">
         <div className="drainer-header flex flex-col gap-3">
           <div className="flex items-center justify-between">
             <h1 className="drainer-title text-xl">{sectionName} — Records</h1>
@@ -344,6 +350,8 @@ export default function AdminRecordsPage() {
           emptyMessage={pipeSearch.trim() && filteredRecords.length === 0 ? "No records found" : undefined}
           progressRefreshTrigger={progressRefreshTrigger}
           selectedSection={sectionGuideSource}
+          sectionOptions={sections.map((s) => ({ id: s.id, name: s.name }))}
+          onSectionChange={handleSectionChange}
         />
       </div>
 

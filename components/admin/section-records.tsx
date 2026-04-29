@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { getITRProgress } from "@/lib/drainer";
 import type { PipeRecord } from "./record-edit-form";
 
@@ -102,6 +103,8 @@ type SectionRecordsProps = {
     guide_enabled?: boolean;
     guide_xml?: { sequence_number: number; item_id: string }[] | null;
   } | null;
+  sectionOptions?: { id: string; name: string }[];
+  onSectionChange?: (sectionId: string) => void;
 };
 
 function formatDate(d: string | null) {
@@ -176,6 +179,8 @@ export function SectionRecords({
   emptyMessage = "No records yet",
   progressRefreshTrigger,
   selectedSection,
+  sectionOptions = [],
+  onSectionChange,
 }: SectionRecordsProps) {
   const itrProgress = useMemo(() => getITRProgress(records.length), [records.length]);
   const installedCount = totalInstalledCount ?? records.length;
@@ -186,6 +191,23 @@ export function SectionRecords({
         <CardTitle className="drainer-title">{sectionName} — Records</CardTitle>
       </CardHeader>
       <CardContent className="space-y-4 flex flex-col min-h-0">
+        {sectionOptions.length > 0 && onSectionChange ? (
+          <div className="w-full max-w-xs">
+            <Select value={sectionId} onValueChange={onSectionChange}>
+              <SelectTrigger>
+                <SelectValue placeholder="Select section" />
+              </SelectTrigger>
+              <SelectContent>
+                {sectionOptions.map((section) => (
+                  <SelectItem key={section.id} value={section.id}>
+                    {section.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        ) : null}
+
         <div className="flex flex-wrap gap-2 items-center">
           <span className="drainer-badge-ready">
             <span className="drainer-badge-ready-dot" aria-hidden />
@@ -206,8 +228,8 @@ export function SectionRecords({
           guideXml={selectedSection?.guide_xml ?? null}
         />
 
-        <div className="border border-[var(--border)] rounded-lg overflow-hidden bg-[#E8D2BF] flex-1 min-h-[220px]">
-          <div className="overflow-x-auto overflow-y-auto h-full">
+        <div className="border border-[var(--border)] rounded-lg overflow-hidden bg-[#E8D2BF] flex-1 min-h-[220px] min-h-0 max-h-full">
+          <div className="h-full max-h-full overflow-x-auto overflow-y-scroll drainer-scrollbar-none">
             <table className="w-full text-sm min-w-[400px] font-[var(--font-body)]">
               <thead className="bg-[#EEE4DA] sticky top-0">
                 <tr>

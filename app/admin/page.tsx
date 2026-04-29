@@ -6,6 +6,7 @@ import Link from "next/link";
 import { AuthPanel } from "@/components/auth-panel";
 import { useToast } from "@/components/toast";
 import { getSupabaseBrowser } from "@/lib/supabase/browser";
+import { useSearchParams } from "next/navigation";
 import { SectionProgressBar } from "@/components/admin/section-records";
 import { WeldTrackingTable } from "@/components/weld-tracking/WeldTrackingTable";
 import {
@@ -81,6 +82,7 @@ function countPipesAndFittings(records: RecordRow[]): { pipes: number; fittings:
 }
 
 export default function AdminPage() {
+  const searchParams = useSearchParams();
   const supabase = getSupabaseBrowser();
   const { pushToast } = useToast();
   const [authEmail, setAuthEmail] = useState<string | null>(null);
@@ -107,6 +109,11 @@ export default function AdminPage() {
   const [recordsRefreshing, setRecordsRefreshing] = useState(false);
   const [progressRefreshTrigger, setProgressRefreshTrigger] = useState(0);
   const [activeTab, setActiveTab] = useState<"admin" | "weld-wrap">("admin");
+
+  useEffect(() => {
+    const requestedTab = searchParams.get("tab");
+    setActiveTab(requestedTab === "weld-wrap" ? "weld-wrap" : "admin");
+  }, [searchParams]);
 
   const getAccessToken = useCallback(async () => {
     const { data } = await supabase.auth.getSession();
