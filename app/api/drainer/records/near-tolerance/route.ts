@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getUserFromRequest } from "@/lib/api-auth";
 import { isAdminEmail } from "@/lib/admin";
 import { getSupabaseServer } from "@/lib/supabase/server";
+import { getCriteriaForDrainerSection, type AnalysisCriteria } from "@/lib/analysis-criteria";
 
 export type NearToleranceRecord = {
   id: string;
@@ -17,20 +18,31 @@ export type NearToleranceRecord = {
 
 function getLevel(
   vMm: number,
-  hMm: number
+  hMm: number,
+  criteria: AnalysisCriteria
 ): "warning" | "critical" | null {
-  const vCritical = vMm >= 45;
-  const vWarning = vMm >= 40 && vMm < 45;
-  const hCritical = hMm >= 90;
-  const hWarning = hMm >= 80 && hMm < 90;
+  const vCritical = vMm >= criteria.near_tolerance_v_alert;
+  const vWarning = vMm >= criteria.near_tolerance_v_warn && vMm < criteria.near_tolerance_v_alert;
+  const hCritical = hMm >= criteria.near_tolerance_h_alert;
+  const hWarning = hMm >= criteria.near_tolerance_h_warn && hMm < criteria.near_tolerance_h_alert;
   if (vCritical || hCritical) return "critical";
   if (vWarning || hWarning) return "warning";
   return null;
 }
 
-function worstScore(vMm: number, hMm: number): number {
-  const vNorm = vMm >= 50 ? 50 : vMm >= 45 ? 45 : vMm >= 40 ? 40 : 0;
-  const hNorm = hMm >= 100 ? 100 : hMm >= 90 ? 90 : hMm >= 80 ? 80 : 0;
+function worstScore(vMm: number, hMm: number, criteria: AnalysisCriteria): number {
+  const vNorm =
+    vMm >= criteria.near_tolerance_v_alert
+      ? criteria.near_tolerance_v_alert
+      : vMm >= criteria.near_tolerance_v_warn
+        ? criteria.near_tolerance_v_warn
+        : 0;
+  const hNorm =
+    hMm >= criteria.near_tolerance_h_alert
+      ? criteria.near_tolerance_h_alert
+      : hMm >= criteria.near_tolerance_h_warn
+        ? criteria.near_tolerance_h_warn
+        : 0;
   return Math.max(vNorm, hNorm / 2);
 }
 
@@ -96,6 +108,7 @@ async function getNearToleranceForSection(
   sectionId: string,
   subsectionId?: string
 ): Promise<{ section_id: string; records: NearToleranceRecord[] }> {
+  const { criteria } = await getCriteriaForDrainerSection(supabase, sectionId);
   let query = supabase
     .from("drainer_pipe_records")
     .select("id,counter,chainage,pipe_fitting_id,deflection_v_sign,deflection_v_mm,deflection_h_side,deflection_h_mm")
@@ -119,7 +132,7 @@ async function getNearToleranceForSection(
     if (validatedIds.has(r.id)) continue;
     const vMm = Math.abs(Number(r.deflection_v_mm) ?? 0);
     const hMm = Math.abs(Number(r.deflection_h_mm) ?? 0);
-    const level = getLevel(vMm, hMm);
+    const level = getLevel(vMm, hMm, criteria);
     if (level) {
       flagged.push({
         id: r.id,
@@ -138,11 +151,13 @@ async function getNearToleranceForSection(
   flagged.sort((a, b) => {
     const scoreA = worstScore(
       Math.abs(a.deflection_v_mm ?? 0),
-      Math.abs(a.deflection_h_mm ?? 0)
+      Math.abs(a.deflection_h_mm ?? 0),
+      criteria
     );
     const scoreB = worstScore(
       Math.abs(b.deflection_v_mm ?? 0),
-      Math.abs(b.deflection_h_mm ?? 0)
+      Math.abs(b.deflection_h_mm ?? 0),
+      criteria
     );
     return scoreB - scoreA;
   });

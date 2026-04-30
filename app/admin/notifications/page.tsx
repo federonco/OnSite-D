@@ -24,7 +24,34 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { RefreshCw } from "lucide-react";
+import { Input } from "@/components/ui/input";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { MoreVertical, RefreshCw } from "lucide-react";
+import { DEFAULT_CRITERIA, type AnalysisCriteria } from "@/lib/analysis-criteria";
+
+async function fetchWithTimeout(url: string, headers?: HeadersInit, ms = 8000) {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), ms);
+  try {
+    const res = await fetch(url, {
+      cache: "no-store",
+      headers,
+      signal: controller.signal,
+    });
+    clearTimeout(timeout);
+    if (!res.ok) throw new Error(`${url} -> ${res.status}`);
+    return await res.json();
+  } catch (err) {
+    clearTimeout(timeout);
+    console.error("[data-analysis] fetch failed:", url, err);
+    return null;
+  }
+}
 
 type InconsistencyItem = {
   ch_from: number;
@@ -142,6 +169,11 @@ export default function NotificationsPage() {
   const [validatingNearKey, setValidatingNearKey] = useState<string | null>(null);
   const [filterSections, setFilterSections] = useState<FilterSection[]>([]);
   const [selectedSectionId, setSelectedSectionId] = useState<string>("all");
+  const [criteria, setCriteria] = useState<AnalysisCriteria>(DEFAULT_CRITERIA);
+  const [savedCriteria, setSavedCriteria] = useState<AnalysisCriteria>(DEFAULT_CRITERIA);
+  const [criteriaLoading, setCriteriaLoading] = useState(false);
+  const [criteriaSaving, setCriteriaSaving] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const getAccessToken = useCallback(async () => {
     const { data } = await supabase.auth.getSession();
     return data.session?.access_token ?? null;
@@ -160,14 +192,16 @@ export default function NotificationsPage() {
     const token = await getAccessToken();
     setInconsistenciesLoading(true);
     try {
-      const res = await fetch(`/api/drainer/records/inconsistencies${buildFilterQuery()}`, {
-        cache: "no-store",
-        headers: token ? { Authorization: `Bearer ${token}` } : {},
-      });
-      const data = await res.json();
+      const url = `/api/drainer/records/inconsistencies${buildFilterQuery()}`;
+      const data = await fetchWithTimeout(url, token ? { Authorization: `Bearer ${token}` } : undefined);
+      if (!data) {
+        setSectionData([]);
+        return;
+      }
       if (data.sections) setSectionData(data.sections);
       else if (data.section_id) setSectionData([data]);
       else setSectionData([]);
+      console.log("[data-analysis] ✓ inconsistencies done");
     } finally {
       setInconsistenciesLoading(false);
     }
@@ -177,15 +211,18 @@ export default function NotificationsPage() {
     const token = await getAccessToken();
     setDuplicatesLoading(true);
     try {
-      const res = await fetch(`/api/drainer/records/duplicates${buildFilterQuery()}`, {
-        cache: "no-store",
-        headers: token ? { Authorization: `Bearer ${token}` } : {},
-      });
-      const data = await res.json();
+      const url = `/api/drainer/records/duplicates${buildFilterQuery()}`;
+      const data = await fetchWithTimeout(url, token ? { Authorization: `Bearer ${token}` } : undefined);
+      if (!data) {
+        setDuplicatesData([]);
+        setDupOpen(false);
+        return;
+      }
       const sections: DuplicatesSection[] = data.sections ?? (data.duplicates ? [{ section_id: data.section_id ?? "", section_name: data.section_name, duplicates: data.duplicates }] : []);
       setDuplicatesData(sections);
       const total = sections.reduce((s, sec) => s + (sec.duplicates?.length ?? 0), 0);
       setDupOpen(total > 0);
+      console.log("[data-analysis] ✓ duplicates done");
     } finally {
       setDuplicatesLoading(false);
     }
@@ -195,15 +232,18 @@ export default function NotificationsPage() {
     const token = await getAccessToken();
     setNearToleranceLoading(true);
     try {
-      const res = await fetch(`/api/drainer/records/near-tolerance${buildFilterQuery()}`, {
-        cache: "no-store",
-        headers: token ? { Authorization: `Bearer ${token}` } : {},
-      });
-      const data = await res.json();
+      const url = `/api/drainer/records/near-tolerance${buildFilterQuery()}`;
+      const data = await fetchWithTimeout(url, token ? { Authorization: `Bearer ${token}` } : undefined);
+      if (!data) {
+        setNearToleranceData([]);
+        setNearOpen(false);
+        return;
+      }
       const sections: NearToleranceSection[] = data.sections ?? (data.records ? [{ section_id: data.section_id ?? "", section_name: data.section_name, records: data.records }] : []);
       setNearToleranceData(sections);
       const total = sections.reduce((s, sec) => s + (sec.records?.length ?? 0), 0);
       setNearOpen(total > 0);
+      console.log("[data-analysis] ✓ near-tolerance done");
     } finally {
       setNearToleranceLoading(false);
     }
@@ -213,15 +253,18 @@ export default function NotificationsPage() {
     const token = await getAccessToken();
     setFittingsLoading(true);
     try {
-      const res = await fetch(`/api/drainer/records/fittings${buildFilterQuery()}`, {
-        cache: "no-store",
-        headers: token ? { Authorization: `Bearer ${token}` } : {},
-      });
-      const data = await res.json();
+      const url = `/api/drainer/records/fittings${buildFilterQuery()}`;
+      const data = await fetchWithTimeout(url, token ? { Authorization: `Bearer ${token}` } : undefined);
+      if (!data) {
+        setFittingsData([]);
+        setFittingsOpen(false);
+        return;
+      }
       const sections: FittingsSection[] = data.sections ?? (data.records ? [{ section_id: data.section_id ?? "", section_name: data.section_name, records: data.records }] : []);
       setFittingsData(sections);
       const total = sections.reduce((s, sec) => s + (sec.records?.length ?? 0), 0);
       setFittingsOpen(total > 0);
+      console.log("[data-analysis] ✓ fittings done");
     } finally {
       setFittingsLoading(false);
     }
@@ -231,15 +274,18 @@ export default function NotificationsPage() {
     const token = await getAccessToken();
     setDeflectionTrendLoading(true);
     try {
-      const res = await fetch(`/api/drainer/records/deflection-trend${buildFilterQuery()}`, {
-        cache: "no-store",
-        headers: token ? { Authorization: `Bearer ${token}` } : {},
-      });
-      const data = await res.json();
+      const url = `/api/drainer/records/deflection-trend${buildFilterQuery()}`;
+      const data = await fetchWithTimeout(url, token ? { Authorization: `Bearer ${token}` } : undefined);
+      if (!data) {
+        setDeflectionTrendData([]);
+        setTrendOpen(false);
+        return;
+      }
       const sections: DeflectionTrendSection[] = data.sections ?? (data.trends ? [{ section_id: data.section_id ?? "", section_name: data.section_name, trends: data.trends }] : []);
       setDeflectionTrendData(sections);
       const total = sections.reduce((s, sec) => s + (sec.trends?.length ?? 0), 0);
       setTrendOpen(total > 0);
+      console.log("[data-analysis] ✓ deflection-trend done");
     } finally {
       setDeflectionTrendLoading(false);
     }
@@ -247,6 +293,7 @@ export default function NotificationsPage() {
 
   const loadAllValidation = useCallback(
     async (showToast = false) => {
+      console.log("[data-analysis] starting fetch for section:", selectedSectionId);
       await Promise.all([
         loadInconsistencies(),
         loadFittings(),
@@ -265,6 +312,7 @@ export default function NotificationsPage() {
       loadNearTolerance,
       loadDeflectionTrend,
       pushToast,
+      selectedSectionId,
     ]
   );
 
@@ -282,6 +330,35 @@ export default function NotificationsPage() {
         : []
     );
   }, [getAccessToken]);
+
+  const loadCriteria = useCallback(async () => {
+    if (selectedSectionId === "all") return;
+    const token = await getAccessToken();
+    if (!token) return;
+    setCriteriaLoading(true);
+    try {
+      const res = await fetch(`/api/drainer/sections/${selectedSectionId}/analysis-criteria`, {
+        cache: "no-store",
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const data = (await res.json().catch(() => ({}))) as { criteria?: AnalysisCriteria; error?: string };
+      if (!res.ok) throw new Error(data.error ?? "Failed to load criteria");
+      const next = data.criteria ?? DEFAULT_CRITERIA;
+      setCriteria(next);
+      setSavedCriteria(next);
+    } catch (err) {
+      pushToast({
+        type: "error",
+        title: "Could not load analysis settings",
+        message: err instanceof Error ? err.message : "Unknown error",
+      });
+    } finally {
+      setCriteriaLoading(false);
+    }
+  }, [getAccessToken, pushToast, selectedSectionId]);
+
+  const hasUnsavedCriteria =
+    selectedSectionId !== "all" && JSON.stringify(criteria) !== JSON.stringify(savedCriteria);
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => {
@@ -309,6 +386,31 @@ export default function NotificationsPage() {
     if (!authEmail || !isAdmin) return;
     loadAllValidation();
   }, [authEmail, isAdmin, selectedSectionId, loadAllValidation]);
+
+  useEffect(() => {
+    if (!authEmail || !isAdmin) return;
+    const safety = setTimeout(() => {
+      setInconsistenciesLoading(false);
+      setDuplicatesLoading(false);
+      setFittingsLoading(false);
+      setNearToleranceLoading(false);
+      setDeflectionTrendLoading(false);
+      console.warn("[data-analysis] safety timeout triggered — some fetch hung");
+    }, 10000);
+    return () => clearTimeout(safety);
+  }, [authEmail, isAdmin, selectedSectionId]);
+
+  useEffect(() => {
+    if (!authEmail || !isAdmin || selectedSectionId === "all") return;
+    void loadCriteria();
+  }, [authEmail, isAdmin, selectedSectionId, loadCriteria]);
+
+  useEffect(() => {
+    if (selectedSectionId === "all") {
+      setCriteria(DEFAULT_CRITERIA);
+      setSavedCriteria(DEFAULT_CRITERIA);
+    }
+  }, [selectedSectionId]);
 
   const openViewRecord = (inc: InconsistencyItem) => {
     const note =
@@ -488,6 +590,37 @@ export default function NotificationsPage() {
     }
   };
 
+  const handleSaveCriteria = async (next: AnalysisCriteria) => {
+    if (selectedSectionId === "all") return;
+    setCriteriaSaving(true);
+    try {
+      const token = await getAccessToken();
+      if (!token) throw new Error("Sign in required");
+      const res = await fetch(`/api/drainer/sections/${selectedSectionId}/analysis-criteria`, {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify(next),
+      });
+      const data = (await res.json().catch(() => ({}))) as { criteria?: AnalysisCriteria; error?: string };
+      if (!res.ok) throw new Error(data.error ?? "Save failed");
+      const saved = data.criteria ?? next;
+      setCriteria(saved);
+      setSavedCriteria(saved);
+      await loadAllValidation(true);
+    } catch (err) {
+      pushToast({
+        type: "error",
+        title: "Save failed",
+        message: err instanceof Error ? err.message : "Unknown error",
+      });
+    } finally {
+      setCriteriaSaving(false);
+    }
+  };
+
   const allInconsistencies = sectionData.flatMap((sec) =>
     sec.inconsistencies.map((inc) => ({ inc, sec }))
   );
@@ -571,8 +704,184 @@ export default function NotificationsPage() {
                   <RefreshCw className="size-4" />
                 )}
               </Button>
+              {selectedSectionId !== "all" && (
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="min-h-[44px] min-w-[44px] shrink-0 rounded-full bg-[var(--card-bg)] border-0 hover:bg-[var(--surface)]"
+                      aria-label="Analysis actions"
+                    >
+                      <MoreVertical className="size-4" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end">
+                    <DropdownMenuItem onClick={() => setSettingsOpen((o) => !o)}>
+                      {settingsOpen ? "Hide analysis settings" : "Analysis settings"}
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              )}
             </div>
             <div className="mt-4">
+            {selectedSectionId !== "all" && settingsOpen && (
+              <div className="mb-4 rounded-xl border border-[var(--border)] bg-white p-4 shadow-sm">
+                <div className="mb-3 flex items-center justify-between gap-2">
+                  <span className="text-sm font-semibold text-[var(--ink)]">Analysis Settings</span>
+                  {hasUnsavedCriteria ? (
+                    <span className="text-xs font-medium text-amber-700">Unsaved changes</span>
+                  ) : (
+                    <span className="text-xs text-[var(--muted-foreground)]">Saved</span>
+                  )}
+                </div>
+                <div className="space-y-4">
+                  {criteriaLoading ? (
+                    <p className="text-sm text-[var(--muted-foreground)]">Loading settings…</p>
+                  ) : (
+                    <>
+                      <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+                        <label className="text-xs text-[var(--muted-foreground)]">
+                          Gap threshold (m)
+                          <Input
+                            type="number"
+                            className="drainer-input mt-1"
+                            value={criteria.gap_threshold_m}
+                            onChange={(e) =>
+                              setCriteria((c) => ({ ...c, gap_threshold_m: Number(e.target.value) || 0 }))
+                            }
+                          />
+                        </label>
+                        <label className="text-xs text-[var(--muted-foreground)]">
+                          Overlap threshold (m)
+                          <Input
+                            type="number"
+                            className="drainer-input mt-1"
+                            value={criteria.overlap_threshold_m}
+                            onChange={(e) =>
+                              setCriteria((c) => ({ ...c, overlap_threshold_m: Number(e.target.value) || 0 }))
+                            }
+                          />
+                        </label>
+                        <label className="text-xs text-[var(--muted-foreground)] md:col-span-2">
+                          Pipe ID format (pattern)
+                          <Input
+                            className="drainer-input mt-1"
+                            value={criteria.pipe_id_pattern}
+                            onChange={(e) => setCriteria((c) => ({ ...c, pipe_id_pattern: e.target.value }))}
+                            placeholder="Example: 1234-5"
+                          />
+                          <span className="mt-1 block text-[11px] text-[var(--muted-foreground)]">
+                            Use simple formats like: 1234-5, 12345-678, 000536-000096.
+                            Any ID outside this format is treated as a fitting.
+                          </span>
+                        </label>
+                        <label className="text-xs text-[var(--muted-foreground)]">
+                          V warn / V alert (mm)
+                          <div className="mt-1 grid grid-cols-2 gap-2">
+                            <Input
+                              type="number"
+                              className="drainer-input"
+                              value={criteria.near_tolerance_v_warn}
+                              onChange={(e) =>
+                                setCriteria((c) => ({ ...c, near_tolerance_v_warn: Number(e.target.value) || 0 }))
+                              }
+                            />
+                            <Input
+                              type="number"
+                              className="drainer-input"
+                              value={criteria.near_tolerance_v_alert}
+                              onChange={(e) =>
+                                setCriteria((c) => ({ ...c, near_tolerance_v_alert: Number(e.target.value) || 0 }))
+                              }
+                            />
+                          </div>
+                        </label>
+                        <label className="text-xs text-[var(--muted-foreground)]">
+                          H warn / H alert (mm)
+                          <div className="mt-1 grid grid-cols-2 gap-2">
+                            <Input
+                              type="number"
+                              className="drainer-input"
+                              value={criteria.near_tolerance_h_warn}
+                              onChange={(e) =>
+                                setCriteria((c) => ({ ...c, near_tolerance_h_warn: Number(e.target.value) || 0 }))
+                              }
+                            />
+                            <Input
+                              type="number"
+                              className="drainer-input"
+                              value={criteria.near_tolerance_h_alert}
+                              onChange={(e) =>
+                                setCriteria((c) => ({ ...c, near_tolerance_h_alert: Number(e.target.value) || 0 }))
+                              }
+                            />
+                          </div>
+                        </label>
+                        <label className="text-xs text-[var(--muted-foreground)]">
+                          Window (consecutive records)
+                          <Input
+                            type="number"
+                            className="drainer-input mt-1"
+                            value={criteria.deflection_trend_window}
+                            onChange={(e) =>
+                              setCriteria((c) => ({ ...c, deflection_trend_window: Number(e.target.value) || 2 }))
+                            }
+                          />
+                        </label>
+                        <label className="text-xs text-[var(--muted-foreground)]">
+                          V tolerance (mm)
+                          <Input
+                            type="number"
+                            className="drainer-input mt-1"
+                            value={criteria.deflection_trend_v_threshold}
+                            onChange={(e) =>
+                              setCriteria((c) => ({
+                                ...c,
+                                deflection_trend_v_threshold: Number(e.target.value) || 0,
+                              }))
+                            }
+                          />
+                        </label>
+                        <label className="text-xs text-[var(--muted-foreground)]">
+                          H tolerance (mm)
+                          <Input
+                            type="number"
+                            className="drainer-input mt-1"
+                            value={criteria.deflection_trend_h_threshold}
+                            onChange={(e) =>
+                              setCriteria((c) => ({
+                                ...c,
+                                deflection_trend_h_threshold: Number(e.target.value) || 0,
+                              }))
+                            }
+                          />
+                        </label>
+                      </div>
+                      <div className="flex flex-wrap justify-end gap-2">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="min-h-[40px]"
+                          disabled={criteriaSaving}
+                          onClick={() => void handleSaveCriteria(DEFAULT_CRITERIA)}
+                        >
+                          Reset to defaults
+                        </Button>
+                        <Button
+                          size="sm"
+                          className="min-h-[40px] bg-[#B8682A] text-white border-0 hover:bg-[#A35D26]"
+                          disabled={criteriaSaving || !hasUnsavedCriteria}
+                          onClick={() => void handleSaveCriteria(criteria)}
+                        >
+                          {criteriaSaving ? "Saving…" : "Save & Re-analyse"}
+                        </Button>
+                      </div>
+                    </>
+                  )}
+                </div>
+              </div>
+            )}
             {inconsistenciesLoading ? (
               <p className="text-sm text-[var(--muted-foreground)] py-4">
                 Loading…

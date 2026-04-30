@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getUserFromRequest } from "@/lib/api-auth";
 import { isAdminEmail } from "@/lib/admin";
 import { getSupabaseServer } from "@/lib/supabase/server";
+import { getCriteriaForDrainerSection } from "@/lib/analysis-criteria";
 
 export type TrendRecord = {
   counter: number | null;
@@ -84,6 +85,7 @@ async function getDeflectionTrendForSection(
   sectionId: string,
   subsectionId?: string
 ): Promise<{ section_id: string; trends: DeflectionTrendEntry[] }> {
+  const { criteria } = await getCriteriaForDrainerSection(supabase, sectionId);
   const { data: section } = await supabase
     .from("drainer_sections")
     .select("direction")
@@ -118,7 +120,7 @@ async function getDeflectionTrendForSection(
   }));
 
   const trends: DeflectionTrendEntry[] = [];
-  const windowSize = 4;
+  const windowSize = Math.max(2, Math.floor(criteria.deflection_trend_window));
 
   for (let i = 0; i <= ordered.length - windowSize; i++) {
     const window = ordered.slice(i, i + windowSize);
@@ -126,7 +128,7 @@ async function getDeflectionTrendForSection(
     const vSigns = window.map((r) => (r.deflection_v_sign ?? "").trim()).filter(Boolean);
     const vMms = window.map((r) => Math.abs(r.deflection_v_mm ?? 0));
     const allVSameSign = vSigns.length === windowSize && new Set(vSigns).size === 1;
-    const allVAbove15 = vMms.every((m) => m >= 15);
+    const allVAbove15 = vMms.every((m) => m >= criteria.deflection_trend_v_threshold);
     if (allVSameSign && allVAbove15) {
       const direction = vSigns[0] === "+" ? "positive (+)" : "negative (−)";
       const avg = vMms.reduce((a, b) => a + b, 0) / windowSize;
@@ -143,7 +145,7 @@ async function getDeflectionTrendForSection(
     const hSides = window.map((r) => (r.deflection_h_side ?? "").trim()).filter(Boolean);
     const hMms = window.map((r) => Math.abs(r.deflection_h_mm ?? 0));
     const allHSameSide = hSides.length === windowSize && new Set(hSides).size === 1;
-    const allHAbove20 = hMms.every((m) => m >= 20);
+    const allHAbove20 = hMms.every((m) => m >= criteria.deflection_trend_h_threshold);
     if (allHSameSide && allHAbove20) {
       const direction = hSides[0] === "L" ? "Left (L)" : "Right (R)";
       const avg = hMms.reduce((a, b) => a + b, 0) / windowSize;

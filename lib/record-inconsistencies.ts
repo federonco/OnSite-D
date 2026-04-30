@@ -1,4 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { DEFAULT_CRITERIA, getCriteriaMapForDrainerSections } from "@/lib/analysis-criteria";
 
 export type RecordInconsistency = {
   record_a_ch: number;
@@ -7,9 +8,6 @@ export type RecordInconsistency = {
   type: "gap" | "overlap";
   section_id?: string;
 };
-
-const MIN_DIFF = 12;
-const MAX_DIFF = 13;
 
 export async function detectRecordInconsistencies(
   supabase: SupabaseClient
@@ -29,14 +27,20 @@ export async function detectRecordInconsistencies(
   }
 
   const inconsistencies: RecordInconsistency[] = [];
+  const criteriaBySection = await getCriteriaMapForDrainerSections(
+    supabase,
+    Array.from(bySection.keys()).filter((k) => k !== "_")
+  );
 
   for (const [sectionId, list] of bySection) {
+    const criteria =
+      sectionId === "_" ? DEFAULT_CRITERIA : (criteriaBySection[sectionId] ?? DEFAULT_CRITERIA);
     for (let i = 0; i < list.length - 1; i++) {
       const a = list[i].chainage;
       const b = list[i + 1].chainage;
       const diff = b - a;
 
-      if (diff > MAX_DIFF) {
+      if (diff > criteria.gap_threshold_m) {
         inconsistencies.push({
           record_a_ch: a,
           record_b_ch: b,
@@ -44,7 +48,7 @@ export async function detectRecordInconsistencies(
           type: "gap",
           section_id: sectionId === "_" ? undefined : sectionId,
         });
-      } else if (diff < MIN_DIFF) {
+      } else if (diff < criteria.overlap_threshold_m) {
         inconsistencies.push({
           record_a_ch: a,
           record_b_ch: b,

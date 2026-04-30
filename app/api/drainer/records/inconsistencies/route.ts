@@ -2,18 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getUserFromRequest } from "@/lib/api-auth";
 import { isAdminEmail } from "@/lib/admin";
 import { getSupabaseServer } from "@/lib/supabase/server";
-
-/**
- * Pipe: digits-hyphen-digits (000536-000096), PP+digits-hyphen-digits (PP000010-000169), or just digits.
- * Fitting: anything else (90D Bend, Double Scour, etc).
- */
-const PIPE_REGEX = /^((PP)?\d+-\d+|\d+)$/;
-
-function inferType(pipeFittingId: string | null): "pipe" | "fitting" {
-  if (!pipeFittingId || typeof pipeFittingId !== "string") return "fitting";
-  const t = pipeFittingId.trim();
-  return PIPE_REGEX.test(t) ? "pipe" : "fitting";
-}
+import { getCriteriaForDrainerSection } from "@/lib/analysis-criteria";
 
 export type RecordInconsistencyItem = {
   ch_from: number;
@@ -93,6 +82,8 @@ async function getSectionInconsistencies(
   sectionId: string,
   subsectionId?: string
 ): Promise<InconsistenciesResponse> {
+  const { criteria } = await getCriteriaForDrainerSection(supabase, sectionId);
+  const pipeRegex = new RegExp(criteria.pipe_id_pattern);
   const { data: section } = await supabase
     .from("drainer_sections")
     .select("direction")
@@ -138,7 +129,7 @@ async function getSectionInconsistencies(
     const b = ordered[i + 1];
     const diff = Math.abs(b.chainage - a.chainage);
 
-    if (diff > 13.0) {
+    if (diff > criteria.gap_threshold_m) {
       inconsistencies.push({
         ch_from: a.chainage,
         ch_to: b.chainage,
@@ -149,10 +140,10 @@ async function getSectionInconsistencies(
         record_from_counter: a.counter,
         record_from_fitting_id: a.pipe_fitting_id,
         record_to_fitting_id: b.pipe_fitting_id,
-        inferred_type_from: inferType(a.pipe_fitting_id),
-        inferred_type_to: inferType(b.pipe_fitting_id),
+        inferred_type_from: pipeRegex.test((a.pipe_fitting_id ?? "").trim()) ? "pipe" : "fitting",
+        inferred_type_to: pipeRegex.test((b.pipe_fitting_id ?? "").trim()) ? "pipe" : "fitting",
       });
-    } else if (diff < 12.0) {
+    } else if (diff < criteria.overlap_threshold_m) {
       inconsistencies.push({
         ch_from: a.chainage,
         ch_to: b.chainage,
@@ -163,8 +154,8 @@ async function getSectionInconsistencies(
         record_from_counter: a.counter,
         record_from_fitting_id: a.pipe_fitting_id,
         record_to_fitting_id: b.pipe_fitting_id,
-        inferred_type_from: inferType(a.pipe_fitting_id),
-        inferred_type_to: inferType(b.pipe_fitting_id),
+        inferred_type_from: pipeRegex.test((a.pipe_fitting_id ?? "").trim()) ? "pipe" : "fitting",
+        inferred_type_to: pipeRegex.test((b.pipe_fitting_id ?? "").trim()) ? "pipe" : "fitting",
       });
     }
   }

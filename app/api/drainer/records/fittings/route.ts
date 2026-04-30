@@ -2,9 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getUserFromRequest } from "@/lib/api-auth";
 import { isAdminEmail } from "@/lib/admin";
 import { getSupabaseServer } from "@/lib/supabase/server";
-
-/** Pipe format: digits-hyphen-digits, PP+digits-hyphen-digits, or just digits. Fitting: anything else. */
-const PIPE_REGEX = /^((PP)?\d+-\d+|\d+)$/;
+import { getCriteriaForDrainerSection } from "@/lib/analysis-criteria";
 
 export type FittingRecord = {
   id: string;
@@ -72,6 +70,14 @@ async function getFittingsForSection(
   sectionId: string,
   subsectionId?: string
 ): Promise<{ section_id: string; records: FittingRecord[] }> {
+  const { criteria } = await getCriteriaForDrainerSection(supabase, sectionId);
+  let pipeRegex: RegExp;
+  try {
+    pipeRegex = new RegExp(criteria.pipe_id_pattern);
+  } catch {
+    pipeRegex = /^\d+-\d+$/;
+  }
+
   let query = supabase
     .from("drainer_pipe_records")
     .select("id,counter,chainage,pipe_fitting_id,date_installed")
@@ -95,7 +101,7 @@ async function getFittingsForSection(
     if (validatedIds.has(r.id)) continue;
     const pf = (r.pipe_fitting_id ?? "").trim();
     if (!pf) continue;
-    if (PIPE_REGEX.test(pf)) continue; // pipe format, skip
+    if (pipeRegex.test(pf)) continue; // pipe format, skip
     fittings.push({
       id: r.id,
       counter: r.counter ?? null,
