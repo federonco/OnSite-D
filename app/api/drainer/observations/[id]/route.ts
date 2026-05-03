@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getUserFromRequest } from "@/lib/api-auth";
-import { isAdminEmail } from "@/lib/admin";
+import { isAdmin } from "@/lib/admin";
 import { getSupabaseServer } from "@/lib/supabase/server";
 
 export async function PATCH(
@@ -11,13 +11,14 @@ export async function PATCH(
   if (!user || !token) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
-  if (!isAdminEmail(user.email)) {
-    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-  }
-
   const { id } = await params;
   if (!id) {
     return NextResponse.json({ error: "Missing id" }, { status: 400 });
+  }
+
+  const supabase = getSupabaseServer({ accessToken: token });
+  if (!await isAdmin(supabase)) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
   let body: { status?: string; approval_comment?: string };
@@ -30,8 +31,6 @@ export async function PATCH(
   if (body.status !== "approved") {
     return NextResponse.json({ error: "Only status=approved is supported" }, { status: 400 });
   }
-
-  const supabase = getSupabaseServer({ accessToken: token });
 
   const { data, error } = await supabase
     .from("drainer_observations")

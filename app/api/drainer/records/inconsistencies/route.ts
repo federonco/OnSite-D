@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getUserFromRequest } from "@/lib/api-auth";
-import { isAdminEmail } from "@/lib/admin";
+import { isAdmin } from "@/lib/admin";
 import { getSupabaseServer } from "@/lib/supabase/server";
 import { getCriteriaForDrainerSection } from "@/lib/analysis-criteria";
 
@@ -31,15 +31,14 @@ export async function GET(request: NextRequest) {
   if (!user || !token) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
-  if (!isAdminEmail(user.email)) {
-    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  const supabase = getSupabaseServer({ accessToken: token });
+  if (!await isAdmin(supabase)) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
   const { searchParams } = new URL(request.url);
   const sectionId = searchParams.get("section_id");
   const subsectionId = searchParams.get("subsection_id");
-
-  const supabase = getSupabaseServer({ accessToken: token });
 
   let resolvedSectionId = sectionId;
   if (!resolvedSectionId && subsectionId) {

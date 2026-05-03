@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getUserFromRequest } from "@/lib/api-auth";
-import { isAdminEmail } from "@/lib/admin";
+import { isAdmin } from "@/lib/admin";
 import { getSupabaseServer } from "@/lib/supabase/server";
 import { rejectForeignSubsectionAppId } from "@/lib/drainer-sections-policy";
 
@@ -9,11 +9,10 @@ export async function GET(request: NextRequest) {
   if (!user || !token) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
-  if (!isAdminEmail(user.email)) {
-    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-  }
-
   const supabase = getSupabaseServer({ accessToken: token });
+  if (!await isAdmin(supabase)) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
   const sectionId = request.nextUrl.searchParams.get("section_id")?.trim();
   let query = supabase
     .from("subsections")
@@ -34,8 +33,8 @@ export async function POST(request: NextRequest) {
   if (!user || !token) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
-  if (!isAdminEmail(user.email)) {
-    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  if (!await isAdmin(getSupabaseServer({ accessToken: token }))) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
   const body = (await request.json()) as Record<string, unknown>;

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getUserFromRequest } from "@/lib/api-auth";
-import { isAdminEmail } from "@/lib/admin";
+import { isAdmin } from "@/lib/admin";
 import {
   createEmailTransporter,
   getEmailFrom,
@@ -36,8 +36,8 @@ export async function POST(request: NextRequest) {
   if (!user || !token) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
-  if (!isAdminEmail(user.email)) {
-    return NextResponse.json({ error: "Admin only" }, { status: 403 });
+  if (!await isAdmin(getSupabaseServer({ accessToken: token }))) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
   const body = await request.json();

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getUserFromRequest } from "@/lib/api-auth";
-import { isAdminEmail } from "@/lib/admin";
+import { isAdmin } from "@/lib/admin";
 import { getSupabaseServer } from "@/lib/supabase/server";
 import { rejectForeignSubsectionAppId } from "@/lib/drainer-sections-policy";
 
@@ -13,11 +13,10 @@ export async function GET(
   if (!user || !token) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
-  if (!isAdminEmail(user.email)) {
-    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-  }
-
   const supabase = getSupabaseServer({ accessToken: token });
+  if (!await isAdmin(supabase)) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
   const { data, error } = await supabase
     .from("subsections")
     .select("*")
@@ -40,13 +39,12 @@ export async function PUT(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params;
-  console.log("[subsections PUT] params.id:", id);
   const { user, token } = await getUserFromRequest(request);
   if (!user || !token) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
-  if (!isAdminEmail(user.email)) {
-    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  if (!await isAdmin(getSupabaseServer({ accessToken: token }))) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
   const body = (await request.json()) as Record<string, unknown>;
@@ -98,31 +96,6 @@ export async function PUT(
         : null;
   }
 
-  const supabase = getSupabaseServer({ accessToken: token });
-  console.log("[subsections PUT] updates payload:", JSON.stringify(updates, null, 2));
-  const { data: existsByIdOnly, error: existsByIdOnlyError } = await supabase
-    .from("subsections")
-    .select("id,app_id")
-    .eq("id", id)
-    .maybeSingle();
-  console.log("[subsections PUT] exists by id (no app filter):", {
-    id,
-    data: existsByIdOnly,
-    error: existsByIdOnlyError?.message ?? null,
-  });
-
-  const { data: existsByIdAndApp, error: existsByIdAndAppError } = await supabase
-    .from("subsections")
-    .select("id,app_id")
-    .eq("id", id)
-    .eq("app_id", "onsite-d")
-    .maybeSingle();
-  console.log("[subsections PUT] exists by id + app_id=onsite-d:", {
-    id,
-    data: existsByIdAndApp,
-    error: existsByIdAndAppError?.message ?? null,
-  });
-
   const supabaseAdmin = getSupabaseServer({ useServiceRole: true });
   const { data, error } = await supabaseAdmin
     .from("subsections")
@@ -133,17 +106,9 @@ export async function PUT(
     .maybeSingle();
 
   if (error) {
-    console.log("[subsections PUT] update error:", {
-      id,
-      message: error.message ?? null,
-      code: error.code ?? null,
-      details: error.details ?? null,
-      hint: error.hint ?? null,
-    });
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
   if (!data) {
-    console.log("[subsections PUT] update returned null", { id });
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
 
@@ -159,11 +124,10 @@ export async function DELETE(
   if (!user || !token) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
-  if (!isAdminEmail(user.email)) {
-    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-  }
-
   const supabase = getSupabaseServer({ accessToken: token });
+  if (!await isAdmin(supabase)) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
   const { error } = await supabase
     .from("subsections")
     .delete()

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getUserFromRequest } from "@/lib/api-auth";
-import { isAdminEmail } from "@/lib/admin";
+import { isAdmin } from "@/lib/admin";
 import { getSupabaseServer } from "@/lib/supabase/server";
 
 /** Pipe: digits-hyphen-digits, PP+digits-hyphen-digits, or just digits. */
@@ -25,9 +25,12 @@ export type DuplicateGroup = {
 };
 
 export async function GET(request: NextRequest) {
-  const { user } = await getUserFromRequest(request);
-  if (!user || !isAdminEmail(user.email)) {
-    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+  const { user, token } = await getUserFromRequest(request);
+  if (!user || !token) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+  if (!await isAdmin(getSupabaseServer({ accessToken: token }))) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
   const { searchParams } = new URL(request.url);

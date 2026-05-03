@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getUserFromRequest } from "@/lib/api-auth";
-import { isAdminEmail } from "@/lib/admin";
+import { isAdmin } from "@/lib/admin";
 import { getSupabaseServer } from "@/lib/supabase/server";
 import { listDrainerSectionsWithProjectFallback } from "@/lib/drainer-sections-read";
 import { sectionsWriteForbiddenResponse } from "@/lib/drainer-sections-policy";
@@ -15,7 +15,7 @@ export async function GET(request: NextRequest) {
   const includeQrFields = !!(
     user &&
     token &&
-    isAdminEmail(user.email)
+    await isAdmin(supabase)
   );
 
   const { data, error, projectEmbedOk } =
