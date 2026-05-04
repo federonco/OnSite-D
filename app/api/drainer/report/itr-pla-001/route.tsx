@@ -67,11 +67,14 @@ export async function POST(request: NextRequest) {
   let contentType: string;
   let fileName: string;
   try {
+    const isOpenITR = pageRecords.length < ITR_PAGE_SIZE;
+
     const result = await generateITRPla001PdfWithFallback(
       section,
       pageRecords,
       itrIndex,
-      totalPages
+      totalPages,
+      { isOpenITR }
     );
     buffer = result.buffer;
     contentType = result.contentType;
