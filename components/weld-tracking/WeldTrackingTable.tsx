@@ -34,19 +34,6 @@ type ToggleField = "welded_at" | "wrapped_at";
 type WeldStepKey = "external_1" | "external_2" | "internal_1" | "internal_2";
 const WB_STEPS: WeldStepKey[] = ["external_1", "external_2", "internal_1", "internal_2"];
 
-function weldUnitsForJointType(jointType: string | null) {
-  // Weld band joints require 2 external + 2 internal welds.
-  return jointType === "WB" ? 4 : 1;
-}
-
-function getCompletedWeldChecks(record: WeldRecord) {
-  if (record.joint_type !== "WB") return record.welded_at ? 1 : 0;
-  if (record.welded_steps) {
-    return WB_STEPS.filter((step) => !!record.welded_steps?.[step]).length;
-  }
-  return record.welded_at ? 4 : 0;
-}
-
 function formatDate(value: string | null) {
   if (!value) return "";
   const date = new Date(value);
@@ -56,6 +43,49 @@ function formatDate(value: string | null) {
     month: "short",
     year: "numeric",
   }).format(date);
+}
+
+/** Calendar day in local timezone vs `new Date()` */
+function isToday(iso: string | null): boolean {
+  if (!iso) return false;
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return false;
+  const now = new Date();
+  return (
+    d.getFullYear() === now.getFullYear() &&
+    d.getMonth() === now.getMonth() &&
+    d.getDate() === now.getDate()
+  );
+}
+
+function latestWbStepIso(record: WeldRecord): string | null {
+  const times = WB_STEPS.map((s) => record.welded_steps?.[s]).filter(Boolean) as string[];
+  if (times.length === 0) return null;
+  return times.reduce((a, b) => (new Date(a) > new Date(b) ? a : b));
+}
+
+function isWeldFullyComplete(record: WeldRecord): boolean {
+  if (record.joint_type === "WR") return !!record.welded_at;
+  if (record.joint_type === "WB")
+    return WB_STEPS.every((step) => !!record.welded_steps?.[step]);
+  return false;
+}
+
+function isWeldCompletedToday(record: WeldRecord): boolean {
+  if (!isWeldFullyComplete(record)) return false;
+  if (record.joint_type === "WR") return isToday(record.welded_at);
+  const ref = record.welded_at ?? latestWbStepIso(record);
+  return ref ? isToday(ref) : false;
+}
+
+function SummaryRow({ label, value }: { label: string; value: number }) {
+  return (
+    <div className="min-w-0 text-[10px] leading-snug">
+      <span className="text-[var(--muted-foreground)]">{label}</span>
+      <span className="text-[var(--muted-foreground)]"> = </span>
+      <span className="font-semibold tabular-nums text-[var(--ink)]">{value}</span>
+    </div>
+  );
 }
 
 export function WeldTrackingTable() {
@@ -128,18 +158,42 @@ export function WeldTrackingTable() {
     [records, sectionFilter]
   );
 
-  const totals = useMemo(() => {
-    const total = visibleRecords.length;
-    const weldedTarget = visibleRecords.reduce(
-      (acc, record) => acc + weldUnitsForJointType(record.joint_type),
-      0
-    );
-    const welded = visibleRecords.reduce(
-      (acc, record) => acc + getCompletedWeldChecks(record),
-      0
-    );
-    const wrapped = visibleRecords.filter((r) => !!r.wrapped_at).length;
-    return { total, welded, wrapped, weldedTarget };
+  const {
+    wrWeldDone,
+    wrWeldPending,
+    wbWeldDone,
+    wbWeldPending,
+    wrapDone,
+    wrapPending,
+    weldingDoneToday,
+    wrappingDoneToday,
+  } = useMemo(() => {
+    const wrRecords = visibleRecords.filter((r) => r.joint_type === "WR");
+    const wbRecords = visibleRecords.filter((r) => r.joint_type === "WB");
+    const wrWeldDoneCount = wrRecords.filter((r) => !!r.welded_at).length;
+    const wrWeldPendingCount = wrRecords.length - wrWeldDoneCount;
+    const wbWeldDoneCount = wbRecords.filter((r) =>
+      WB_STEPS.every((step) => !!r.welded_steps?.[step])
+    ).length;
+    const wbWeldPendingCount = wbRecords.length - wbWeldDoneCount;
+    const wrapDoneCount = visibleRecords.filter((r) => !!r.wrapped_at).length;
+    const wrapPendingCount = visibleRecords.length - wrapDoneCount;
+    const weldingDoneTodayCount = visibleRecords.filter((r) =>
+      isWeldCompletedToday(r)
+    ).length;
+    const wrappingDoneTodayCount = visibleRecords.filter((r) =>
+      isToday(r.wrapped_at)
+    ).length;
+    return {
+      wrWeldDone: wrWeldDoneCount,
+      wrWeldPending: wrWeldPendingCount,
+      wbWeldDone: wbWeldDoneCount,
+      wbWeldPending: wbWeldPendingCount,
+      wrapDone: wrapDoneCount,
+      wrapPending: wrapPendingCount,
+      weldingDoneToday: weldingDoneTodayCount,
+      wrappingDoneToday: wrappingDoneTodayCount,
+    };
   }, [visibleRecords]);
 
   const onToggle = useCallback(
@@ -336,15 +390,12 @@ export function WeldTrackingTable() {
   }
 
   return (
-    <div className="space-y-3">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <p className="text-sm text-[var(--muted-foreground)]">
-          {totals.welded} / {totals.weldedTarget} welded · {totals.wrapped} / {totals.total} wrapped
-        </p>
-        <div className="flex items-center gap-2">
-          {sections.length > 1 ? (
+    <div className="space-y-2">
+      <div className="flex w-full min-w-0 items-center gap-2">
+        {sections.length > 1 ? (
+          <div className="min-w-0 flex-1">
             <Select value={sectionFilter} onValueChange={setSectionFilter}>
-              <SelectTrigger className="drainer-input w-[240px]">
+              <SelectTrigger className="drainer-input h-10 w-full min-w-0 max-w-full">
                 <SelectValue placeholder="Filter by section" />
               </SelectTrigger>
               <SelectContent>
@@ -355,42 +406,62 @@ export function WeldTrackingTable() {
                 ))}
               </SelectContent>
             </Select>
-          ) : null}
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            className="min-h-[40px] min-w-[40px] px-2"
-            onClick={loadRecords}
-            aria-label="Refresh weld tracking"
-            title="Refresh"
-          >
-            <RefreshCw className="size-4" />
-          </Button>
+          </div>
+        ) : null}
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          className={`h-10 min-w-[40px] shrink-0 px-2 ${sections.length <= 1 ? "ml-auto" : ""}`}
+          onClick={loadRecords}
+          aria-label="Refresh weld tracking"
+          title="Refresh"
+        >
+          <RefreshCw className="size-4" />
+        </Button>
+      </div>
+
+      <div className="mb-2 w-full min-w-0 rounded-md border border-[var(--border)] bg-white px-3 py-2 shadow-sm">
+        <p className="text-[9px] font-semibold uppercase tracking-wide text-[var(--muted-foreground)]">
+          Section summary
+        </p>
+        <div className="mt-1.5 grid grid-cols-2 gap-x-4 gap-y-1 text-left sm:gap-x-8">
+          <SummaryRow label="Welds done (WR)" value={wrWeldDone} />
+          <SummaryRow label="Welds pending (WR)" value={wrWeldPending} />
+          <SummaryRow label="Welds done (WB)" value={wbWeldDone} />
+          <SummaryRow label="Welds pending (WB)" value={wbWeldPending} />
+          <hr className="col-span-full my-0.5 border-0 border-t border-[var(--border)]" />
+          <SummaryRow label="Wrapping done" value={wrapDone} />
+          <SummaryRow label="Wrapping pending" value={wrapPending} />
+          <hr className="col-span-full my-0.5 border-0 border-t border-[var(--border)]" />
+          <SummaryRow label="Welding done today" value={weldingDoneToday} />
+          <SummaryRow label="Wrapping done today" value={wrappingDoneToday} />
         </div>
       </div>
 
-      <div
-        className={`overflow-x-hidden rounded-lg border border-[var(--border)] ${
-          visibleRecords.length > 20 ? "max-h-[720px] overflow-y-auto" : ""
-        }`}
-      >
-        <table className="min-w-full text-sm">
-          <thead className="bg-[var(--surface-alt)]">
-            <tr className="text-left text-xs uppercase tracking-wide text-[var(--muted-foreground)]">
-              <th className="px-3 py-2">#Counter</th>
-              <th className="px-3 py-2">CH</th>
-              <th className="px-3 py-2">Pipe/Fitting ID</th>
-              <th className="px-3 py-2">Joint Type</th>
-              <th className="px-3 py-2">Welded</th>
-              <th className="px-3 py-2">Wrapped</th>
-              <th className="px-3 py-2">Edit</th>
-            </tr>
-          </thead>
-          <tbody>
+      <div className="overflow-x-auto rounded-lg border border-[var(--border)]">
+        <div className={visibleRecords.length > 20 ? "max-h-[720px] overflow-y-auto" : ""}>
+          <table className="min-w-[600px] w-full text-sm">
+            <thead className="bg-[var(--surface-alt)]">
+              <tr className="text-left uppercase tracking-wide text-[var(--muted-foreground)]">
+                <th className="w-10 px-2 py-1.5 sm:px-3 sm:py-2 text-xs sm:text-sm">#</th>
+                <th className="w-16 px-2 py-1.5 sm:px-3 sm:py-2 text-xs sm:text-sm">CH</th>
+                <th className="w-28 px-2 py-1.5 sm:px-3 sm:py-2 text-xs sm:text-sm">
+                  Pipe/Fitting ID
+                </th>
+                <th className="w-16 px-2 py-1.5 sm:px-3 sm:py-2 text-xs sm:text-sm">Joint Type</th>
+                <th className="w-24 px-2 py-1.5 sm:px-3 sm:py-2 text-xs sm:text-sm">Welded</th>
+                <th className="w-24 px-2 py-1.5 sm:px-3 sm:py-2 text-xs sm:text-sm">Wrapped</th>
+                <th className="w-10 px-2 py-1.5 sm:px-3 sm:py-2 text-xs sm:text-sm">Edit</th>
+              </tr>
+            </thead>
+            <tbody>
             {visibleRecords.length === 0 ? (
               <tr>
-                <td colSpan={7} className="px-3 py-6 text-center text-sm text-[var(--muted-foreground)]">
+                <td
+                  colSpan={7}
+                  className="px-2 py-1.5 sm:px-3 sm:py-6 text-center text-xs sm:text-sm text-[var(--muted-foreground)]"
+                >
                   No WR/WB records found.
                 </td>
               </tr>
@@ -402,10 +473,14 @@ export function WeldTrackingTable() {
                 const steps = record.welded_steps ?? {};
                 return (
                   <tr key={record.id} className="border-t border-[var(--border)] align-top">
-                    <td className="px-3 py-2 font-medium">{record.counter ?? "-"}</td>
-                    <td className="px-3 py-2">{record.chainage ?? "-"}</td>
-                    <td className="px-3 py-2">{record.pipe_fitting_id || "-"}</td>
-                    <td className="px-3 py-2">
+                    <td className="px-2 py-1.5 sm:px-3 sm:py-2 font-medium">
+                      {record.counter ?? "-"}
+                    </td>
+                    <td className="px-2 py-1.5 sm:px-3 sm:py-2">{record.chainage ?? "-"}</td>
+                    <td className="max-w-[7rem] truncate px-2 py-1.5 sm:px-3 sm:py-2">
+                      {record.pipe_fitting_id || "-"}
+                    </td>
+                    <td className="px-2 py-1.5 sm:px-3 sm:py-2">
                       <Badge
                         variant="secondary"
                         className={isWR ? "bg-blue-100 text-blue-700" : "bg-orange-100 text-orange-700"}
@@ -413,7 +488,7 @@ export function WeldTrackingTable() {
                         {record.joint_type ?? "-"}
                       </Badge>
                     </td>
-                    <td className="px-3 py-2">
+                    <td className="px-2 py-1.5 sm:px-3 sm:py-2">
                       {record.joint_type === "WB" ? (
                         <div className="grid grid-cols-2 gap-1">
                           {WB_STEPS.map((step, index) => (
@@ -450,7 +525,7 @@ export function WeldTrackingTable() {
                         <p className="mt-1 text-xs text-[var(--muted-foreground)]">{weldedOn}</p>
                       ) : null}
                     </td>
-                    <td className="px-3 py-2">
+                    <td className="px-2 py-1.5 sm:px-3 sm:py-2">
                       <button
                         type="button"
                         onClick={() => onToggle(record.id, "wrapped_at")}
@@ -467,12 +542,12 @@ export function WeldTrackingTable() {
                         <p className="mt-1 text-xs text-[var(--muted-foreground)]">{wrappedOn}</p>
                       ) : null}
                     </td>
-                    <td className="px-3 py-2">
+                    <td className="px-2 py-1.5 sm:px-3 sm:py-2">
                       <Button
                         type="button"
                         variant="outline"
                         size="sm"
-                        className="min-h-[32px] px-3 text-xs"
+                        className="min-h-[32px] px-2 text-xs sm:px-3"
                         onClick={() => setEditingRecordId(record.id)}
                       >
                         Edit record
@@ -482,8 +557,9 @@ export function WeldTrackingTable() {
                 );
               })
             )}
-          </tbody>
-        </table>
+            </tbody>
+          </table>
+        </div>
       </div>
       <RecordEditForm
         recordId={editingRecordId}
