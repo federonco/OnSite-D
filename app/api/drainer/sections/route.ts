@@ -8,15 +8,20 @@ import { sectionsWriteForbiddenResponse } from "@/lib/drainer-sections-policy";
 export async function GET(request: NextRequest) {
   const { user, token } = await getUserFromRequest(request);
   const subsectionId = request.nextUrl.searchParams.get("subsection_id")?.trim() || null;
-  const supabase = token
-    ? getSupabaseServer({ accessToken: token })
-    : getSupabaseServer({ useServiceRole: true });
 
-  const includeQrFields = !!(
-    user &&
-    token &&
-    await isAdmin(supabase)
-  );
+  const userSb = token ? getSupabaseServer({ accessToken: token }) : null;
+  const verifiedAdmin =
+    !!userSb && !!user && !!token && (await isAdmin(userSb));
+
+  // App admin is granted via has_role; RLS on drainer_sections may still hide rows from the JWT.
+  // After verifying admin, list with service role so admin UI gets all sections.
+  const supabase = verifiedAdmin
+    ? getSupabaseServer({ useServiceRole: true })
+    : token
+      ? getSupabaseServer({ accessToken: token })
+      : getSupabaseServer({ useServiceRole: true });
+
+  const includeQrFields = verifiedAdmin;
 
   const { data, error, projectEmbedOk } =
     await listDrainerSectionsWithProjectFallback(supabase, {
