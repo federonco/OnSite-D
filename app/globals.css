@@ -467,6 +467,31 @@ body {
     height: 0;
     display: none; /* Chrome, Safari, Opera */
   }
+
+  .drainer-scrollbar {
+    scrollbar-width: thin;
+    scrollbar-color: #b8682a #e8d2bf;
+  }
+
+  .drainer-scrollbar::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+
+  .drainer-scrollbar::-webkit-scrollbar-track {
+    background: #e8d2bf;
+    border-radius: 5px;
+  }
+
+  .drainer-scrollbar::-webkit-scrollbar-thumb {
+    background: #b8682a;
+    border-radius: 5px;
+    border: 2px solid #e8d2bf;
+  }
+
+  .drainer-scrollbar::-webkit-scrollbar-thumb:hover {
+    background: #a35d26;
+  }
 }
 
 /* Lodge button - outside layer for higher specificity over Tailwind */

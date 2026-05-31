@@ -149,9 +149,20 @@ function formatTimeFromTimestamp(ts: string | null | undefined) {
 }
 
 function formatLodgedTime(r: PipeRecord) {
-  return formatTime(r.date_installed, r.time_installed) !== "—"
-    ? formatTime(r.date_installed, r.time_installed)
-    : formatTimeFromTimestamp(r.lodged_at);
+  const fromLodged = formatTimeFromTimestamp(r.lodged_at);
+  if (fromLodged !== "—") return fromLodged;
+  const fromUpdated = formatTimeFromTimestamp(r.updated_at);
+  if (fromUpdated !== "—") return fromUpdated;
+  return formatTime(r.date_installed, r.time_installed);
+}
+
+function recordLodgedTimestamp(r: PipeRecord): number {
+  for (const ts of [r.lodged_at, r.updated_at, r.date_installed]) {
+    if (!ts) continue;
+    const t = new Date(ts).getTime();
+    if (!Number.isNaN(t)) return t;
+  }
+  return 0;
 }
 
 function formatEditedTime(r: PipeRecord) {
@@ -184,6 +195,13 @@ export function SectionRecords({
 }: SectionRecordsProps) {
   const itrProgress = useMemo(() => getITRProgress(records.length), [records.length]);
   const installedCount = totalInstalledCount ?? records.length;
+  const sortedRecords = useMemo(
+    () =>
+      [...records].sort(
+        (a, b) => recordLodgedTimestamp(b) - recordLodgedTimestamp(a)
+      ),
+    [records]
+  );
 
   return (
     <Card className="drainer-card resize-y overflow-auto min-h-[420px] max-h-[90vh]">
@@ -228,8 +246,9 @@ export function SectionRecords({
           guideXml={selectedSection?.guide_xml ?? null}
         />
 
-        <div className="border border-[var(--border)] rounded-lg overflow-hidden bg-[#E8D2BF] flex-1 min-h-[220px] min-h-0 max-h-full">
-          <div className="h-full max-h-full overflow-x-auto overflow-y-scroll drainer-scrollbar-none">
+        <div className="border border-[var(--border)] rounded-lg overflow-hidden bg-[#E8D2BF] flex-1 min-h-0">
+          <div className="min-h-[220px] max-h-[min(360px,45vh)] overflow-x-auto overflow-y-auto drainer-scrollbar">
+            <div className="overflow-x-auto [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
             <table className="w-full text-sm min-w-[400px] font-[var(--font-body)]">
               <thead className="bg-[#EEE4DA] sticky top-0">
                 <tr>
@@ -243,14 +262,14 @@ export function SectionRecords({
                 </tr>
               </thead>
               <tbody>
-                {records.length === 0 ? (
+                {sortedRecords.length === 0 ? (
                   <tr>
                     <td colSpan={7} className="px-3 py-4 text-center text-[var(--muted-foreground)]">
                       {emptyMessage}
                     </td>
                   </tr>
                 ) : (
-                  records.map((r) => (
+                  sortedRecords.map((r) => (
                     <tr
                       key={r.id}
                       className="border-t border-[var(--border)] hover:bg-[var(--surface-alt)]/50"
@@ -276,6 +295,7 @@ export function SectionRecords({
                 )}
               </tbody>
             </table>
+            </div>
           </div>
         </div>
       </CardContent>

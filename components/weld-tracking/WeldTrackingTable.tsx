@@ -34,6 +34,10 @@ type ToggleField = "welded_at" | "wrapped_at";
 type WeldStepKey = "external_1" | "external_2" | "internal_1" | "internal_2";
 const WB_STEPS: WeldStepKey[] = ["external_1", "external_2", "internal_1", "internal_2"];
 
+function isSimpleWeldJoint(jointType: string | null | undefined): boolean {
+  return jointType === "WR" || jointType === "Transition";
+}
+
 function formatDate(value: string | null) {
   if (!value) return "";
   const date = new Date(value);
@@ -65,7 +69,7 @@ function latestWbStepIso(record: WeldRecord): string | null {
 }
 
 function isWeldFullyComplete(record: WeldRecord): boolean {
-  if (record.joint_type === "WR") return !!record.welded_at;
+  if (isSimpleWeldJoint(record.joint_type)) return !!record.welded_at;
   if (record.joint_type === "WB")
     return WB_STEPS.every((step) => !!record.welded_steps?.[step]);
   return false;
@@ -73,7 +77,7 @@ function isWeldFullyComplete(record: WeldRecord): boolean {
 
 function isWeldCompletedToday(record: WeldRecord): boolean {
   if (!isWeldFullyComplete(record)) return false;
-  if (record.joint_type === "WR") return isToday(record.welded_at);
+  if (isSimpleWeldJoint(record.joint_type)) return isToday(record.welded_at);
   const ref = record.welded_at ?? latestWbStepIso(record);
   return ref ? isToday(ref) : false;
 }
@@ -168,7 +172,7 @@ export function WeldTrackingTable() {
     weldingDoneToday,
     wrappingDoneToday,
   } = useMemo(() => {
-    const wrRecords = visibleRecords.filter((r) => r.joint_type === "WR");
+    const wrRecords = visibleRecords.filter((r) => isSimpleWeldJoint(r.joint_type));
     const wbRecords = visibleRecords.filter((r) => r.joint_type === "WB");
     const wrWeldDoneCount = wrRecords.filter((r) => !!r.welded_at).length;
     const wrWeldPendingCount = wrRecords.length - wrWeldDoneCount;
@@ -470,6 +474,7 @@ export function WeldTrackingTable() {
                 const weldedOn = formatDate(record.welded_at);
                 const wrappedOn = formatDate(record.wrapped_at);
                 const isWR = record.joint_type === "WR";
+                const isTransition = record.joint_type === "Transition";
                 const steps = record.welded_steps ?? {};
                 return (
                   <tr key={record.id} className="border-t border-[var(--border)] align-top">
@@ -481,12 +486,20 @@ export function WeldTrackingTable() {
                       {record.pipe_fitting_id || "-"}
                     </td>
                     <td className="px-2 py-1.5 sm:px-3 sm:py-2">
-                      <Badge
-                        variant="secondary"
-                        className={isWR ? "bg-blue-100 text-blue-700" : "bg-orange-100 text-orange-700"}
-                      >
-                        {record.joint_type ?? "-"}
-                      </Badge>
+                      {isTransition ? (
+                        <Badge variant="secondary" className="bg-purple-100 text-purple-700">
+                          TR
+                        </Badge>
+                      ) : (
+                        <Badge
+                          variant="secondary"
+                          className={
+                            isWR ? "bg-blue-100 text-blue-700" : "bg-orange-100 text-orange-700"
+                          }
+                        >
+                          {record.joint_type ?? "-"}
+                        </Badge>
+                      )}
                     </td>
                     <td className="px-2 py-1.5 sm:px-3 sm:py-2">
                       {record.joint_type === "WB" ? (

@@ -20,7 +20,7 @@ export async function GET(request: NextRequest) {
     .select(
       "id,counter,chainage,pipe_fitting_id,joint_type,date_installed,welded_at,wrapped_at,welded_steps,section_id,drainer_sections(name)"
     )
-    .in("joint_type", ["WR", "WB"])
+    .in("joint_type", ["WR", "WB", "Transition"])
     .order("chainage", { ascending: true });
 
   if (error) {
