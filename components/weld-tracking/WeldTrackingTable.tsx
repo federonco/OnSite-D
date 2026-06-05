@@ -4,10 +4,23 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useToast } from "@/components/toast";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { getSupabaseBrowser } from "@/lib/supabase/browser";
 import { RecordEditForm } from "@/components/admin/record-edit-form";
-import { RefreshCw } from "lucide-react";
+import type { WeldWrapSectionContext } from "@/lib/weld-wrap/section-context";
+import {
+  WELD_WRAP_STATUS_FILTER_OPTIONS,
+  type WeldWrapStatusFilterKey,
+} from "@/lib/reporting/weld-wrap/report-filters";
+import { Loader2, RefreshCw } from "lucide-react";
 
 type SectionInfo = { name: string | null } | null;
 
@@ -20,6 +33,7 @@ type WeldRecord = {
   date_installed: string | null;
   welded_at: string | null;
   wrapped_at: string | null;
+  comments: string | null;
   welded_steps?: {
     external_1?: string | null;
     external_2?: string | null;
@@ -82,7 +96,7 @@ function isWeldCompletedToday(record: WeldRecord): boolean {
   return ref ? isToday(ref) : false;
 }
 
-function SummaryRow({ label, value }: { label: string; value: number }) {
+function SummaryRow({ label, value }: { label: string; value: string | number }) {
   return (
     <div className="min-w-0 text-[10px] leading-snug">
       <span className="text-[var(--muted-foreground)]">{label}</span>
@@ -98,8 +112,19 @@ export function WeldTrackingTable() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [records, setRecords] = useState<WeldRecord[]>([]);
+  const [commentDrafts, setCommentDrafts] = useState<Record<string, string>>({});
   const [sectionFilter, setSectionFilter] = useState<string>("all");
   const [editingRecordId, setEditingRecordId] = useState<string | null>(null);
+  const [reportModalOpen, setReportModalOpen] = useState(false);
+  const [reportEmail, setReportEmail] = useState("");
+  const [reportDefaultEmail, setReportDefaultEmail] = useState("");
+  const [sendingReport, setSendingReport] = useState(false);
+  const [reportStatusFilters, setReportStatusFilters] = useState<WeldWrapStatusFilterKey[]>(
+    []
+  );
+  const [sectionContext, setSectionContext] = useState<WeldWrapSectionContext | null>(
+    null
+  );
 
   const getAccessToken = useCallback(async () => {
     const { data } = await supabase.auth.getSession();
@@ -124,6 +149,11 @@ export function WeldTrackingTable() {
         throw new Error(data.error ?? "Failed to load weld tracking records.");
       }
       setRecords(Array.isArray(data.records) ? data.records : []);
+      const drafts: Record<string, string> = {};
+      for (const record of data.records ?? []) {
+        drafts[record.id] = record.comments ?? "";
+      }
+      setCommentDrafts(drafts);
     } catch (err) {
       const message = err instanceof Error ? err.message : "Unknown error";
       setError(message);
@@ -135,6 +165,51 @@ export function WeldTrackingTable() {
   useEffect(() => {
     loadRecords();
   }, [loadRecords]);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const token = await getAccessToken();
+      if (!token || cancelled) return;
+      const res = await fetch("/api/drainer/me", {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (cancelled || !res.ok) return;
+      const json = (await res.json()) as {
+        reportDefaultEmail?: string;
+        email?: string | null;
+      };
+      setReportDefaultEmail(json.reportDefaultEmail || json.email || "");
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [getAccessToken]);
+
+  const loadSectionContext = useCallback(async () => {
+    if (!sectionFilter || sectionFilter === "all") {
+      setSectionContext(null);
+      return;
+    }
+    const token = await getAccessToken();
+    if (!token) return;
+    const res = await fetch(
+      `/api/drainer/weld-tracking/section-context?sectionId=${encodeURIComponent(sectionFilter)}`,
+      { headers: { Authorization: `Bearer ${token}` } }
+    );
+    const data = (await res.json().catch(() => ({}))) as {
+      context?: WeldWrapSectionContext;
+    };
+    if (res.ok && data.context) {
+      setSectionContext(data.context);
+    } else {
+      setSectionContext(null);
+    }
+  }, [sectionFilter, getAccessToken]);
+
+  useEffect(() => {
+    loadSectionContext();
+  }, [loadSectionContext, records]);
 
   const sections = useMemo(() => {
     const map = new Map<string, string>();
@@ -265,6 +340,138 @@ export function WeldTrackingTable() {
     },
     [getAccessToken, pushToast, records]
   );
+
+  const onSaveComments = useCallback(
+    async (recordId: string, draft: string) => {
+      const current = records.find((record) => record.id === recordId);
+      if (!current) return;
+
+      const nextValue = draft.trim() || null;
+      const storedValue = current.comments ?? null;
+      if (nextValue === storedValue) return;
+
+      const previousValue = current.comments;
+      setRecords((prev) =>
+        prev.map((record) =>
+          record.id === recordId ? { ...record, comments: nextValue } : record
+        )
+      );
+
+      try {
+        const token = await getAccessToken();
+        const res = await fetch("/api/drainer/weld-tracking", {
+          method: "PATCH",
+          headers: {
+            "Content-Type": "application/json",
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          },
+          body: JSON.stringify({
+            id: recordId,
+            field: "comments",
+            value: nextValue,
+          }),
+        });
+        const data = (await res.json().catch(() => ({}))) as {
+          record?: Pick<WeldRecord, "id" | "comments">;
+          error?: string;
+        };
+
+        if (!res.ok) {
+          throw new Error(data.error ?? "Update failed");
+        }
+
+        if (data.record) {
+          setRecords((prev) =>
+            prev.map((record) =>
+              record.id === recordId
+                ? { ...record, comments: data.record?.comments ?? null }
+                : record
+            )
+          );
+          setCommentDrafts((prev) => ({
+            ...prev,
+            [recordId]: data.record?.comments ?? "",
+          }));
+        }
+      } catch (err) {
+        setRecords((prev) =>
+          prev.map((record) =>
+            record.id === recordId ? { ...record, comments: previousValue ?? null } : record
+          )
+        );
+        setCommentDrafts((prev) => ({
+          ...prev,
+          [recordId]: previousValue ?? "",
+        }));
+        pushToast({
+          type: "error",
+          title: "Update failed",
+          message: err instanceof Error ? err.message : "Could not save comments.",
+        });
+      }
+    },
+    [getAccessToken, pushToast, records]
+  );
+
+  const openSendReportModal = useCallback(async () => {
+    const { data } = await supabase.auth.getSession();
+    setReportEmail(
+      reportDefaultEmail || data.session?.user.email || ""
+    );
+    setReportModalOpen(true);
+  }, [reportDefaultEmail, supabase]);
+
+  const toggleReportStatusFilter = useCallback((key: WeldWrapStatusFilterKey) => {
+    if (key === "all") {
+      setReportStatusFilters([]);
+      return;
+    }
+    setReportStatusFilters((prev) =>
+      prev.includes(key) ? prev.filter((item) => item !== key) : [...prev, key]
+    );
+  }, []);
+
+  const reportFiltersPayload = useMemo(
+    () => (reportStatusFilters.length > 0 ? reportStatusFilters : undefined),
+    [reportStatusFilters]
+  );
+
+  const handleSendReport = useCallback(async () => {
+    if (!sectionFilter || sectionFilter === "all" || !reportEmail.trim()) return;
+    setSendingReport(true);
+    try {
+      const token = await getAccessToken();
+      if (!token) throw new Error("Sign in required");
+      const res = await fetch("/api/drainer/report/weld-wrap/email", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          sectionId: sectionFilter,
+          recipientEmail: reportEmail.trim(),
+          statusFilters: reportFiltersPayload,
+        }),
+      });
+      const data = (await res.json().catch(() => ({}))) as { error?: string };
+      if (!res.ok) throw new Error(data.error ?? "Send failed");
+      pushToast({
+        type: "success",
+        title: "Report sent",
+        message: `Weld & Wrap report sent to ${reportEmail.trim()}`,
+      });
+      setReportModalOpen(false);
+    } catch (err) {
+      pushToast({
+        type: "error",
+        title: "Send failed",
+        message: err instanceof Error ? err.message : "Could not send report.",
+      });
+    } finally {
+      setSendingReport(false);
+    }
+  }, [sectionFilter, reportEmail, reportFiltersPayload, getAccessToken, pushToast]);
 
   const onToggleWbStep = useCallback(
     async (recordId: string, step: WeldStepKey) => {
@@ -416,12 +623,48 @@ export function WeldTrackingTable() {
           type="button"
           variant="outline"
           size="sm"
-          className={`h-10 min-w-[40px] shrink-0 px-2 ${sections.length <= 1 ? "ml-auto" : ""}`}
+          className="h-10 min-h-10 min-w-[40px] shrink-0 px-2"
           onClick={loadRecords}
           aria-label="Refresh weld tracking"
           title="Refresh"
         >
           <RefreshCw className="size-4" />
+        </Button>
+      </div>
+
+      <div className="flex w-full min-w-0 flex-wrap items-center gap-x-3 gap-y-1.5 rounded-md border border-[var(--border)] bg-[var(--surface-alt)] px-2.5 py-2">
+        {WELD_WRAP_STATUS_FILTER_OPTIONS.map((option) => {
+          const checked =
+            option.key === "all"
+              ? reportStatusFilters.length === 0
+              : reportStatusFilters.includes(option.key);
+          return (
+            <label
+              key={option.key}
+              className="inline-flex shrink-0 cursor-pointer items-center gap-1.5 whitespace-nowrap text-[10px] text-[var(--ink)]"
+            >
+              <input
+                type="checkbox"
+                className="size-3 shrink-0 accent-[#B8682A]"
+                checked={checked}
+                onChange={() => toggleReportStatusFilter(option.key)}
+              />
+              {option.label}
+            </label>
+          );
+        })}
+      </div>
+
+      <div className="flex w-full flex-wrap items-center justify-end gap-2">
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          className="h-10 min-h-10 shrink-0 whitespace-nowrap px-4 text-xs sm:text-sm"
+          onClick={openSendReportModal}
+          disabled={!sectionFilter || sectionFilter === "all" || sendingReport}
+        >
+          Send report
         </Button>
       </div>
 
@@ -440,6 +683,15 @@ export function WeldTrackingTable() {
           <hr className="col-span-full my-0.5 border-0 border-t border-[var(--border)]" />
           <SummaryRow label="Welding done today" value={weldingDoneToday} />
           <SummaryRow label="Wrapping done today" value={wrappingDoneToday} />
+          <hr className="col-span-full my-0.5 border-0 border-t border-[var(--border)]" />
+          <SummaryRow
+            label="Backfill up to"
+            value={
+              sectionContext?.backfillUpTo != null
+                ? sectionContext.backfillUpTo.toLocaleString("en-AU")
+                : "—"
+            }
+          />
         </div>
       </div>
 
@@ -456,6 +708,7 @@ export function WeldTrackingTable() {
                 <th className="w-16 px-2 py-1.5 sm:px-3 sm:py-2 text-xs sm:text-sm">Joint Type</th>
                 <th className="w-24 px-2 py-1.5 sm:px-3 sm:py-2 text-xs sm:text-sm">Welded</th>
                 <th className="w-24 px-2 py-1.5 sm:px-3 sm:py-2 text-xs sm:text-sm">Wrapped</th>
+                <th className="min-w-[8rem] px-2 py-1.5 sm:px-3 sm:py-2 text-xs sm:text-sm">Comments</th>
                 <th className="w-10 px-2 py-1.5 sm:px-3 sm:py-2 text-xs sm:text-sm">Edit</th>
               </tr>
             </thead>
@@ -463,7 +716,7 @@ export function WeldTrackingTable() {
             {visibleRecords.length === 0 ? (
               <tr>
                 <td
-                  colSpan={7}
+                  colSpan={8}
                   className="px-2 py-1.5 sm:px-3 sm:py-6 text-center text-xs sm:text-sm text-[var(--muted-foreground)]"
                 >
                   No WR/WB records found.
@@ -556,6 +809,23 @@ export function WeldTrackingTable() {
                       ) : null}
                     </td>
                     <td className="px-2 py-1.5 sm:px-3 sm:py-2">
+                      <textarea
+                        rows={1}
+                        value={commentDrafts[record.id] ?? ""}
+                        onChange={(e) =>
+                          setCommentDrafts((prev) => ({
+                            ...prev,
+                            [record.id]: e.target.value,
+                          }))
+                        }
+                        onBlur={() =>
+                          onSaveComments(record.id, commentDrafts[record.id] ?? "")
+                        }
+                        className="w-full min-w-[8rem] resize-y rounded border border-[var(--border)] bg-white px-2 py-1 text-xs sm:text-sm text-[var(--ink)] placeholder:text-[var(--muted-foreground)] focus:outline-none focus:ring-1 focus:ring-[var(--primary)]"
+                        placeholder="Add comment…"
+                      />
+                    </td>
+                    <td className="px-2 py-1.5 sm:px-3 sm:py-2">
                       <Button
                         type="button"
                         variant="outline"
@@ -581,6 +851,45 @@ export function WeldTrackingTable() {
         onSaved={loadRecords}
         getAccessToken={getAccessToken}
       />
+
+      <Dialog open={reportModalOpen} onOpenChange={setReportModalOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Send report to</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            <p className="text-sm text-[var(--muted-foreground)]">
+              Weld &amp; Wrap status report for the selected section (PDF attached).
+            </p>
+            <Input
+              type="email"
+              placeholder="Email address"
+              value={reportEmail}
+              onChange={(e) => setReportEmail(e.target.value)}
+              className="drainer-input"
+            />
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setReportModalOpen(false)}>
+              Cancel
+            </Button>
+            <Button
+              onClick={handleSendReport}
+              disabled={!reportEmail.trim() || sendingReport}
+              className="bg-[#B8682A] text-white border-0 hover:bg-[#A35D26]"
+            >
+              {sendingReport ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin shrink-0 mr-1" />
+                  Sending…
+                </>
+              ) : (
+                "Send"
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

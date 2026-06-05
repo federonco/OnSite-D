@@ -3,7 +3,7 @@ import { getUserFromRequest } from "@/lib/api-auth";
 import { isAdmin } from "@/lib/admin";
 import { getSupabaseServer } from "@/lib/supabase/server";
 
-const ALLOWED_FIELDS = new Set(["welded_at", "wrapped_at", "welded_steps"]);
+const ALLOWED_FIELDS = new Set(["welded_at", "wrapped_at", "welded_steps", "comments"]);
 
 export async function GET(request: NextRequest) {
   const { user, token } = await getUserFromRequest(request);
@@ -15,13 +15,26 @@ export async function GET(request: NextRequest) {
   }
 
   const supabase = getSupabaseServer({ useServiceRole: true });
-  const { data, error } = await supabase
+  const withCommentsSelect =
+    "id,counter,chainage,pipe_fitting_id,joint_type,date_installed,welded_at,wrapped_at,welded_steps,comments,section_id,drainer_sections(name)";
+  const baseSelect =
+    "id,counter,chainage,pipe_fitting_id,joint_type,date_installed,welded_at,wrapped_at,welded_steps,section_id,drainer_sections(name)";
+
+  let { data, error } = await supabase
     .from("drainer_pipe_records")
-    .select(
-      "id,counter,chainage,pipe_fitting_id,joint_type,date_installed,welded_at,wrapped_at,welded_steps,section_id,drainer_sections(name)"
-    )
+    .select(withCommentsSelect)
     .in("joint_type", ["WR", "WB", "Transition"])
     .order("chainage", { ascending: true });
+
+  if (error?.message?.includes("comments")) {
+    const fallback = await supabase
+      .from("drainer_pipe_records")
+      .select(baseSelect)
+      .in("joint_type", ["WR", "WB", "Transition"])
+      .order("chainage", { ascending: true });
+    data = fallback.data?.map((row) => ({ ...row, comments: null })) ?? null;
+    error = fallback.error;
+  }
 
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 });
@@ -62,6 +75,13 @@ export async function PATCH(request: NextRequest) {
         { status: 400 }
       );
     }
+  } else if (body.field === "comments") {
+    if (body.value !== null && typeof body.value !== "string") {
+      return NextResponse.json(
+        { error: "Invalid comments. Must be string or null." },
+        { status: 400 }
+      );
+    }
   } else {
     if (body.value !== null && typeof body.value !== "string") {
       return NextResponse.json(
@@ -78,13 +98,35 @@ export async function PATCH(request: NextRequest) {
     }
   }
 
+  const updateValue =
+    body.field === "comments"
+      ? typeof body.value === "string" && body.value.trim() === ""
+        ? null
+        : (body.value ?? null)
+      : body.value;
+
   const supabase = getSupabaseServer({ useServiceRole: true });
-  const { data, error } = await supabase
+  const selectFields =
+    body.field === "comments"
+      ? "id,welded_at,wrapped_at,welded_steps,comments"
+      : "id,welded_at,wrapped_at,welded_steps";
+
+  let { data, error } = await supabase
     .from("drainer_pipe_records")
-    .update({ [body.field]: body.value })
+    .update({ [body.field]: updateValue })
     .eq("id", body.id)
-    .select("id,welded_at,wrapped_at,welded_steps")
+    .select(selectFields)
     .single();
+
+  if (error?.message?.includes("comments") && body.field === "comments") {
+    return NextResponse.json(
+      {
+        error:
+          "Comments column not available. Apply migration 20260531120000_add_comments_to_drainer_pipe_records.sql",
+      },
+      { status: 503 }
+    );
+  }
 
   if (error) {
     return NextResponse.json({ error: error.message }, { status: 500 });
