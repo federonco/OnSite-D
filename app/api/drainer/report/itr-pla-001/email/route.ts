@@ -14,8 +14,8 @@ export async function POST(request: NextRequest) {
   if (!user || !token) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
-  const supabase = getSupabaseServer({ accessToken: token });
-  if (!await isAdmin(supabase)) {
+  const userSupabase = getSupabaseServer({ accessToken: token });
+  if (!(await isAdmin(userSupabase))) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
@@ -40,6 +40,7 @@ export async function POST(request: NextRequest) {
     );
   }
 
+  const supabase = getSupabaseServer({ useServiceRole: true });
   const { section, error: sectionErr } = await fetchItrSectionById(supabase, sectionId);
   if (!section) {
     return NextResponse.json(

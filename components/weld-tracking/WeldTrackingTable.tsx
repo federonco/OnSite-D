@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import { useToast } from "@/components/toast";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -96,10 +96,77 @@ function isWeldCompletedToday(record: WeldRecord): boolean {
   return ref ? isToday(ref) : false;
 }
 
-function SummaryRow({ label, value }: { label: string; value: string | number }) {
+function DbField({ children }: { children: string }) {
+  return (
+    <code className="rounded bg-gray-700 px-1 font-mono text-[10px] text-white">
+      {children}
+    </code>
+  );
+}
+
+interface MetricTooltipProps {
+  label: string;
+  formula: ReactNode;
+}
+
+function MetricTooltip({ label, formula }: MetricTooltipProps) {
+  const [open, setOpen] = useState(false);
+  const [coords, setCoords] = useState({ x: 0, y: 0 });
+
+  const showAt = (clientX: number, clientY: number) => {
+    setCoords({ x: clientX, y: clientY });
+    setOpen(true);
+  };
+
+  return (
+    <>
+      <span
+        className="inline-flex cursor-help items-center gap-0.5"
+        onMouseEnter={(e) => showAt(e.clientX, e.clientY)}
+        onMouseLeave={() => setOpen(false)}
+        onClick={(e) => {
+          e.stopPropagation();
+          if (open) {
+            setOpen(false);
+          } else {
+            showAt(e.clientX, e.clientY);
+          }
+        }}
+      >
+        <span className="text-[var(--muted-foreground)]">{label}</span>
+        <span className="text-[8px] text-[var(--muted-foreground)]" aria-hidden>
+          ⓘ
+        </span>
+      </span>
+      {open ? (
+        <span
+          role="tooltip"
+          className="pointer-events-none fixed z-50 w-max max-w-[260px] rounded px-3 py-2 text-xs leading-snug text-white shadow-md"
+          style={{
+            backgroundColor: "#1a1a1a",
+            left: coords.x + 8,
+            top: coords.y + 12,
+          }}
+        >
+          {formula}
+        </span>
+      ) : null}
+    </>
+  );
+}
+
+function SummaryRow({
+  label,
+  formula,
+  value,
+}: {
+  label: string;
+  formula: ReactNode;
+  value: string | number;
+}) {
   return (
     <div className="min-w-0 text-[10px] leading-snug">
-      <span className="text-[var(--muted-foreground)]">{label}</span>
+      <MetricTooltip label={label} formula={formula} />
       <span className="text-[var(--muted-foreground)]"> = </span>
       <span className="font-semibold tabular-nums text-[var(--ink)]">{value}</span>
     </div>
@@ -673,19 +740,84 @@ export function WeldTrackingTable() {
           Section summary
         </p>
         <div className="mt-1.5 grid grid-cols-2 gap-x-4 gap-y-1 text-left sm:gap-x-8">
-          <SummaryRow label="Welds done (WR)" value={wrWeldDone} />
-          <SummaryRow label="Welds pending (WR)" value={wrWeldPending} />
-          <SummaryRow label="Welds done (WB)" value={wbWeldDone} />
-          <SummaryRow label="Welds pending (WB)" value={wbWeldPending} />
+          <SummaryRow
+            label="Welds done (WR)"
+            formula={
+              <>
+                (WR + Transition) with <DbField>welded_at</DbField> ≠ null
+              </>
+            }
+            value={wrWeldDone}
+          />
+          <SummaryRow
+            label="Welds pending (WR)"
+            formula={
+              <>
+                (WR + Transition) with <DbField>welded_at</DbField> = null
+              </>
+            }
+            value={wrWeldPending}
+          />
+          <SummaryRow
+            label="Welds done (WB)"
+            formula={
+              <>
+                WB with <DbField>welded_at</DbField> ≠ null
+              </>
+            }
+            value={wbWeldDone}
+          />
+          <SummaryRow
+            label="Welds pending (WB)"
+            formula={
+              <>
+                WB with <DbField>welded_at</DbField> = null
+              </>
+            }
+            value={wbWeldPending}
+          />
           <hr className="col-span-full my-0.5 border-0 border-t border-[var(--border)]" />
-          <SummaryRow label="Wrapping done" value={wrapDone} />
-          <SummaryRow label="Wrapping pending" value={wrapPending} />
+          <SummaryRow
+            label="Wrapping done"
+            formula={
+              <>
+                (WR+WB+TR) with <DbField>wrapped_at</DbField> ≠ null
+              </>
+            }
+            value={wrapDone}
+          />
+          <SummaryRow
+            label="Wrapping pending"
+            formula={
+              <>
+                (WR+WB+TR) with <DbField>wrapped_at</DbField> = null
+              </>
+            }
+            value={wrapPending}
+          />
           <hr className="col-span-full my-0.5 border-0 border-t border-[var(--border)]" />
-          <SummaryRow label="Welding done today" value={weldingDoneToday} />
-          <SummaryRow label="Wrapping done today" value={wrappingDoneToday} />
+          <SummaryRow
+            label="Welding done today"
+            formula={
+              <>
+                (WR + Transition) or WB with <DbField>welded_at</DbField> = today
+              </>
+            }
+            value={weldingDoneToday}
+          />
+          <SummaryRow
+            label="Wrapping done today"
+            formula={
+              <>
+                (WR+WB+TR) with <DbField>wrapped_at</DbField> = today
+              </>
+            }
+            value={wrappingDoneToday}
+          />
           <hr className="col-span-full my-0.5 border-0 border-t border-[var(--border)]" />
           <SummaryRow
             label="Backfill up to"
+            formula={<>MIN(chainage) from PSP records in this section</>}
             value={
               sectionContext?.backfillUpTo != null
                 ? sectionContext.backfillUpTo.toLocaleString("en-AU")

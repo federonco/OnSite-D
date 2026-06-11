@@ -20,8 +20,8 @@ export async function POST(request: NextRequest) {
   if (!user || !token) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
-  const supabase = getSupabaseServer({ accessToken: token });
-  if (!await isAdmin(supabase)) {
+  const userSupabase = getSupabaseServer({ accessToken: token });
+  if (!(await isAdmin(userSupabase))) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
@@ -42,6 +42,9 @@ export async function POST(request: NextRequest) {
       { status: 400 }
     );
   }
+
+  // Admin via has_role; section/records reads use service role (RLS may hide rows from JWT).
+  const supabase = getSupabaseServer({ useServiceRole: true });
 
   const { data: section, error: sectionError } = await supabase
     .from("drainer_sections")
