@@ -96,12 +96,52 @@ export function RecordEditForm({
   const [sparkTesting, setSparkTesting] = useState(false);
   const [inspectorName, setInspectorName] = useState("");
   const [contextChToLocal, setContextChToLocal] = useState("");
+  const [isSuperAdmin, setIsSuperAdmin] = useState(false);
+  const [sections, setSections] = useState<{ id: string; name: string }[]>([]);
+  const [selectedSectionId, setSelectedSectionId] = useState("");
 
   useEffect(() => {
     if (open && contextChTo != null) {
       setContextChToLocal(String(contextChTo));
     }
   }, [open, contextChTo]);
+
+  useEffect(() => {
+    if (!open) {
+      setIsSuperAdmin(false);
+      setSections([]);
+      setSelectedSectionId("");
+      return;
+    }
+
+    const loadAccess = async () => {
+      const token = await getAccessToken();
+      const meRes = await fetch("/api/drainer/me", {
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      });
+      const meData = await meRes.json();
+      const superAdmin = !!meData.isSuperAdmin;
+      setIsSuperAdmin(superAdmin);
+      if (!superAdmin) {
+        setSections([]);
+        return;
+      }
+      const sectionsRes = await fetch("/api/drainer/sections", {
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      });
+      const sectionsData = await sectionsRes.json();
+      if (sectionsRes.ok && Array.isArray(sectionsData.sections)) {
+        setSections(
+          sectionsData.sections.map((s: { id: string; name: string }) => ({
+            id: s.id,
+            name: s.name,
+          }))
+        );
+      }
+    };
+
+    loadAccess();
+  }, [open, getAccessToken]);
 
   useEffect(() => {
     if (!open || !recordId) return;
@@ -118,6 +158,7 @@ export function RecordEditForm({
       }
       const r = data.record as PipeRecord;
       setRecord(r);
+      setSelectedSectionId(r.section_id ?? "");
       setDateInstalled(r.date_installed ?? "");
       setTimeInstalled(r.time_installed ?? "");
       setChainage(String(r.chainage ?? ""));
@@ -140,8 +181,11 @@ export function RecordEditForm({
     load();
   }, [open, recordId, getAccessToken, pushToast]);
 
+  const effectiveSectionId =
+    isSuperAdmin && selectedSectionId ? selectedSectionId : record?.section_id;
+
   const checkDuplicateChainage = useCallback(async () => {
-    const sectionId = record?.section_id;
+    const sectionId = effectiveSectionId;
     if (!sectionId || !chainage || !recordId) {
       setIsDuplicateChainage(false);
       return;
@@ -162,16 +206,16 @@ export function RecordEditForm({
     } catch {
       setIsDuplicateChainage(false);
     }
-  }, [record?.section_id, chainage, recordId, getAccessToken]);
+  }, [effectiveSectionId, chainage, recordId, getAccessToken]);
 
   useEffect(() => {
-    if (!record?.section_id || !chainage) {
+    if (!effectiveSectionId || !chainage) {
       setIsDuplicateChainage(false);
       return;
     }
     const timer = setTimeout(checkDuplicateChainage, 400);
     return () => clearTimeout(timer);
-  }, [record?.section_id, chainage, checkDuplicateChainage]);
+  }, [effectiveSectionId, chainage, checkDuplicateChainage]);
 
   const handleSave = async () => {
     if (!recordId || isDuplicateChainage) return;
@@ -202,13 +246,7 @@ export function RecordEditForm({
         }
       }
 
-      const res = await fetch(`/api/drainer/records/${recordId}`, {
-        method: "PUT",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({
+      const payload: Record<string, unknown> = {
           date_installed: dateInstalled || null,
           time_installed: timeInstalled || null,
           chainage: chainage ? Number(chainage) : null,
@@ -226,7 +264,23 @@ export function RecordEditForm({
           cement_liner: cementLiner,
           spark_testing: sparkTesting,
           inspector_name: inspectorName || null,
-        }),
+        };
+
+      if (
+        isSuperAdmin &&
+        selectedSectionId &&
+        selectedSectionId !== record?.section_id
+      ) {
+        payload.section_id = selectedSectionId;
+      }
+
+      const res = await fetch(`/api/drainer/records/${recordId}`, {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify(payload),
       });
 
       const data = await res.json();
@@ -323,6 +377,24 @@ export function RecordEditForm({
         )}
 
         <div className="space-y-3">
+          {isSuperAdmin && sections.length > 0 && (
+            <div>
+              <label className="drainer-label block mb-1">Section</label>
+              <Select value={selectedSectionId} onValueChange={setSelectedSectionId}>
+                <SelectTrigger className="drainer-input">
+                  <SelectValue placeholder="Select section" />
+                </SelectTrigger>
+                <SelectContent>
+                  {sections.map((section) => (
+                    <SelectItem key={section.id} value={section.id}>
+                      {section.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
+
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="drainer-label block mb-1">Date Installed</label>

@@ -471,11 +471,16 @@ body {
   .drainer-scrollbar {
     scrollbar-width: thin;
     scrollbar-color: #b8682a #e8d2bf;
+    -webkit-overflow-scrolling: touch;
   }
 
   .drainer-scrollbar::-webkit-scrollbar {
     width: 10px;
-    height: 10px;
+    height: 12px;
+  }
+
+  .drainer-scrollbar::-webkit-scrollbar-corner {
+    background: #e8d2bf;
   }
 
   .drainer-scrollbar::-webkit-scrollbar-track {

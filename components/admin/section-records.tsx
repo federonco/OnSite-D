@@ -204,11 +204,11 @@ export function SectionRecords({
   );
 
   return (
-    <Card className="drainer-card resize-y overflow-auto min-h-[420px] max-h-[90vh]">
+    <Card className="drainer-card resize-y overflow-y-auto overflow-x-hidden min-h-[420px] max-h-[90vh] min-w-0 max-w-full">
       <CardHeader>
         <CardTitle className="drainer-title">{sectionName} — Records</CardTitle>
       </CardHeader>
-      <CardContent className="space-y-4 flex flex-col min-h-0">
+      <CardContent className="space-y-4 flex flex-col min-h-0 min-w-0">
         {sectionOptions.length > 0 && onSectionChange ? (
           <div className="w-full max-w-xs">
             <Select value={sectionId} onValueChange={onSectionChange}>
@@ -246,10 +246,10 @@ export function SectionRecords({
           guideXml={selectedSection?.guide_xml ?? null}
         />
 
-        <div className="border border-[var(--border)] rounded-lg overflow-hidden bg-[#E8D2BF] flex-1 min-h-0">
-          <div className="min-h-[220px] max-h-[min(360px,45vh)] overflow-x-auto overflow-y-auto drainer-scrollbar">
-            <div className="overflow-x-auto [&::-webkit-scrollbar]:hidden [-ms-overflow-style:none] [scrollbar-width:none]">
-            <table className="w-full text-sm min-w-[400px] font-[var(--font-body)]">
+        <div className="border border-[var(--border)] rounded-lg bg-[#E8D2BF] flex-1 min-h-0 min-w-0 max-w-full">
+          <div className="min-h-[220px] max-h-[min(360px,45vh)] max-w-full overflow-y-auto overflow-x-scroll drainer-scrollbar">
+            <div className="inline-block min-w-full w-max">
+            <table className="text-sm min-w-[720px] font-[var(--font-body)]">
               <thead className="bg-[#EEE4DA] sticky top-0">
                 <tr>
                   <th className="text-left px-3 py-2 font-semibold whitespace-nowrap">Date</th>
@@ -280,7 +280,7 @@ export function SectionRecords({
                       <td className="px-3 py-2 whitespace-nowrap">{r.chainage}</td>
                       <td className="px-3 py-2 text-xs whitespace-nowrap">{r.pipe_fitting_id ?? "—"}</td>
                       <td className="px-3 py-2 whitespace-nowrap">{r.joint_type ?? "—"}</td>
-                      <td className="px-3 py-2">
+                      <td className="px-3 py-2 whitespace-nowrap">
                         <Button
                           variant="ghost"
                           size="sm"

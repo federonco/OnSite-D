@@ -73,9 +73,10 @@ export function cpLugsVal(r: RecordRow): string {
 
 export function jointAirTestVal(r: RecordRow): string {
   const jt = (r.joint_type ?? "").toString().toUpperCase().trim();
-  if (jt === "TRANSITION") return "N/A";
+  if (jt === "TRANSITION") return "";
   if (jt === "RRJ") return "N/A";
   if (jt === "WR") return yn(r.joint_air_test);
+  if (jt === "WB") return "";
   return "N/A";
 }
 
