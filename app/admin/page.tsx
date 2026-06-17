@@ -544,9 +544,6 @@ export default function AdminPage() {
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end">
                 <DropdownMenuItem asChild>
-                  <Link href="/admin/sections">Manage subsections</Link>
-                </DropdownMenuItem>
-                <DropdownMenuItem asChild>
                   <Link href={`/admin/records/${sectionId}`}>Open section records</Link>
                 </DropdownMenuItem>
               </DropdownMenuContent>

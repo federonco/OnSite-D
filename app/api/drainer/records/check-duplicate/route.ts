@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getUserFromRequest } from "@/lib/api-auth";
+import { resolvePipeRecordSectionRef } from "@/lib/drainer-section-resolve";
 import { getSupabaseServer } from "@/lib/supabase/server";
 
 export async function GET(request: NextRequest) {
@@ -28,11 +29,29 @@ export async function GET(request: NextRequest) {
     ? getSupabaseServer({ accessToken: token })
     : getSupabaseServer({ useServiceRole: true });
 
+  const { ref, error: resolveError } = await resolvePipeRecordSectionRef(
+    supabase,
+    sectionId
+  );
+  if (resolveError || !ref) {
+    return NextResponse.json(
+      { error: resolveError ?? "Section not found" },
+      { status: resolveError === "Section not found" ? 404 : 500 }
+    );
+  }
+
   let query = supabase
     .from("drainer_pipe_records")
     .select("id,chainage,pipe_fitting_id")
-    .eq("section_id", sectionId)
     .eq("chainage", ch);
+
+  if (ref.section_id) {
+    query = query.eq("section_id", ref.section_id);
+  } else {
+    query = query
+      .eq("unified_section_id", ref.unified_section_id!)
+      .is("section_id", null);
+  }
   if (excludeRecordId) {
     query = query.neq("id", excludeRecordId);
   }

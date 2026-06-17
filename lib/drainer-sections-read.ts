@@ -27,6 +27,112 @@ export type DrainerSectionRow = {
   qr_token_issued_at?: string | null;
 };
 
+const UNIFIED_SHARED_SECTION_SELECT =
+  "id,name,start_ch,end_ch,direction,app_config,project_id";
+
+type UnifiedSharedSectionRow = {
+  id: string;
+  name: string;
+  start_ch: number | null;
+  end_ch: number | null;
+  direction: string | null;
+  app_config: unknown;
+  project_id: string | null;
+};
+
+function appConfigRecord(appConfig: unknown): Record<string, unknown> {
+  if (!appConfig || typeof appConfig !== "object" || Array.isArray(appConfig)) {
+    return {};
+  }
+  return appConfig as Record<string, unknown>;
+}
+
+function jointTypesFromAppConfig(appConfig: unknown): string[] | null {
+  const raw = appConfigRecord(appConfig).joint_types;
+  if (!Array.isArray(raw)) return [];
+  return raw.filter((t): t is string => typeof t === "string");
+}
+
+function guideXmlFromAppConfig(
+  appConfig: unknown
+): { sequence_number: number; item_id: string }[] | null {
+  const raw = appConfigRecord(appConfig).guide_xml;
+  if (!Array.isArray(raw)) return null;
+  const out: { sequence_number: number; item_id: string }[] = [];
+  for (const row of raw) {
+    if (!row || typeof row !== "object") continue;
+    const o = row as Record<string, unknown>;
+    const seq = Number(o.sequence_number);
+    const item = typeof o.item_id === "string" ? o.item_id.trim() : "";
+    if (!Number.isFinite(seq) || !item) continue;
+    out.push({ sequence_number: seq, item_id: item });
+  }
+  return out.length > 0 ? out : null;
+}
+
+function legacyIdFromAppConfig(appConfig: unknown): string | null {
+  const legacyId = appConfigRecord(appConfig).legacy_id;
+  return typeof legacyId === "string" && legacyId.trim() ? legacyId.trim() : null;
+}
+
+function mapUnifiedSharedSectionToRow(row: UnifiedSharedSectionRow): DrainerSectionRow {
+  const cfg = appConfigRecord(row.app_config);
+  const itpRaw = cfg.itp_number;
+  return {
+    id: row.id,
+    name: row.name,
+    start_ch: row.start_ch ?? null,
+    end_ch: row.end_ch ?? null,
+    direction: typeof row.direction === "string" && row.direction.trim() ? row.direction : "onwards",
+    itp_number: typeof itpRaw === "string" && itpRaw.trim() ? itpRaw.trim() : null,
+    project_id: row.project_id ?? null,
+    joint_types: jointTypesFromAppConfig(row.app_config),
+    guide_enabled: cfg.guide_enabled === true,
+    guide_xml: guideXmlFromAppConfig(row.app_config),
+    projects: null,
+  };
+}
+
+async function listSharedUnifiedSections(
+  supabase: SupabaseClient
+): Promise<{ data: UnifiedSharedSectionRow[] | null; error: { message: string } | null }> {
+  const { data, error } = await supabase
+    .from("sections")
+    .select(UNIFIED_SHARED_SECTION_SELECT)
+    .eq("scope", "shared")
+    .eq("is_active", true)
+    .order("name");
+
+  if (error) {
+    console.error(
+      "[sections] shared pool SELECT failed:",
+      error.message,
+      error.details ?? "",
+      error.hint ?? ""
+    );
+    return { data: null, error };
+  }
+
+  return { data: (data ?? []) as UnifiedSharedSectionRow[], error: null };
+}
+
+function mergeLegacyAndSharedSections(
+  legacy: DrainerSectionRow[],
+  sharedRows: UnifiedSharedSectionRow[]
+): DrainerSectionRow[] {
+  const legacyIds = new Set(legacy.map((s) => s.id));
+  const sharedMapped = sharedRows
+    .filter((row) => {
+      if (legacyIds.has(row.id)) return false;
+      const legacyId = legacyIdFromAppConfig(row.app_config);
+      if (legacyId && legacyIds.has(legacyId)) return false;
+      return true;
+    })
+    .map(mapUnifiedSharedSectionToRow);
+
+  return [...legacy, ...sharedMapped].sort((a, b) => a.name.localeCompare(b.name));
+}
+
 /**
  * List sections: try embed first; on failure log and retry without embed so rows still load.
  */
@@ -51,7 +157,12 @@ export async function listDrainerSectionsWithProjectFallback(
         (row as { projects?: ProjectEmbed | ProjectEmbed[] | null }).projects
       ),
     }));
-    return { data: normalized, error: null, projectEmbedOk: true };
+    const { data: sharedRows, error: sharedError } =
+      await listSharedUnifiedSections(supabase);
+    const merged = sharedError || !sharedRows
+      ? normalized
+      : mergeLegacyAndSharedSections(normalized, sharedRows);
+    return { data: merged, error: null, projectEmbedOk: true };
   }
 
   console.error(
@@ -81,7 +192,13 @@ export async function listDrainerSectionsWithProjectFallback(
     projects: null,
   }));
 
-  return { data: normalized, error: null, projectEmbedOk: false };
+  const { data: sharedRows, error: sharedError } =
+    await listSharedUnifiedSections(supabase);
+  const merged = sharedError || !sharedRows
+    ? normalized
+    : mergeLegacyAndSharedSections(normalized, sharedRows);
+
+  return { data: merged, error: null, projectEmbedOk: false };
 }
 
 /** Audit PDF metadata (matches generateAuditReportPdf section shape). */

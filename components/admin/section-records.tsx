@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -105,6 +106,7 @@ type SectionRecordsProps = {
   } | null;
   sectionOptions?: { id: string; name: string }[];
   onSectionChange?: (sectionId: string) => void;
+  onRefresh?: () => void | Promise<void>;
 };
 
 function formatDate(d: string | null) {
@@ -192,7 +194,9 @@ export function SectionRecords({
   selectedSection,
   sectionOptions = [],
   onSectionChange,
+  onRefresh,
 }: SectionRecordsProps) {
+  const [refreshing, setRefreshing] = useState(false);
   const itrProgress = useMemo(() => getITRProgress(records.length), [records.length]);
   const installedCount = totalInstalledCount ?? records.length;
   const sortedRecords = useMemo(
@@ -203,10 +207,33 @@ export function SectionRecords({
     [records]
   );
 
+  const handleRefresh = async () => {
+    if (!onRefresh || refreshing) return;
+    setRefreshing(true);
+    try {
+      await onRefresh();
+    } finally {
+      setRefreshing(false);
+    }
+  };
+
   return (
     <Card className="drainer-card resize-y overflow-y-auto overflow-x-hidden min-h-[420px] max-h-[90vh] min-w-0 max-w-full">
-      <CardHeader>
+      <CardHeader className="flex flex-row items-center justify-between gap-2">
         <CardTitle className="drainer-title">{sectionName} — Records</CardTitle>
+        {onRefresh ? (
+          <Button
+            variant="outline"
+            size="sm"
+            className="min-h-[44px] min-w-[44px] shrink-0 rounded-full bg-[var(--card-bg)] border-0 hover:bg-[var(--surface)]"
+            onClick={handleRefresh}
+            disabled={refreshing}
+            title="Refresh records"
+            aria-label="Refresh records"
+          >
+            <RefreshCw className={`size-4 ${refreshing ? "animate-spin" : ""}`} />
+          </Button>
+        ) : null}
       </CardHeader>
       <CardContent className="space-y-4 flex flex-col min-h-0 min-w-0">
         {sectionOptions.length > 0 && onSectionChange ? (

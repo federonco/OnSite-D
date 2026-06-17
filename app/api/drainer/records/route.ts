@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getUserFromRequest } from "@/lib/api-auth";
+import { resolvePipeRecordSectionRef } from "@/lib/drainer-section-resolve";
 import { getSupabaseServer } from "@/lib/supabase/server";
 import { processCheckpointAlerts } from "@/lib/checkpoint-notify";
 import { detectRecordInconsistencies } from "@/lib/record-inconsistencies";
@@ -45,7 +46,7 @@ export async function GET(request: NextRequest) {
   let query = supabase
     .from("drainer_pipe_records")
     .select("*")
-    .eq("section_id", sectionId);
+    .or(`section_id.eq.${sectionId},unified_section_id.eq.${sectionId}`);
 
   if (limit) {
     query = query
@@ -118,6 +119,17 @@ export async function POST(request: NextRequest) {
     );
   }
 
+  const { ref, error: resolveError } = await resolvePipeRecordSectionRef(
+    supabaseForInsert,
+    String(section_id)
+  );
+  if (resolveError || !ref) {
+    return NextResponse.json(
+      { error: resolveError ?? "Section not found" },
+      { status: resolveError === "Section not found" ? 404 : 500 }
+    );
+  }
+
   const vMm = deflection_v_mm != null ? Math.abs(Number(deflection_v_mm)) : 0;
   const hMm = deflection_h_mm != null ? Math.abs(Number(deflection_h_mm)) : 0;
   if (vMm > 50) {
@@ -134,7 +146,8 @@ export async function POST(request: NextRequest) {
   }
 
   const record = {
-    section_id,
+    section_id: ref.section_id,
+    unified_section_id: ref.unified_section_id,
     ...(subsection_id ? { subsection_id } : {}),
     date_installed: date_installed || null,
     time_installed: time_installed || null,
@@ -157,10 +170,17 @@ export async function POST(request: NextRequest) {
     ai_insight: ai_insight || null,
   };
 
-  const { data: maxCounterRow, error: maxCounterError } = await supabaseForInsert
-    .from("drainer_pipe_records")
-    .select("counter")
-    .eq("section_id", section_id)
+  let counterQuery = supabaseForInsert.from("drainer_pipe_records").select("counter");
+
+  if (ref.section_id) {
+    counterQuery = counterQuery.eq("section_id", ref.section_id);
+  } else {
+    counterQuery = counterQuery
+      .eq("unified_section_id", ref.unified_section_id!)
+      .is("section_id", null);
+  }
+
+  const { data: maxCounterRow, error: maxCounterError } = await counterQuery
     .order("counter", { ascending: false })
     .limit(1)
     .maybeSingle();
@@ -189,9 +209,11 @@ export async function POST(request: NextRequest) {
   }
 
   const supabaseAdmin = getSupabaseServer({ useServiceRole: true });
-  processCheckpointAlerts(supabaseAdmin, section_id).catch((err) =>
-    console.error("Checkpoint alerts:", err)
-  );
+  if (ref.section_id) {
+    processCheckpointAlerts(supabaseAdmin, ref.section_id).catch((err) =>
+      console.error("Checkpoint alerts:", err)
+    );
+  }
   detectRecordInconsistencies(supabaseAdmin).catch((err) =>
     console.error("Record inconsistencies:", err)
   );

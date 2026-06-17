@@ -352,6 +352,10 @@ export default function AdminRecordsPage() {
           selectedSection={sectionGuideSource}
           sectionOptions={sections.map((s) => ({ id: s.id, name: s.name }))}
           onSectionChange={handleSectionChange}
+          onRefresh={async () => {
+            await loadRecords();
+            setProgressRefreshTrigger((t) => t + 1);
+          }}
         />
       </div>
 
