@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { fetchItrSectionById } from "@/lib/drainer-sections-read";
+import { fetchSectionById, pipeRecordsSectionOrFilter } from "@/lib/section-catalog";
 import {
   computeBackfillUpTo,
   fetchPspBackfillRecordsForDrainerSection,
@@ -82,7 +83,7 @@ export async function buildWeldWrapReportData(
   let { data: recordsData, error: recordsError } = await supabase
     .from("drainer_pipe_records")
     .select(recordsSelectWithComments)
-    .eq("section_id", sectionId)
+    .or(pipeRecordsSectionOrFilter(sectionId))
     .in("joint_type", ["WR", "WB", "Transition"])
     .order("chainage", { ascending: true });
 
@@ -90,7 +91,7 @@ export async function buildWeldWrapReportData(
     const fallback = await supabase
       .from("drainer_pipe_records")
       .select(recordsSelectBase)
-      .eq("section_id", sectionId)
+      .or(pipeRecordsSectionOrFilter(sectionId))
       .in("joint_type", ["WR", "WB", "Transition"])
       .order("chainage", { ascending: true });
     recordsData = fallback.data?.map((row) => ({ ...row, comments: null })) ?? null;
@@ -119,11 +120,10 @@ export async function buildWeldWrapReportData(
     minute: "2-digit",
   }).format(new Date());
 
-  const { data: sectionBounds } = await supabase
-    .from("drainer_sections")
-    .select("start_ch,end_ch,direction")
-    .eq("id", sectionId)
-    .maybeSingle();
+  const catalogSection = await fetchSectionById(supabase, sectionId);
+  const startCh = catalogSection?.start_ch ?? null;
+  const endCh = catalogSection?.end_ch ?? null;
+  const direction = catalogSection?.direction ?? null;
 
   const { records: pspRecordRows, error: pspError } =
     await fetchPspBackfillRecordsForDrainerSection(supabase, sectionId);
@@ -131,11 +131,6 @@ export async function buildWeldWrapReportData(
   if (pspError) {
     return { data: null, error: pspError, status: 500 };
   }
-
-  const startCh =
-    sectionBounds?.start_ch != null ? Number(sectionBounds.start_ch) : null;
-  const endCh = sectionBounds?.end_ch != null ? Number(sectionBounds.end_ch) : null;
-  const direction = (sectionBounds?.direction as string | null) ?? null;
   const backfillUpTo = computeBackfillUpTo(pspRecordRows, direction);
 
   const { data: checkpointRows } = await supabase.from("checkpoints").select("*");

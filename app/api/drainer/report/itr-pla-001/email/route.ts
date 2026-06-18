@@ -4,6 +4,7 @@ import { isAdmin } from "@/lib/admin";
 import { getSupabaseServer } from "@/lib/supabase/server";
 import { generateITRPla001PdfWithFallback } from "@/lib/reporting/itr-pla-001/generate-with-fallback";
 import { fetchItrSectionById } from "@/lib/drainer-sections-read";
+import { pipeRecordsSectionOrFilter } from "@/lib/section-catalog";
 import { ITR_PAGE_SIZE } from "@/lib/drainer";
 import { createEmailTransporter, getEmailFrom, getEmailSignatureHtml, getLogoAttachment, hasEmailConfig, LOGO_CID } from "@/lib/email-config";
 
@@ -40,7 +41,7 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  const supabase = getSupabaseServer({ useServiceRole: true });
+  const supabase = getSupabaseServer({ accessToken: token });
   const { section, error: sectionErr } = await fetchItrSectionById(supabase, sectionId);
   if (!section) {
     return NextResponse.json(
@@ -52,7 +53,7 @@ export async function POST(request: NextRequest) {
   const { data: allRecords, error: recordsError } = await supabase
     .from("drainer_pipe_records")
     .select("*")
-    .eq("section_id", sectionId)
+    .or(pipeRecordsSectionOrFilter(sectionId))
     .order("chainage", { ascending: false });
 
   if (recordsError) {

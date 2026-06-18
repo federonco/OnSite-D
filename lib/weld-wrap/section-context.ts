@@ -1,5 +1,5 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { getCriteriaForDrainerSection } from "@/lib/analysis-criteria";
+import { getCriteriaForSectionId } from "@/lib/analysis-criteria";
 
 export type CheckpointPin = {  id: string;
   name: string;
@@ -76,15 +76,12 @@ export function computeBackfillUpTo(
   return frontCh ?? latestCh;
 }
 
-/** Resolve drainer_sections.id → sections.id (legacy_id map) and load psp_records. */
+/** Resolve section id (legacy or unified) → psp_records for backfill context. */
 export async function fetchPspBackfillRecordsForDrainerSection(
   supabase: SupabaseClient,
-  drainerSectionId: string
+  sectionId: string
 ): Promise<{ records: PspBackfillRecord[]; error?: string }> {
-  const { unifiedSectionId } = await getCriteriaForDrainerSection(
-    supabase,
-    drainerSectionId
-  );
+  const { unifiedSectionId } = await getCriteriaForSectionId(supabase, sectionId);
   if (!unifiedSectionId) {
     return { records: [] };
   }

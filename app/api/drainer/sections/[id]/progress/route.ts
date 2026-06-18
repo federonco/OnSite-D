@@ -3,7 +3,13 @@ import { getUserFromRequest } from "@/lib/api-auth";
 import { isAdmin } from "@/lib/admin";
 import { getSupabaseServer } from "@/lib/supabase/server";
 import { getAdminCrewIds } from "@/lib/admin-crew";
+import {
+  computeMinItrRequired,
+  computeSectionItrProgress,
+  ITR_PAGE_SIZE,
+} from "@/lib/drainer";
 import { fetchSectionById, pipeRecordsSectionOrFilter } from "@/lib/section-catalog";
+import { normalizeGuideXmlFromJsonb } from "@/lib/installation-guide-xml";
 
 export async function GET(
   request: NextRequest,
@@ -31,52 +37,30 @@ export async function GET(
 
   const { data: records } = await supabase
     .from("drainer_pipe_records")
-    .select("chainage")
+    .select("id")
     .or(pipeRecordsSectionOrFilter(id));
 
-  const chainages = (records ?? [])
-    .map((r) => Number(r.chainage))
-    .filter((n) => Number.isFinite(n));
-  const minCh = chainages.length > 0 ? Math.min(...chainages) : null;
-  const maxCh = chainages.length > 0 ? Math.max(...chainages) : null;
-  const direction = String(section.direction ?? "forward").toLowerCase();
-  const isBackward = direction === "backward" || direction === "backwards";
-
+  const installedCount = records?.length ?? 0;
   const startCh = section.start_ch != null ? Number(section.start_ch) : null;
   const endCh = section.end_ch != null ? Number(section.end_ch) : null;
 
-  let currentCh = isBackward ? minCh : maxCh;
-  let progressPercent = 0;
+  const guideXml = normalizeGuideXmlFromJsonb(section.app_config?.guide_xml);
+  const guideEnabled = section.app_config?.guide_enabled === true;
+  const guideItemCount =
+    guideEnabled && guideXml?.length ? guideXml.length : undefined;
 
-  if (
-    startCh != null &&
-    endCh != null &&
-    chainages.length > 0 &&
-    startCh !== endCh
-  ) {
-    const denom = endCh - startCh;
-    const clamp01 = (x: number) => Math.min(1, Math.max(0, x));
-    const ratioFor = (ch: number) => clamp01((ch - startCh) / denom);
-
-    let bestRatio = -Infinity;
-    let bestChainage: number | null = null;
-    for (const ch of chainages) {
-      const ratio = ratioFor(ch);
-      if (ratio > bestRatio) {
-        bestRatio = ratio;
-        bestChainage = ch;
-      }
-    }
-
-    currentCh = bestChainage;
-    progressPercent = Math.round(bestRatio * 100 * 10) / 10;
-  }
+  const minItrRequired = computeMinItrRequired(startCh, endCh, { guideItemCount });
+  const totalRecordSlots =
+    minItrRequired != null ? minItrRequired * ITR_PAGE_SIZE : null;
+  const progressPercent = computeSectionItrProgress(installedCount, minItrRequired);
 
   return NextResponse.json({
-    currentCh,
-    endCh,
     progressPercent,
-    configured: startCh != null && endCh != null,
-    hasRecords: chainages.length > 0,
+    configured: minItrRequired != null,
+    hasRecords: installedCount > 0,
+    installedCount,
+    minItrRequired,
+    totalRecordSlots,
+    endCh,
   });
 }

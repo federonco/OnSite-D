@@ -20,6 +20,7 @@ import {
 } from "@/components/ui/select";
 import { Loader2, CheckCircle2, XCircle } from "lucide-react";
 import { getSupabaseBrowser } from "@/lib/supabase/browser";
+import { pipeRecordsSectionOrFilter } from "@/lib/section-catalog";
 
 const JOINT_TYPES = [
   { value: "RRJ", label: "RRJ (Rubber Ring Joint)" },
@@ -190,7 +191,7 @@ export function LodgeForm({
       const { data, error } = await supabase
         .from("drainer_pipe_records")
         .select("counter")
-        .eq("section_id", sectionId)
+        .or(pipeRecordsSectionOrFilter(sectionId))
         .order("counter", { ascending: false })
         .limit(1)
         .maybeSingle();

@@ -3,6 +3,8 @@ import { getUserFromRequest } from "@/lib/api-auth";
 import { isAdmin } from "@/lib/admin";
 import { getSupabaseServer } from "@/lib/supabase/server";
 import { ITR_PAGE_SIZE, groupRecordsIntoITRs } from "@/lib/drainer";
+import { fetchItrSectionById } from "@/lib/drainer-sections-read";
+import { pipeRecordsSectionOrFilter } from "@/lib/section-catalog";
 import {
   createEmailTransporter,
   getEmailFrom,
@@ -43,23 +45,20 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  // Admin via has_role; section/records reads use service role (RLS may hide rows from JWT).
-  const supabase = getSupabaseServer({ useServiceRole: true });
+  const supabase = getSupabaseServer({ accessToken: token });
 
-  const { data: section, error: sectionError } = await supabase
-    .from("drainer_sections")
-    .select("id,name,itp_number")
-    .eq("id", sectionId)
-    .single();
-
-  if (sectionError || !section) {
-    return NextResponse.json({ error: "Section not found" }, { status: 404 });
+  const { section, error: sectionError } = await fetchItrSectionById(supabase, sectionId);
+  if (!section) {
+    return NextResponse.json(
+      { error: sectionError?.message ?? "Section not found" },
+      { status: 404 }
+    );
   }
 
   const { data: allRecords, error: recordsError } = await supabase
     .from("drainer_pipe_records")
     .select("*")
-    .eq("section_id", sectionId)
+    .or(pipeRecordsSectionOrFilter(sectionId))
     .order("chainage", { ascending: false });
 
   if (recordsError) {

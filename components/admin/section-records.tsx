@@ -9,11 +9,13 @@ import { getITRProgress } from "@/lib/drainer";
 import type { PipeRecord } from "./record-edit-form";
 
 type SectionChProgress = {
-  currentCh: number | null;
   endCh: number | null;
   progressPercent: number;
   configured: boolean;
   hasRecords: boolean;
+  installedCount?: number;
+  minItrRequired?: number | null;
+  totalRecordSlots?: number | null;
 };
 
 type SectionProgressBarProps = {
@@ -63,15 +65,19 @@ export function SectionProgressBar({
   const label = hasGuideProgress
     ? `${installedCount} / ${guideTotalItems} items · ${guidePercent}%`
     : progress?.configured
-    ? progress?.hasRecords
-      ? `CH ${(progress.currentCh ?? 0).toLocaleString("en-AU", { minimumFractionDigits: 2 })} → ${(progress.endCh ?? 0).toLocaleString("en-AU", { minimumFractionDigits: 2 })} · ${progress.progressPercent}%`
-      : "No records yet"
+    ? progress.minItrRequired != null && progress.totalRecordSlots != null
+      ? progress.hasRecords
+        ? `${installedCount} / ${progress.totalRecordSlots} records (${progress.minItrRequired} ITR min) · ${progress.progressPercent}%`
+        : `0 / ${progress.totalRecordSlots} records (${progress.minItrRequired} ITR min) · 0%`
+      : progress?.hasRecords
+        ? `${installedCount} records · ${progress.progressPercent}%`
+        : "No records yet"
     : progress
       ? "Configure section CH to see progress"
       : "Loading…";
   const percent = hasGuideProgress
     ? guidePercent
-    : progress?.configured && progress?.hasRecords
+    : progress?.configured
       ? progress.progressPercent
       : 0;
 
