@@ -90,6 +90,37 @@ function readCriteriaFromAppConfig(appConfig: unknown): AnalysisCriteria {
   return mergeCriteria(criteriaRaw as Partial<AnalysisCriteria>);
 }
 
+export async function getCriteriaForSectionId(
+  supabase: SupabaseClient,
+  sectionId: string
+): Promise<{
+  criteria: AnalysisCriteria;
+  unifiedSectionId: string | null;
+  unifiedAppConfig: Record<string, unknown> | null;
+}> {
+  const { data: unifiedById } = await supabase
+    .from("sections")
+    .select("id, app_config")
+    .eq("id", sectionId)
+    .maybeSingle();
+
+  if (unifiedById) {
+    const appConfig =
+      unifiedById.app_config &&
+      typeof unifiedById.app_config === "object" &&
+      !Array.isArray(unifiedById.app_config)
+        ? (unifiedById.app_config as Record<string, unknown>)
+        : null;
+    return {
+      criteria: readCriteriaFromAppConfig(appConfig),
+      unifiedSectionId: unifiedById.id,
+      unifiedAppConfig: appConfig,
+    };
+  }
+
+  return getCriteriaForDrainerSection(supabase, sectionId);
+}
+
 export async function getCriteriaForDrainerSection(
   supabase: SupabaseClient,
   drainerSectionId: string

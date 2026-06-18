@@ -4,10 +4,11 @@ import { isAdmin } from "@/lib/admin";
 import { getSupabaseServer } from "@/lib/supabase/server";
 import {
   DEFAULT_CRITERIA,
-  getCriteriaForDrainerSection,
+  getCriteriaForSectionId,
   mergeCriteria,
   type AnalysisCriteria,
 } from "@/lib/analysis-criteria";
+import { fetchSectionById } from "@/lib/section-catalog";
 
 export async function GET(
   request: NextRequest,
@@ -27,20 +28,15 @@ export async function GET(
   }
 
   const supabase = getSupabaseServer({ useServiceRole: true });
-  const { data: drainerSection } = await supabase
-    .from("drainer_sections")
-    .select("id,name")
-    .eq("id", id)
-    .maybeSingle();
-
-  if (!drainerSection) {
+  const section = await fetchSectionById(supabase, id);
+  if (!section) {
     return NextResponse.json({ error: "Section not found" }, { status: 404 });
   }
 
-  const resolved = await getCriteriaForDrainerSection(supabase, id);
+  const resolved = await getCriteriaForSectionId(supabase, id);
   return NextResponse.json({
     section_id: id,
-    section_name: drainerSection.name ?? null,
+    section_name: section.name ?? null,
     criteria: resolved.criteria,
     defaults: DEFAULT_CRITERIA,
     linked_unified_section_id: resolved.unifiedSectionId,
@@ -72,21 +68,16 @@ export async function PATCH(
   }
 
   const supabase = getSupabaseServer({ useServiceRole: true });
-  const { data: drainerSection } = await supabase
-    .from("drainer_sections")
-    .select("id,name")
-    .eq("id", id)
-    .maybeSingle();
-
-  if (!drainerSection) {
+  const section = await fetchSectionById(supabase, id);
+  if (!section) {
     return NextResponse.json({ error: "Section not found" }, { status: 404 });
   }
 
-  const resolved = await getCriteriaForDrainerSection(supabase, id);
+  const resolved = await getCriteriaForSectionId(supabase, id);
   if (!resolved.unifiedSectionId) {
     return NextResponse.json({
       section_id: id,
-      section_name: drainerSection.name ?? null,
+      section_name: section.name ?? null,
       criteria: DEFAULT_CRITERIA,
       defaults: DEFAULT_CRITERIA,
       linked_unified_section_id: null,
@@ -116,7 +107,7 @@ export async function PATCH(
   return NextResponse.json({
     ok: true,
     section_id: id,
-    section_name: drainerSection.name ?? null,
+    section_name: section.name ?? null,
     criteria: merged,
     defaults: DEFAULT_CRITERIA,
     linked_unified_section_id: resolved.unifiedSectionId,

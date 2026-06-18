@@ -1,6 +1,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { unwrapProjectsEmbed, type ProjectEmbed } from "@/lib/embed-projects";
 import type { SectionInfo } from "@/lib/reporting/itr-pla-001/types";
+import { ensureSectionQrToken } from "@/lib/section-catalog";
 
 /** Columns always available on drainer_sections (no FK embed). */
 export const DRAINER_SECTION_BASE =
@@ -25,10 +26,12 @@ export type DrainerSectionRow = {
   /** Present when listing as admin (includeQrFields). */
   qr_token?: string | null;
   qr_token_issued_at?: string | null;
+  /** True when row comes from unified `sections` only (no legacy drainer_sections row). */
+  unified_only?: boolean;
 };
 
 const UNIFIED_SHARED_SECTION_SELECT =
-  "id,name,start_ch,end_ch,direction,app_config,project_id";
+  "id,name,start_ch,end_ch,direction,app_config,project_id,qr_token,qr_token_issued_at";
 
 type UnifiedSharedSectionRow = {
   id: string;
@@ -38,6 +41,8 @@ type UnifiedSharedSectionRow = {
   direction: string | null;
   app_config: unknown;
   project_id: string | null;
+  qr_token?: string | null;
+  qr_token_issued_at?: string | null;
 };
 
 function appConfigRecord(appConfig: unknown): Record<string, unknown> {
@@ -90,7 +95,38 @@ function mapUnifiedSharedSectionToRow(row: UnifiedSharedSectionRow): DrainerSect
     guide_enabled: cfg.guide_enabled === true,
     guide_xml: guideXmlFromAppConfig(row.app_config),
     projects: null,
+    qr_token: typeof row.qr_token === "string" ? row.qr_token : null,
+    qr_token_issued_at:
+      typeof row.qr_token_issued_at === "string" ? row.qr_token_issued_at : null,
+    unified_only: true,
   };
+}
+
+async function ensureUnifiedQrTokensForAdminList(
+  supabase: SupabaseClient,
+  sections: DrainerSectionRow[],
+  includeQrFields: boolean | undefined
+): Promise<DrainerSectionRow[]> {
+  if (!includeQrFields) return sections;
+
+  const out: DrainerSectionRow[] = [];
+  for (const section of sections) {
+    if (!section.unified_only || section.qr_token) {
+      out.push(section);
+      continue;
+    }
+    const ensured = await ensureSectionQrToken(supabase, section.id);
+    if (!ensured) {
+      out.push(section);
+      continue;
+    }
+    out.push({
+      ...section,
+      qr_token: ensured.qr_token,
+      qr_token_issued_at: ensured.qr_token_issued_at,
+    });
+  }
+  return out;
 }
 
 async function listSharedUnifiedSections(
@@ -162,7 +198,12 @@ export async function listDrainerSectionsWithProjectFallback(
     const merged = sharedError || !sharedRows
       ? normalized
       : mergeLegacyAndSharedSections(normalized, sharedRows);
-    return { data: merged, error: null, projectEmbedOk: true };
+    const withQr = await ensureUnifiedQrTokensForAdminList(
+      supabase,
+      merged,
+      options?.includeQrFields
+    );
+    return { data: withQr, error: null, projectEmbedOk: true };
   }
 
   console.error(
@@ -198,7 +239,13 @@ export async function listDrainerSectionsWithProjectFallback(
     ? normalized
     : mergeLegacyAndSharedSections(normalized, sharedRows);
 
-  return { data: merged, error: null, projectEmbedOk: false };
+  const withQr = await ensureUnifiedQrTokensForAdminList(
+    supabase,
+    merged,
+    options?.includeQrFields
+  );
+
+  return { data: withQr, error: null, projectEmbedOk: false };
 }
 
 /** Audit PDF metadata (matches generateAuditReportPdf section shape). */
@@ -209,6 +256,8 @@ export type AuditSectionForPdf = {
   end_ch: number | null;
   project: ProjectEmbed | null;
 };
+
+import { fetchSectionById } from "@/lib/section-catalog";
 
 /**
  * Single section for ITR PDF/email: try project embed; on PostgREST embed error, load base columns only.
@@ -240,11 +289,13 @@ export async function fetchItrSectionById(
     };
   }
 
-  console.error(
-    "[fetchItrSectionById] projects embed failed — fallback:",
-    embed.error?.message,
-    embed.error?.details ?? ""
-  );
+  if (!embed.error || embed.error.code !== "PGRST116") {
+    console.error(
+      "[fetchItrSectionById] projects embed failed — fallback:",
+      embed.error?.message,
+      embed.error?.details ?? ""
+    );
+  }
 
   const base = await supabase
     .from("drainer_sections")
@@ -252,33 +303,53 @@ export async function fetchItrSectionById(
     .eq("id", sectionId)
     .single();
 
-  if (base.error || !base.data) {
+  if (!base.error && base.data) {
+    const row = base.data as { name: string; itp_number: string | null };
     return {
-      section: null,
-      error: { message: base.error?.message ?? embed.error?.message ?? "Section not found" },
+      section: {
+        name: row.name,
+        itp_number: row.itp_number,
+        project: null,
+      },
+      error: null,
     };
   }
 
-  const row = base.data as { name: string; itp_number: string | null };
+  const unified = await fetchSectionById(supabase, sectionId);
+  if (unified) {
+    const itp =
+      typeof unified.app_config?.itp_number === "string"
+        ? unified.app_config.itp_number
+        : null;
+    return {
+      section: { name: unified.name, itp_number: itp, project: null },
+      error: null,
+    };
+  }
+
   return {
-    section: {
-      name: row.name,
-      itp_number: row.itp_number,
-      project: null,
-    },
-    error: null,
+    section: null,
+    error: { message: base.error?.message ?? embed.error?.message ?? "Section not found" },
   };
 }
 
 export async function fetchAuditSectionById(
   supabase: SupabaseClient,
-  sectionId: string
+  sectionId: string,
+  options?: { crewIds?: string[] }
 ): Promise<{ section: AuditSectionForPdf | null; error: { message: string } | null }> {
-  const embed = await supabase
+  if (options?.crewIds?.length === 0) {
+    return { section: null, error: { message: "Section not found" } };
+  }
+
+  let embedQuery = supabase
     .from("drainer_sections")
     .select("id,name,direction,start_ch,end_ch,projects!project_id(name,number)")
-    .eq("id", sectionId)
-    .single();
+    .eq("id", sectionId);
+  if (options?.crewIds) {
+    embedQuery = embedQuery.in("crew_id", options.crewIds);
+  }
+  const embed = await embedQuery.single();
 
   if (!embed.error && embed.data) {
     const row = embed.data as {
@@ -306,13 +377,29 @@ export async function fetchAuditSectionById(
     embed.error?.details ?? ""
   );
 
-  const base = await supabase
+  let baseQuery = supabase
     .from("drainer_sections")
     .select("id,name,direction,start_ch,end_ch")
-    .eq("id", sectionId)
-    .single();
+    .eq("id", sectionId);
+  if (options?.crewIds) {
+    baseQuery = baseQuery.in("crew_id", options.crewIds);
+  }
+  const base = await baseQuery.single();
 
   if (base.error || !base.data) {
+    const unified = await fetchSectionById(supabase, sectionId, options);
+    if (unified) {
+      return {
+        section: {
+          name: unified.name,
+          direction: unified.direction,
+          start_ch: unified.start_ch,
+          end_ch: unified.end_ch,
+          project: null,
+        },
+        error: null,
+      };
+    }
     return {
       section: null,
       error: { message: base.error?.message ?? embed.error?.message ?? "Section not found" },

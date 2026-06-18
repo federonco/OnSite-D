@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getUserFromRequest } from "@/lib/api-auth";
 import { resolvePipeRecordSectionRef } from "@/lib/drainer-section-resolve";
 import { getSupabaseServer } from "@/lib/supabase/server";
+import { pipeRecordsSectionOrFilter, verifyQrTokenForSection } from "@/lib/section-catalog";
 import { processCheckpointAlerts } from "@/lib/checkpoint-notify";
 import { detectRecordInconsistencies } from "@/lib/record-inconsistencies";
 
@@ -23,16 +24,8 @@ export async function GET(request: NextRequest) {
 
   if (!token && qrTokenParam) {
     const verify = getSupabaseServer({ useServiceRole: true });
-    const { data: secRow, error: verifyErr } = await verify
-      .from("drainer_sections")
-      .select("id")
-      .eq("id", sectionId)
-      .eq("qr_token", qrTokenParam)
-      .maybeSingle();
-    if (verifyErr) {
-      return NextResponse.json({ error: verifyErr.message }, { status: 500 });
-    }
-    if (!secRow) {
+    const ok = await verifyQrTokenForSection(verify, sectionId, qrTokenParam);
+    if (!ok) {
       return NextResponse.json({ error: "Invalid QR token" }, { status: 403 });
     }
   }
@@ -46,7 +39,7 @@ export async function GET(request: NextRequest) {
   let query = supabase
     .from("drainer_pipe_records")
     .select("*")
-    .or(`section_id.eq.${sectionId},unified_section_id.eq.${sectionId}`);
+    .or(pipeRecordsSectionOrFilter(sectionId));
 
   if (limit) {
     query = query

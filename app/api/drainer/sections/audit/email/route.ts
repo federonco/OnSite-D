@@ -2,8 +2,10 @@ import { NextRequest, NextResponse } from "next/server";
 import { getUserFromRequest } from "@/lib/api-auth";
 import { isAdmin } from "@/lib/admin";
 import { getSupabaseServer } from "@/lib/supabase/server";
+import { getAdminCrewIds } from "@/lib/admin-crew";
 import { generateAuditReportPdf } from "@/lib/reporting/audit-report-pdf";
 import { fetchAuditSectionById } from "@/lib/drainer-sections-read";
+import { pipeRecordsSectionOrFilter } from "@/lib/section-catalog";
 import { createEmailTransporter, getEmailFrom, getEmailSignatureHtml, getLogoAttachment, hasEmailConfig, LOGO_CID } from "@/lib/email-config";
 
 export const runtime = "nodejs";
@@ -39,8 +41,13 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  const supabase = getSupabaseServer({ useServiceRole: true });
-  const { section, error: sectionErr } = await fetchAuditSectionById(supabase, sectionId);
+  const supabase = getSupabaseServer({ accessToken: token });
+  const crewIds = await getAdminCrewIds(supabase);
+  const { section, error: sectionErr } = await fetchAuditSectionById(
+    supabase,
+    sectionId,
+    { crewIds }
+  );
   if (!section) {
     return NextResponse.json(
       { error: sectionErr?.message ?? "Section not found" },
@@ -51,7 +58,7 @@ export async function POST(request: NextRequest) {
   const { data: records, error: recordsError } = await supabase
     .from("drainer_pipe_records")
     .select("*")
-    .eq("section_id", sectionId)
+    .or(pipeRecordsSectionOrFilter(sectionId))
     .order("date_installed", { ascending: true })
     .order("chainage", { ascending: true });
 

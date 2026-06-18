@@ -12,6 +12,7 @@ import {
 import { generateSectionQrPdf } from "@/lib/reporting/section-qr-pdf";
 import { buildEnterUrlFromQrToken } from "@/lib/site-url";
 import { getSupabaseServer } from "@/lib/supabase/server";
+import { ensureSectionQrToken, fetchSectionById } from "@/lib/section-catalog";
 
 export const runtime = "nodejs";
 
@@ -68,35 +69,19 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Recipient email required" }, { status: 400 });
   }
 
-  const supabase = getSupabaseServer({ accessToken: token });
+  const supabase = getSupabaseServer({ useServiceRole: true });
 
-  const { data: section, error: sectionError } = await supabase
-    .from("drainer_sections")
-    .select("id,name,qr_token,qr_token_issued_at")
-    .eq("id", sectionId)
-    .single();
-
-  if (sectionError || !section) {
+  const section = await fetchSectionById(supabase, sectionId);
+  if (!section) {
     return NextResponse.json({ error: "Section not found" }, { status: 404 });
   }
 
-  let qrToken = section.qr_token as string | null;
-
-  if (!qrToken) {
-    qrToken = crypto.randomUUID();
-    const issued = new Date().toISOString();
-    const { error: upErr } = await supabase
-      .from("drainer_sections")
-      .update({
-        qr_token: qrToken,
-        qr_token_issued_at: issued,
-      })
-      .eq("id", sectionId);
-    if (upErr) {
-      console.error("[send-qr] persist token failed:", upErr.message);
-      return NextResponse.json({ error: upErr.message }, { status: 500 });
-    }
+  const ensured = await ensureSectionQrToken(supabase, sectionId);
+  if (!ensured) {
+    return NextResponse.json({ error: "Section not found" }, { status: 404 });
   }
+
+  const qrToken = ensured.qr_token;
 
   if (
     clientQrToken != null &&
@@ -110,7 +95,7 @@ export async function POST(request: NextRequest) {
   }
 
   const enterUrl = buildEnterUrlFromQrToken(qrToken);
-  const sectionName = String(section.name ?? "Section");
+  const sectionName = section.name || "Section";
 
   if (!hasEmailConfig()) {
     return NextResponse.json(

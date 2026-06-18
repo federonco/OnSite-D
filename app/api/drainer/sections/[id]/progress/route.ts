@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { getUserFromRequest } from "@/lib/api-auth";
 import { isAdmin } from "@/lib/admin";
 import { getSupabaseServer } from "@/lib/supabase/server";
+import { getAdminCrewIds } from "@/lib/admin-crew";
+import { fetchSectionById, pipeRecordsSectionOrFilter } from "@/lib/section-catalog";
 
 export async function GET(
   request: NextRequest,
@@ -21,20 +23,16 @@ export async function GET(
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const { data: section, error: sectionError } = await supabase
-    .from("drainer_sections")
-    .select("start_ch,end_ch,direction")
-    .eq("id", id)
-    .single();
-
-  if (sectionError || !section) {
+  const crewIds = await getAdminCrewIds(supabase);
+  const section = await fetchSectionById(supabase, id, { crewIds });
+  if (!section) {
     return NextResponse.json({ error: "Section not found" }, { status: 404 });
   }
 
   const { data: records } = await supabase
     .from("drainer_pipe_records")
     .select("chainage")
-    .eq("section_id", id);
+    .or(pipeRecordsSectionOrFilter(id));
 
   const chainages = (records ?? [])
     .map((r) => Number(r.chainage))
@@ -50,9 +48,6 @@ export async function GET(
   let currentCh = isBackward ? minCh : maxCh;
   let progressPercent = 0;
 
-  // Progress = how far lodged chainages have advanced along the configured
-  // start_ch → end_ch span (section size). Single metric — no dual-pipe / duplicate-CH heuristic
-  // (air cushion and similar phases can lodge duplicate chainages without meaning “second line”).
   if (
     startCh != null &&
     endCh != null &&
@@ -76,16 +71,6 @@ export async function GET(
     currentCh = bestChainage;
     progressPercent = Math.round(bestRatio * 100 * 10) / 10;
   }
-
-  console.log("[sections/progress]", {
-    sectionId: id,
-    totalRecords: chainages.length,
-    minCh,
-    maxCh,
-    currentCh,
-    direction,
-    progressPercent,
-  });
 
   return NextResponse.json({
     currentCh,
