@@ -2,7 +2,13 @@ import { NextRequest, NextResponse } from "next/server";
 import { getUserFromRequest } from "@/lib/api-auth";
 import { isAdmin } from "@/lib/admin";
 import { getSupabaseServer } from "@/lib/supabase/server";
-import { getCriteriaForDrainerSection } from "@/lib/analysis-criteria";
+import { getCriteriaForSectionId } from "@/lib/analysis-criteria";
+import {
+  fetchSectionDirection,
+  isSectionBackwards,
+  listSectionsForAdminEnumeration,
+} from "@/lib/admin-section-enumerator";
+import { pipeRecordsSectionOrFilter } from "@/lib/section-catalog";
 
 export type RecordInconsistencyItem = {
   ch_from: number;
@@ -59,18 +65,16 @@ export async function GET(request: NextRequest) {
     return NextResponse.json(result);
   }
 
-  const { data: sections } = await supabase
-    .from("drainer_sections")
-    .select("id,name,direction");
+  const sections = await listSectionsForAdminEnumeration(supabase);
 
-  if (!sections?.length) {
+  if (!sections.length) {
     return NextResponse.json({ sections: [] });
   }
 
   const results: InconsistenciesResponse[] = [];
   for (const s of sections) {
     const r = await getSectionInconsistencies(supabase, s.id);
-    results.push({ ...r, section_name: s.name ?? undefined });
+    results.push({ ...r, section_name: s.name });
   }
 
   return NextResponse.json({ sections: results });
@@ -81,20 +85,15 @@ async function getSectionInconsistencies(
   sectionId: string,
   subsectionId?: string
 ): Promise<InconsistenciesResponse> {
-  const { criteria } = await getCriteriaForDrainerSection(supabase, sectionId);
+  const { criteria } = await getCriteriaForSectionId(supabase, sectionId);
   const pipeRegex = new RegExp(criteria.pipe_id_pattern);
-  const { data: section } = await supabase
-    .from("drainer_sections")
-    .select("direction")
-    .eq("id", sectionId)
-    .single();
-
-  const isBackwards = section?.direction === "backwards";
+  const direction = await fetchSectionDirection(supabase, sectionId);
+  const isBackwards = isSectionBackwards(direction);
 
   let recordsQuery = supabase
     .from("drainer_pipe_records")
     .select("id,chainage,pipe_fitting_id,counter")
-    .eq("section_id", sectionId)
+    .or(pipeRecordsSectionOrFilter(sectionId))
     .order("chainage", { ascending: !isBackwards });
   if (subsectionId) {
     recordsQuery = recordsQuery.eq("subsection_id", subsectionId);

@@ -2,7 +2,11 @@ import { NextRequest, NextResponse } from "next/server";
 import { getUserFromRequest } from "@/lib/api-auth";
 import { isAdmin } from "@/lib/admin";
 import { getSupabaseServer } from "@/lib/supabase/server";
-import { getCriteriaForDrainerSection, type AnalysisCriteria } from "@/lib/analysis-criteria";
+import { getCriteriaForSectionId, type AnalysisCriteria } from "@/lib/analysis-criteria";
+import {
+  listSectionsForAdminEnumeration,
+} from "@/lib/admin-section-enumerator";
+import { pipeRecordsSectionOrFilter } from "@/lib/section-catalog";
 
 export type NearToleranceRecord = {
   id: string;
@@ -59,7 +63,7 @@ export async function GET(request: NextRequest) {
   const sectionId = searchParams.get("section_id");
   const subsectionId = searchParams.get("subsection_id");
 
-  const supabase = getSupabaseServer({ useServiceRole: true });
+  const supabase = getSupabaseServer({ accessToken: token });
 
   let resolvedSectionId = sectionId;
   if (!resolvedSectionId && subsectionId) {
@@ -80,11 +84,9 @@ export async function GET(request: NextRequest) {
     return NextResponse.json(result);
   }
 
-  const { data: sections } = await supabase
-    .from("drainer_sections")
-    .select("id,name");
+  const sections = await listSectionsForAdminEnumeration(supabase);
 
-  if (!sections?.length) {
+  if (!sections.length) {
     return NextResponse.json({ sections: [] });
   }
 
@@ -98,7 +100,7 @@ export async function GET(request: NextRequest) {
     const result = await getNearToleranceForSection(supabase, s.id);
     sectionsWithRecords.push({
       section_id: s.id,
-      section_name: s.name ?? undefined,
+      section_name: s.name,
       records: result.records,
     });
   }
@@ -111,11 +113,13 @@ async function getNearToleranceForSection(
   sectionId: string,
   subsectionId?: string
 ): Promise<{ section_id: string; records: NearToleranceRecord[] }> {
-  const { criteria } = await getCriteriaForDrainerSection(supabase, sectionId);
+  const { criteria } = await getCriteriaForSectionId(supabase, sectionId);
   let query = supabase
     .from("drainer_pipe_records")
-    .select("id,counter,chainage,pipe_fitting_id,deflection_v_sign,deflection_v_mm,deflection_h_side,deflection_h_mm")
-    .eq("section_id", sectionId);
+    .select(
+      "id,counter,chainage,pipe_fitting_id,deflection_v_sign,deflection_v_mm,deflection_h_side,deflection_h_mm"
+    )
+    .or(pipeRecordsSectionOrFilter(sectionId));
   if (subsectionId) {
     query = query.eq("subsection_id", subsectionId);
   }

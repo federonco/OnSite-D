@@ -2,7 +2,11 @@ import { NextRequest, NextResponse } from "next/server";
 import { getUserFromRequest } from "@/lib/api-auth";
 import { isAdmin } from "@/lib/admin";
 import { getSupabaseServer } from "@/lib/supabase/server";
-import { getCriteriaForDrainerSection } from "@/lib/analysis-criteria";
+import { getCriteriaForSectionId } from "@/lib/analysis-criteria";
+import {
+  listSectionsForAdminEnumeration,
+} from "@/lib/admin-section-enumerator";
+import { pipeRecordsSectionOrFilter } from "@/lib/section-catalog";
 
 export type FittingRecord = {
   id: string;
@@ -25,7 +29,7 @@ export async function GET(request: NextRequest) {
   const sectionId = searchParams.get("section_id");
   const subsectionId = searchParams.get("subsection_id");
 
-  const supabase = getSupabaseServer({ useServiceRole: true });
+  const supabase = getSupabaseServer({ accessToken: token });
 
   let resolvedSectionId = sectionId;
   if (!resolvedSectionId && subsectionId) {
@@ -42,11 +46,9 @@ export async function GET(request: NextRequest) {
     return NextResponse.json(result);
   }
 
-  const { data: sections } = await supabase
-    .from("drainer_sections")
-    .select("id,name");
+  const sections = await listSectionsForAdminEnumeration(supabase);
 
-  if (!sections?.length) {
+  if (!sections.length) {
     return NextResponse.json({ sections: [] });
   }
 
@@ -60,7 +62,7 @@ export async function GET(request: NextRequest) {
     const result = await getFittingsForSection(supabase, s.id);
     sectionsWithRecords.push({
       section_id: s.id,
-      section_name: s.name ?? undefined,
+      section_name: s.name,
       records: result.records,
     });
   }
@@ -73,7 +75,7 @@ async function getFittingsForSection(
   sectionId: string,
   subsectionId?: string
 ): Promise<{ section_id: string; records: FittingRecord[] }> {
-  const { criteria } = await getCriteriaForDrainerSection(supabase, sectionId);
+  const { criteria } = await getCriteriaForSectionId(supabase, sectionId);
   let pipeRegex: RegExp;
   try {
     pipeRegex = new RegExp(criteria.pipe_id_pattern);
@@ -84,7 +86,7 @@ async function getFittingsForSection(
   let query = supabase
     .from("drainer_pipe_records")
     .select("id,counter,chainage,pipe_fitting_id,date_installed")
-    .eq("section_id", sectionId);
+    .or(pipeRecordsSectionOrFilter(sectionId));
   if (subsectionId) {
     query = query.eq("subsection_id", subsectionId);
   }

@@ -204,6 +204,14 @@ export function pipeRecordsSectionOrFilter(sectionId: string): string {
   return `section_id.eq.${sectionId},unified_section_id.eq.${sectionId}`;
 }
 
+/** Catalog section id on a pipe record (legacy or unified). */
+export function recordCatalogSectionId(record: {
+  section_id?: string | null;
+  unified_section_id?: string | null;
+}): string | null {
+  return record.section_id ?? record.unified_section_id ?? null;
+}
+
 export async function verifyQrTokenForSection(
   supabase: SupabaseClient,
   sectionId: string,

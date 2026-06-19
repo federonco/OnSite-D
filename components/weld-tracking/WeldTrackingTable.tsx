@@ -14,6 +14,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { getSupabaseBrowser } from "@/lib/supabase/browser";
+import { recordCatalogSectionId } from "@/lib/section-catalog";
 import { RecordEditForm } from "@/components/admin/record-edit-form";
 import type { WeldWrapSectionContext } from "@/lib/weld-wrap/section-context";
 import {
@@ -41,6 +42,7 @@ type WeldRecord = {
     internal_2?: string | null;
   } | null;
   section_id: string | null;
+  unified_section_id?: string | null;
   drainer_sections?: SectionInfo;
 };
 
@@ -281,9 +283,10 @@ export function WeldTrackingTable() {
   const sections = useMemo(() => {
     const map = new Map<string, string>();
     for (const record of records) {
-      if (!record.section_id) continue;
+      const catalogId = recordCatalogSectionId(record);
+      if (!catalogId) continue;
       const sectionName = record.drainer_sections?.name?.trim();
-      map.set(record.section_id, sectionName || record.section_id);
+      map.set(catalogId, sectionName || catalogId);
     }
     return Array.from(map.entries())
       .map(([id, name]) => ({ id, name }))
@@ -300,7 +303,10 @@ export function WeldTrackingTable() {
   }, [sections]);
 
   const visibleRecords = useMemo(
-    () => records.filter((record) => record.section_id === sectionFilter),
+    () =>
+      records.filter(
+        (record) => recordCatalogSectionId(record) === sectionFilter
+      ),
     [records, sectionFilter]
   );
 

@@ -2,7 +2,13 @@ import { NextRequest, NextResponse } from "next/server";
 import { getUserFromRequest } from "@/lib/api-auth";
 import { isAdmin } from "@/lib/admin";
 import { getSupabaseServer } from "@/lib/supabase/server";
-import { getCriteriaForDrainerSection } from "@/lib/analysis-criteria";
+import { getCriteriaForSectionId } from "@/lib/analysis-criteria";
+import {
+  fetchSectionDirection,
+  isSectionBackwards,
+  listSectionsForAdminEnumeration,
+} from "@/lib/admin-section-enumerator";
+import { pipeRecordsSectionOrFilter } from "@/lib/section-catalog";
 
 export type TrendRecord = {
   counter: number | null;
@@ -36,7 +42,7 @@ export async function GET(request: NextRequest) {
   const sectionId = searchParams.get("section_id");
   const subsectionId = searchParams.get("subsection_id");
 
-  const supabase = getSupabaseServer({ useServiceRole: true });
+  const supabase = getSupabaseServer({ accessToken: token });
 
   let resolvedSectionId = sectionId;
   if (!resolvedSectionId && subsectionId) {
@@ -57,11 +63,9 @@ export async function GET(request: NextRequest) {
     return NextResponse.json(result);
   }
 
-  const { data: sections } = await supabase
-    .from("drainer_sections")
-    .select("id,name");
+  const sections = await listSectionsForAdminEnumeration(supabase);
 
-  if (!sections?.length) {
+  if (!sections.length) {
     return NextResponse.json({ sections: [] });
   }
 
@@ -75,7 +79,7 @@ export async function GET(request: NextRequest) {
     const result = await getDeflectionTrendForSection(supabase, s.id);
     sectionsWithTrends.push({
       section_id: s.id,
-      section_name: s.name ?? undefined,
+      section_name: s.name,
       trends: result.trends,
     });
   }
@@ -88,19 +92,16 @@ async function getDeflectionTrendForSection(
   sectionId: string,
   subsectionId?: string
 ): Promise<{ section_id: string; trends: DeflectionTrendEntry[] }> {
-  const { criteria } = await getCriteriaForDrainerSection(supabase, sectionId);
-  const { data: section } = await supabase
-    .from("drainer_sections")
-    .select("direction")
-    .eq("id", sectionId)
-    .single();
-
-  const ascending = section?.direction !== "backwards";
+  const { criteria } = await getCriteriaForSectionId(supabase, sectionId);
+  const direction = await fetchSectionDirection(supabase, sectionId);
+  const ascending = !isSectionBackwards(direction);
 
   let query = supabase
     .from("drainer_pipe_records")
-    .select("id,counter,chainage,date_installed,deflection_v_sign,deflection_v_mm,deflection_h_side,deflection_h_mm")
-    .eq("section_id", sectionId)
+    .select(
+      "id,counter,chainage,date_installed,deflection_v_sign,deflection_v_mm,deflection_h_side,deflection_h_mm"
+    )
+    .or(pipeRecordsSectionOrFilter(sectionId))
     .order("chainage", { ascending });
   if (subsectionId) {
     query = query.eq("subsection_id", subsectionId);

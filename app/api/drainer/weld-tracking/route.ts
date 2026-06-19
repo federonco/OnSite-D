@@ -2,8 +2,43 @@ import { NextRequest, NextResponse } from "next/server";
 import { getUserFromRequest } from "@/lib/api-auth";
 import { isAdmin } from "@/lib/admin";
 import { getSupabaseServer } from "@/lib/supabase/server";
+import { fetchSectionById, recordCatalogSectionId } from "@/lib/section-catalog";
 
 const ALLOWED_FIELDS = new Set(["welded_at", "wrapped_at", "welded_steps", "comments"]);
+
+async function enrichWeldTrackingRecords(
+  supabase: ReturnType<typeof getSupabaseServer>,
+  records: Array<{
+    section_id?: string | null;
+    unified_section_id?: string | null;
+    [key: string]: unknown;
+  }>
+) {
+  const ids = new Set<string>();
+  for (const record of records) {
+    const id = recordCatalogSectionId(record);
+    if (id) ids.add(id);
+  }
+
+  const nameById = new Map<string, string>();
+  await Promise.all(
+    Array.from(ids).map(async (id) => {
+      const section = await fetchSectionById(supabase, id);
+      if (section?.name) nameById.set(id, section.name);
+    })
+  );
+
+  return records.map((record) => {
+    const catalogId = recordCatalogSectionId(record);
+    return {
+      ...record,
+      section_id: catalogId,
+      drainer_sections: catalogId
+        ? { name: nameById.get(catalogId) ?? null }
+        : null,
+    };
+  });
+}
 
 export async function GET(request: NextRequest) {
   const { user, token } = await getUserFromRequest(request);
@@ -14,11 +49,11 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const supabase = getSupabaseServer({ useServiceRole: true });
+  const supabase = getSupabaseServer({ accessToken: token });
   const withCommentsSelect =
-    "id,counter,chainage,pipe_fitting_id,joint_type,date_installed,welded_at,wrapped_at,welded_steps,comments,section_id,drainer_sections(name)";
+    "id,counter,chainage,pipe_fitting_id,joint_type,date_installed,welded_at,wrapped_at,welded_steps,comments,section_id,unified_section_id";
   const baseSelect =
-    "id,counter,chainage,pipe_fitting_id,joint_type,date_installed,welded_at,wrapped_at,welded_steps,section_id,drainer_sections(name)";
+    "id,counter,chainage,pipe_fitting_id,joint_type,date_installed,welded_at,wrapped_at,welded_steps,section_id,unified_section_id";
 
   let { data, error } = await supabase
     .from("drainer_pipe_records")
@@ -40,7 +75,8 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }
 
-  return NextResponse.json({ records: data ?? [] });
+  const records = await enrichWeldTrackingRecords(supabase, data ?? []);
+  return NextResponse.json({ records });
 }
 
 export async function PATCH(request: NextRequest) {

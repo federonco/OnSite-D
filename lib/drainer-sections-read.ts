@@ -464,6 +464,13 @@ export async function fetchCheckpointPrintSectionById(
     .single();
 
   if (base.error || !base.data) {
+    const unified = await fetchSectionById(supabase, sectionId);
+    if (unified) {
+      return {
+        section: { name: unified.name, project: null },
+        error: null,
+      };
+    }
     return {
       section: null,
       error: { message: base.error?.message ?? embed.error?.message ?? "Section not found" },

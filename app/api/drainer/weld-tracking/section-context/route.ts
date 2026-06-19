@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { getUserFromRequest } from "@/lib/api-auth";
 import { isAdmin } from "@/lib/admin";
 import { getSupabaseServer } from "@/lib/supabase/server";
+import { getAdminCrewIds } from "@/lib/admin-crew";
+import { fetchSectionById } from "@/lib/section-catalog";
 import {
   computeBackfillUpTo,
   fetchPspBackfillRecordsForDrainerSection,
@@ -24,17 +26,9 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: "Missing sectionId" }, { status: 400 });
   }
 
-  const supabase = getSupabaseServer({ useServiceRole: true });
-
-  const { data: section, error: sectionError } = await supabase
-    .from("drainer_sections")
-    .select("start_ch,end_ch,direction")
-    .eq("id", sectionId)
-    .maybeSingle();
-
-  if (sectionError) {
-    return NextResponse.json({ error: sectionError.message }, { status: 500 });
-  }
+  const supabase = getSupabaseServer({ accessToken: token });
+  const crewIds = await getAdminCrewIds(supabase);
+  const section = await fetchSectionById(supabase, sectionId, { crewIds });
   if (!section) {
     return NextResponse.json({ error: "Section not found" }, { status: 404 });
   }
@@ -48,7 +42,7 @@ export async function GET(request: NextRequest) {
 
   const startCh = section.start_ch != null ? Number(section.start_ch) : null;
   const endCh = section.end_ch != null ? Number(section.end_ch) : null;
-  const direction = section.direction as string | null;
+  const direction = section.direction;
   const backfillUpTo = computeBackfillUpTo(pspRecordRows, direction);
 
   const { data: checkpointRows, error: cpError } = await supabase
