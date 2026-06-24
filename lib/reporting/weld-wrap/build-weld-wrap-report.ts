@@ -1,9 +1,12 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { sortRecordsForItr } from "@/lib/drainer";
 import { fetchItrSectionById } from "@/lib/drainer-sections-read";
 import { fetchSectionById, fetchUnifiedSectionByCatalogId, pipeRecordsSectionOrFilter } from "@/lib/section-catalog";
 import {
   buildGuideDisplayRows,
+  formatGuideNotLaidStatus,
   formatWwPendingDetail,
+  getWeldCompletionDate,
   isRecordWelded,
   type GuideDisplayRow,
 } from "@/lib/guide-record-matching";
@@ -20,7 +23,8 @@ import {
   requiresWeldWrap,
   type WeldWrapStatusFilterKey,
 } from "./report-filters";
-import type { WeldWrapDetailRow, WeldWrapReportData } from "./types";
+import type { WeldWrapDetailRow, WeldWrapReportData, WeldWrapSummary } from "./types";
+import { orderWeldWrapGuideRows } from "./report-order";
 
 type DbRecord = {
   counter: number | null;
@@ -29,6 +33,7 @@ type DbRecord = {
   joint_type: string | null;
   welded_at: string | null;
   wrapped_at: string | null;
+  welded_steps?: Record<string, string | null> | null;
   comments: string | null;
 };
 
@@ -50,8 +55,24 @@ function jointTypeLabel(jointType: string | null): string {
   return jointType ?? "—";
 }
 
-function isSimpleWeldJoint(jointType: string | null): boolean {
-  return jointType === "WR" || jointType === "Transition";
+/** Summary counters: laid records only; RRJ excluded from all weld/wrap counts. */
+function computeWeldWrapSummary(records: DbRecord[]): WeldWrapSummary {
+  const wrRecords = records.filter((r) => r.joint_type === "WR");
+  const wbRecords = records.filter((r) => r.joint_type === "WB");
+  const wrapRecords = records.filter((r) => r.joint_type !== "RRJ");
+
+  const wrWeldsDone = wrRecords.filter((r) => isRecordWelded(r)).length;
+  const wbWeldsDone = wbRecords.filter((r) => isRecordWelded(r)).length;
+  const wrapsDone = wrapRecords.filter((r) => r.wrapped_at != null).length;
+
+  return {
+    wrWeldsDone,
+    wrWeldsPending: wrRecords.length - wrWeldsDone,
+    wbWeldsDone,
+    wbWeldsPending: wbRecords.length - wbWeldsDone,
+    wrapsDone,
+    wrapsPending: wrapRecords.length - wrapsDone,
+  };
 }
 
 function mapDetailRow(record: DbRecord): WeldWrapDetailRow {
@@ -63,7 +84,7 @@ function mapDetailRow(record: DbRecord): WeldWrapDetailRow {
     chainage: record.chainage,
     pipe_fitting_id: record.pipe_fitting_id,
     jointTypeLabel: jointTypeLabel(record.joint_type),
-    weldedLabel: formatReportDate(record.welded_at),
+    weldedLabel: formatReportDate(getWeldCompletionDate(record)),
     wrappedLabel: formatReportDate(record.wrapped_at),
     comments: record.comments,
     pending: needsWw && (!isWelded || !isWrapped),
@@ -76,7 +97,9 @@ function mapGuideDisplayRow(row: GuideDisplayRow<DbRecord>): WeldWrapDetailRow {
       counter: null,
       chainage: null,
       pipe_fitting_id: row.item_id,
-      jointTypeLabel: "—",
+      jointTypeLabel: row.expected_joint_type
+        ? jointTypeLabel(row.expected_joint_type)
+        : "—",
       weldedLabel: "—",
       wrappedLabel: "—",
       comments: null,
@@ -84,6 +107,7 @@ function mapGuideDisplayRow(row: GuideDisplayRow<DbRecord>): WeldWrapDetailRow {
       guideStatus: "not_laid",
       guideItemId: row.item_id,
       guideSequence: row.sequence_number,
+      expectedJointType: row.expected_joint_type ?? null,
       isGuideMode: true,
     };
   }
@@ -145,16 +169,13 @@ export async function buildWeldWrapReportData(
       .or(pipeRecordsSectionOrFilter(sectionId));
   }
 
-  let { data: recordsData, error: recordsError } = await query
-    .in("joint_type", jointTypes)
-    .order("chainage", { ascending: true });
+  let { data: recordsData, error: recordsError } = await query.in("joint_type", jointTypes);
 
   if (recordsError?.message?.includes("comments")) {
     let fallbackQuery = supabase
       .from("drainer_pipe_records")
       .select(recordsSelectBase)
-      .in("joint_type", jointTypes)
-      .order("chainage", { ascending: true });
+      .in("joint_type", jointTypes);
     fallbackQuery = guideMode
       ? fallbackQuery.eq("unified_section_id", sectionId)
       : fallbackQuery.or(pipeRecordsSectionOrFilter(sectionId));
@@ -171,34 +192,25 @@ export async function buildWeldWrapReportData(
     recordMatchesJointTypes(r.joint_type, jointTypes)
   );
   const filteredRecords = filterRecordsByStatus(records, statusFilters);
-
-  const wrRecords = records.filter((r) => isSimpleWeldJoint(r.joint_type));
-  const wbRecords = records.filter((r) => r.joint_type === "WB");
-  const wrWeldsDone = wrRecords.filter((r) => isRecordWelded(r)).length;
-  const wbWeldsDone = wbRecords.filter((r) => isRecordWelded(r)).length;
-  const wrapsDone = records.filter((r) => r.wrapped_at != null).length;
-  const wwRecords = records.filter((r) => requiresWeldWrap(r.joint_type));
+  const sectionSpan = catalogSection
+    ? {
+        direction: catalogSection.direction,
+        start_ch: catalogSection.start_ch,
+        end_ch: catalogSection.end_ch,
+      }
+    : null;
+  const summary = computeWeldWrapSummary(records);
 
   let rows: WeldWrapDetailRow[];
-  let guideSummary: WeldWrapReportData["summary"] | null = null;
 
   if (guideMode && guideCfg.guide_xml) {
-    const guideRows = buildGuideDisplayRows(guideCfg.guide_xml, filteredRecords);
+    const guideRows = orderWeldWrapGuideRows(
+      buildGuideDisplayRows(guideCfg.guide_xml, filteredRecords),
+      sectionSpan
+    );
     rows = guideRows.map(mapGuideDisplayRow);
-    guideSummary = {
-      wrWeldsDone,
-      wrWeldsPending: wrRecords.length - wrWeldsDone,
-      wbWeldsDone,
-      wbWeldsPending: wbRecords.length - wbWeldsDone,
-      wrapsDone,
-      wrapsPending: wwRecords.length - wrapsDone,
-      guideDone: guideRows.filter((r) => r.status === "done").length,
-      guideLaidPending: guideRows.filter((r) => r.status === "laid_ww_pending").length,
-      guideNotLaid: guideRows.filter((r) => r.status === "not_laid").length,
-      guideOffGuide: guideRows.filter((r) => r.status === "off_guide").length,
-    };
   } else {
-    rows = filteredRecords.map(mapDetailRow);
+    rows = sortRecordsForItr(filteredRecords, sectionSpan).map(mapDetailRow);
   }
 
   const generatedAtLabel = new Intl.DateTimeFormat("en-GB", {
@@ -245,14 +257,7 @@ export async function buildWeldWrapReportData(
 
   const reportData: WeldWrapReportData = {
     section,
-    summary: guideSummary ?? {
-      wrWeldsDone,
-      wrWeldsPending: wrRecords.length - wrWeldsDone,
-      wbWeldsDone,
-      wbWeldsPending: wbRecords.length - wbWeldsDone,
-      wrapsDone,
-      wrapsPending: wwRecords.length - wrapsDone,
-    },
+    summary,
     rows,
     generatedAtLabel,
     filterLabel: formatStatusFilterLabel(statusFilters),

@@ -61,6 +61,31 @@ export function isRecordWelded(record: WwRecordFields): boolean {
   return record.welded_at != null;
 }
 
+function maxIsoTimestamp(timestamps: string[]): string | null {
+  if (timestamps.length === 0) return null;
+  return timestamps.reduce((latest, ts) => {
+    const t = new Date(ts).getTime();
+    const lt = new Date(latest).getTime();
+    if (Number.isNaN(t)) return latest;
+    if (Number.isNaN(lt)) return ts;
+    return t > lt ? ts : latest;
+  });
+}
+
+/** Display weld completion date — aligns with isRecordWelded (WB uses latest step when welded_at is null). */
+export function getWeldCompletionDate(record: WwRecordFields): string | null {
+  if (record.joint_type === "WB") {
+    if (!isRecordWelded(record)) return null;
+    if (record.welded_at) return record.welded_at;
+    const steps = record.welded_steps ?? {};
+    const stepTimes = WB_WELD_STEPS.map((step) => steps[step]).filter(
+      (ts): ts is string => typeof ts === "string" && ts.length > 0
+    );
+    return maxIsoTimestamp(stepTimes);
+  }
+  return record.welded_at;
+}
+
 export function computeWwCompletionStatus(record: WwRecordFields): WwCompletionStatus {
   if (record.joint_type === "RRJ") return "done";
   if (isRecordWelded(record) && record.wrapped_at != null) return "done";
@@ -84,10 +109,21 @@ export type GuideDisplayRow<T extends WwRecordFields = WwRecordFields> = {
   kind: "guide_record" | "not_laid" | "off_guide";
   sequence_number: number | null;
   item_id: string | null;
+  expected_joint_type?: string | null;
   record: T | null;
   status: GuideRowStatus;
   pendingDetail: WwPendingDetail | null;
 };
+
+export function formatGuideNotLaidStatus(
+  itemId: string | null | undefined,
+  jointType?: string | null
+): string {
+  const id = itemId?.trim();
+  const jt = jointType?.trim();
+  if (id && jt) return `${id} — ${jt} — Not laid`;
+  return "Not laid";
+}
 
 function chainageSortValue(record: WwRecordFields): number {
   const ch = Number(record.chainage);
@@ -127,6 +163,7 @@ export function buildGuideDisplayRows<T extends WwRecordFields>(
         kind: "not_laid",
         sequence_number: item.sequence_number,
         item_id: item.item_id,
+        expected_joint_type: item.joint_type ?? null,
         record: null,
         status: "not_laid",
         pendingDetail: null,
@@ -139,6 +176,7 @@ export function buildGuideDisplayRows<T extends WwRecordFields>(
         kind: "guide_record",
         sequence_number: item.sequence_number,
         item_id: item.item_id,
+        expected_joint_type: item.joint_type ?? null,
         record,
         status: completion,
         pendingDetail: completion === "laid_ww_pending" ? wwPendingDetail(record) : null,

@@ -1,4 +1,8 @@
-export type GuideXmlEntry = { sequence_number: number; item_id: string };
+export type GuideXmlEntry = {
+  sequence_number: number;
+  item_id: string;
+  joint_type?: string | null;
+};
 
 /** Alias for API / DB shape (column still named guide_xml). */
 export type GuideItem = GuideXmlEntry;
@@ -48,7 +52,14 @@ export function normalizeGuideXmlFromJsonb(
     if (typeof id !== "string" || id.trim() === "") continue;
     const n = Number(seq);
     if (!Number.isFinite(n)) continue;
-    out.push({ sequence_number: n, item_id: id.trim() });
+    const jointRaw = o.joint_type;
+    const joint_type =
+      typeof jointRaw === "string" && jointRaw.trim() ? jointRaw.trim() : undefined;
+    out.push({
+      sequence_number: n,
+      item_id: id.trim(),
+      ...(joint_type ? { joint_type } : {}),
+    });
   }
   out.sort((a, b) => a.sequence_number - b.sequence_number);
   return out.length > 0 ? out : null;

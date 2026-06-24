@@ -17,7 +17,9 @@ import { getSupabaseBrowser } from "@/lib/supabase/browser";
 import { recordCatalogSectionId } from "@/lib/section-catalog";
 import {
   buildGuideDisplayRows,
+  formatGuideNotLaidStatus,
   formatWwPendingDetail,
+  getWeldCompletionDate,
   type GuideDisplayRow,
 } from "@/lib/guide-record-matching";
 import { recordMatchesJointTypes, isGuideModeActive } from "@/lib/section-app-config";
@@ -198,7 +200,8 @@ function guideRowClass(status: GuideDisplayRow<WeldRecord>["status"]): string {
   }
 }
 
-function guideStatusBadge(status: GuideDisplayRow<WeldRecord>["status"], pendingDetail: GuideDisplayRow<WeldRecord>["pendingDetail"]) {
+function guideStatusBadge(guideRow: GuideDisplayRow<WeldRecord>) {
+  const { status, pendingDetail, item_id, expected_joint_type } = guideRow;
   switch (status) {
     case "done":
       return <Badge className="bg-emerald-600 text-white text-[10px]">Done</Badge>;
@@ -209,7 +212,11 @@ function guideStatusBadge(status: GuideDisplayRow<WeldRecord>["status"], pending
         </Badge>
       );
     case "not_laid":
-      return <Badge className="bg-red-600 text-white text-[10px]">Not laid</Badge>;
+      return (
+        <Badge className="bg-red-600 text-white text-[10px]">
+          {formatGuideNotLaidStatus(item_id, expected_joint_type)}
+        </Badge>
+      );
     case "off_guide":
       return <Badge className="bg-orange-600 text-white text-[10px]">Off-guide</Badge>;
     default:
@@ -421,16 +428,6 @@ export function WeldTrackingTable({ isAdmin = false }: { isAdmin?: boolean }) {
       wrappingDoneToday: wrappingDoneTodayCount,
     };
   }, [tableRecords]);
-
-  const guideSummary = useMemo(() => {
-    if (!guideRows) return null;
-    return {
-      done: guideRows.filter((r) => r.status === "done").length,
-      pending: guideRows.filter((r) => r.status === "laid_ww_pending").length,
-      notLaid: guideRows.filter((r) => r.status === "not_laid").length,
-      offGuide: guideRows.filter((r) => r.status === "off_guide").length,
-    };
-  }, [guideRows]);
 
   const onToggle = useCallback(
     async (recordId: string, field: ToggleField) => {
@@ -914,25 +911,6 @@ export function WeldTrackingTable({ isAdmin = false }: { isAdmin?: boolean }) {
             }
             value={wrappingDoneToday}
           />
-          <hr className="col-span-full my-0.5 border-0 border-t border-[var(--border)]" />
-          {guideSummary ? (
-            <>
-              <SummaryRow label="Guide — done" formula={<>Matched records with weld + wrap complete</>} value={guideSummary.done} />
-              <SummaryRow label="Guide — W/W pending" formula={<>Matched records missing weld and/or wrap</>} value={guideSummary.pending} />
-              <SummaryRow label="Guide — not laid" formula={<>Guide items without any matching record</>} value={guideSummary.notLaid} />
-              <SummaryRow label="Guide — off-guide" formula={<>Records with no guide item match</>} value={guideSummary.offGuide} />
-              <hr className="col-span-full my-0.5 border-0 border-t border-[var(--border)]" />
-            </>
-          ) : null}
-          <SummaryRow
-            label="Backfill up to"
-            formula={<>MIN(chainage) from PSP records in this section</>}
-            value={
-              sectionContext?.backfillUpTo != null
-                ? sectionContext.backfillUpTo.toLocaleString("en-AU")
-                : "—"
-            }
-          />
         </div>
       </div>
 
@@ -972,8 +950,16 @@ export function WeldTrackingTable({ isAdmin = false }: { isAdmin?: boolean }) {
                         <td className="px-2 py-1.5 sm:px-3 sm:py-2 font-medium">{guideRow.sequence_number}</td>
                         <td className="px-2 py-1.5 sm:px-3 sm:py-2">—</td>
                         <td className="max-w-[7rem] truncate px-2 py-1.5 sm:px-3 sm:py-2 font-mono">{guideRow.item_id}</td>
-                        <td className="px-2 py-1.5 sm:px-3 sm:py-2">{guideStatusBadge(guideRow.status, guideRow.pendingDetail)}</td>
-                        <td className="px-2 py-1.5 sm:px-3 sm:py-2">—</td>
+                        <td className="px-2 py-1.5 sm:px-3 sm:py-2">{guideStatusBadge(guideRow)}</td>
+                        <td className="px-2 py-1.5 sm:px-3 sm:py-2">
+                          {guideRow.expected_joint_type ? (
+                            <Badge variant="secondary" className="bg-orange-100 text-orange-700">
+                              {guideRow.expected_joint_type}
+                            </Badge>
+                          ) : (
+                            "—"
+                          )}
+                        </td>
                         <td className="px-2 py-1.5 sm:px-3 sm:py-2">—</td>
                         <td className="px-2 py-1.5 sm:px-3 sm:py-2">—</td>
                         <td className="px-2 py-1.5 sm:px-3 sm:py-2">—</td>
@@ -982,7 +968,7 @@ export function WeldTrackingTable({ isAdmin = false }: { isAdmin?: boolean }) {
                     );
                   }
                   const record = guideRow.record!;
-                  const weldedOn = formatDate(record.welded_at);
+                  const weldedOn = formatDate(getWeldCompletionDate(record));
                   const wrappedOn = formatDate(record.wrapped_at);
                   const isWR = record.joint_type === "WR";
                   const isTransition = record.joint_type === "Transition";
@@ -992,7 +978,7 @@ export function WeldTrackingTable({ isAdmin = false }: { isAdmin?: boolean }) {
                       <td className="px-2 py-1.5 sm:px-3 sm:py-2 font-medium">{guideRow.sequence_number ?? record.counter ?? "-"}</td>
                       <td className="px-2 py-1.5 sm:px-3 sm:py-2">{record.chainage ?? "-"}</td>
                       <td className="max-w-[7rem] truncate px-2 py-1.5 sm:px-3 sm:py-2">{record.pipe_fitting_id || guideRow.item_id || "-"}</td>
-                      <td className="px-2 py-1.5 sm:px-3 sm:py-2">{guideStatusBadge(guideRow.status, guideRow.pendingDetail)}</td>
+                      <td className="px-2 py-1.5 sm:px-3 sm:py-2">{guideStatusBadge(guideRow)}</td>
                       <td className="px-2 py-1.5 sm:px-3 sm:py-2">
                         {isTransition ? (
                           <Badge variant="secondary" className="bg-purple-100 text-purple-700">TR</Badge>
@@ -1045,7 +1031,7 @@ export function WeldTrackingTable({ isAdmin = false }: { isAdmin?: boolean }) {
               </tr>
             ) : (
               tableRecords.map((record) => {
-                const weldedOn = formatDate(record.welded_at);
+                const weldedOn = formatDate(getWeldCompletionDate(record));
                 const wrappedOn = formatDate(record.wrapped_at);
                 const isWR = record.joint_type === "WR";
                 const isTransition = record.joint_type === "Transition";

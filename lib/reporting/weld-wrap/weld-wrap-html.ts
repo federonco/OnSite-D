@@ -1,4 +1,5 @@
 import type { WeldWrapReportData } from "./types";
+import { formatGuideNotLaidStatus } from "@/lib/guide-record-matching";
 import { findClosestChainageRowIndex } from "@/lib/weld-wrap/section-context";
 function esc(value: string): string {
   return value
@@ -22,7 +23,7 @@ function guideStatusLabel(row: WeldWrapReportData["rows"][number]): string {
     case "laid_ww_pending":
       return row.pendingDetailLabel ? `Laid — ${row.pendingDetailLabel}` : "Laid, W/W pending";
     case "not_laid":
-      return "Not laid";
+      return formatGuideNotLaidStatus(row.guideItemId, row.expectedJointType);
     case "off_guide":
       return "Off-guide";
     default:
@@ -108,59 +109,35 @@ export function buildWeldWrapHtml(data: WeldWrapReportData, logoSrc: string): st
     <tr><td style="padding:4px 0;"><strong>Section:</strong> ${esc(section.name ?? "—")}</td></tr>
     <tr><td style="padding:4px 0;"><strong>ITP:</strong> ${esc(section.itp_number ?? "—")}</td></tr>
     <tr><td style="padding:4px 0;"><strong>Project:</strong> ${esc(projectLabel(section))}</td></tr>
-    ${
-      sectionContext?.backfillUpTo != null
-        ? `<tr><td style="padding:4px 0;"><strong>Backfill up to:</strong> CH ${sectionContext.backfillUpTo.toLocaleString("en-AU")}</td></tr>`
-        : `<tr><td style="padding:4px 0;"><strong>Backfill up to:</strong> —</td></tr>`
-    }
   </table>
 
-  <table cellpadding="0" cellspacing="0" width="100%" style="margin-bottom:20px;border-collapse:collapse;font-family:Arial,sans-serif;font-size:12px;">
+  <h2 style="margin:0 0 12px;font-size:14px;color:#1a5276;">Summary</h2>
+  <table cellpadding="0" cellspacing="0" width="100%" style="margin-bottom:24px;border-collapse:collapse;font-family:Arial,sans-serif;font-size:12px;">
     <tr style="background:#eee4da;">
-      <th colspan="2" style="padding:8px;border:1px solid #ccc;text-align:left;">Welds (WR + Transition)</th>
-      <th colspan="2" style="padding:8px;border:1px solid #ccc;text-align:left;">Welds (WB)</th>
-      <th colspan="2" style="padding:8px;border:1px solid #ccc;text-align:left;">Wrap</th>
+      <th style="padding:8px;border:1px solid #ccc;text-align:left;width:33%;">WR Welds</th>
+      <th style="padding:8px;border:1px solid #ccc;text-align:left;width:33%;">WB Welds</th>
+      <th style="padding:8px;border:1px solid #ccc;text-align:left;width:34%;">Wraps</th>
     </tr>
     <tr>
-      <td style="padding:6px 8px;border:1px solid #ccc;">Done</td>
-      <td style="padding:6px 8px;border:1px solid #ccc;font-weight:bold;">${summary.wrWeldsDone}</td>
-      <td style="padding:6px 8px;border:1px solid #ccc;">Done</td>
-      <td style="padding:6px 8px;border:1px solid #ccc;font-weight:bold;">${summary.wbWeldsDone}</td>
-      <td style="padding:6px 8px;border:1px solid #ccc;">Done</td>
-      <td style="padding:6px 8px;border:1px solid #ccc;font-weight:bold;">${summary.wrapsDone}</td>
-    </tr>
-    <tr>
-      <td style="padding:6px 8px;border:1px solid #ccc;">Pending</td>
-      <td style="padding:6px 8px;border:1px solid #ccc;font-weight:bold;">${summary.wrWeldsPending}</td>
-      <td style="padding:6px 8px;border:1px solid #ccc;">Pending</td>
-      <td style="padding:6px 8px;border:1px solid #ccc;font-weight:bold;">${summary.wbWeldsPending}</td>
-      <td style="padding:6px 8px;border:1px solid #ccc;">Pending</td>
-      <td style="padding:6px 8px;border:1px solid #ccc;font-weight:bold;">${summary.wrapsPending}</td>
+      <td style="padding:8px;border:1px solid #ccc;vertical-align:top;">
+        <div><strong>Done:</strong> ${summary.wrWeldsDone}</div>
+        <div><strong>Pending:</strong> ${summary.wrWeldsPending}</div>
+        <div style="margin-top:4px;color:#555;"><strong>Total:</strong> ${summary.wrWeldsDone + summary.wrWeldsPending}</div>
+      </td>
+      <td style="padding:8px;border:1px solid #ccc;vertical-align:top;">
+        <div><strong>Done:</strong> ${summary.wbWeldsDone}</div>
+        <div><strong>Pending:</strong> ${summary.wbWeldsPending}</div>
+        <div style="margin-top:4px;color:#555;"><strong>Total:</strong> ${summary.wbWeldsDone + summary.wbWeldsPending}</div>
+      </td>
+      <td style="padding:8px;border:1px solid #ccc;vertical-align:top;">
+        <div><strong>Done:</strong> ${summary.wrapsDone}</div>
+        <div><strong>Pending:</strong> ${summary.wrapsPending}</div>
+        <div style="margin-top:4px;color:#555;"><strong>Total:</strong> ${summary.wrapsDone + summary.wrapsPending}</div>
+      </td>
     </tr>
   </table>
 
-  ${
-    guideMode && summary.guideDone != null
-      ? `<table cellpadding="0" cellspacing="0" width="100%" style="margin-bottom:20px;border-collapse:collapse;font-family:Arial,sans-serif;font-size:12px;">
-    <tr style="background:#eee4da;">
-      <th colspan="4" style="padding:8px;border:1px solid #ccc;text-align:left;">Installation guide</th>
-    </tr>
-    <tr>
-      <td style="padding:6px 8px;border:1px solid #ccc;">Done</td>
-      <td style="padding:6px 8px;border:1px solid #ccc;font-weight:bold;">${summary.guideDone ?? 0}</td>
-      <td style="padding:6px 8px;border:1px solid #ccc;">Laid, W/W pending</td>
-      <td style="padding:6px 8px;border:1px solid #ccc;font-weight:bold;">${summary.guideLaidPending ?? 0}</td>
-    </tr>
-    <tr>
-      <td style="padding:6px 8px;border:1px solid #ccc;">Not laid</td>
-      <td style="padding:6px 8px;border:1px solid #ccc;font-weight:bold;">${summary.guideNotLaid ?? 0}</td>
-      <td style="padding:6px 8px;border:1px solid #ccc;">Off-guide</td>
-      <td style="padding:6px 8px;border:1px solid #ccc;font-weight:bold;">${summary.guideOffGuide ?? 0}</td>
-    </tr>
-  </table>`
-      : ""
-  }
-
+  <h2 style="margin:0 0 12px;font-size:14px;color:#1a5276;">Detail</h2>
   <p style="margin:0 0 12px;font-family:Arial,sans-serif;font-size:10px;color:#666;">
     ${
       guideMode

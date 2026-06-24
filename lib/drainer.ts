@@ -39,7 +39,63 @@ export function getSectionKebab(sectionName: string): string {
   return (sectionName ?? "section").replace(/\s+/g, "-");
 }
 
-/** Groups records into ITR pages (9 per page). Expects records ordered by chainage descending. */
+export type ItrSortableRecord = {
+  counter?: number | null;
+  chainage?: number | null;
+};
+
+export type ItrSectionSpan = {
+  direction?: string | null;
+  start_ch?: number | null;
+  end_ch?: number | null;
+};
+
+function isItrSectionBackwards(direction: string | null | undefined): boolean {
+  const d = String(direction ?? "").toLowerCase();
+  return d === "backward" || d === "backwards";
+}
+
+/** True = ascending chainage (from section start towards end). */
+export function itrChainageAscendingFromStart(section?: ItrSectionSpan | null): boolean {
+  if (section?.direction != null && String(section.direction).trim()) {
+    return !isItrSectionBackwards(section.direction);
+  }
+  const start = section?.start_ch != null ? Number(section.start_ch) : NaN;
+  const end = section?.end_ch != null ? Number(section.end_ch) : NaN;
+  if (Number.isFinite(start) && Number.isFinite(end) && start !== end) {
+    return start < end;
+  }
+  return true;
+}
+
+/** Order records by chainage from section start (direction-aware). ITR-1 = first span from start CH. */
+export function sortRecordsForItr<T extends ItrSortableRecord>(
+  records: T[],
+  section?: ItrSectionSpan | null
+): T[] {
+  const ascending = itrChainageAscendingFromStart(section);
+
+  return [...records].sort((a, b) => {
+    const ach = a.chainage != null ? Number(a.chainage) : NaN;
+    const bch = b.chainage != null ? Number(b.chainage) : NaN;
+    if (Number.isFinite(ach) && Number.isFinite(bch) && ach !== bch) {
+      return ascending ? ach - bch : bch - ach;
+    }
+    if (Number.isFinite(ach) && !Number.isFinite(bch)) return -1;
+    if (!Number.isFinite(ach) && Number.isFinite(bch)) return 1;
+
+    const ac =
+      a.counter != null && Number.isFinite(Number(a.counter)) ? Number(a.counter) : null;
+    const bc =
+      b.counter != null && Number.isFinite(Number(b.counter)) ? Number(b.counter) : null;
+    if (ac != null && bc != null && ac !== bc) return ac - bc;
+    if (ac != null && bc == null) return -1;
+    if (ac == null && bc != null) return 1;
+    return 0;
+  });
+}
+
+/** Groups records into ITR pages (9 per page). Expects records ordered from section start CH. */
 export function groupRecordsIntoITRs<T>(records: T[]): T[][] {
   const pages: T[][] = [];
   for (let i = 0; i < records.length; i += ITR_PAGE_SIZE) {

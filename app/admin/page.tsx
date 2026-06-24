@@ -13,6 +13,7 @@ import {
   ITR_PAGE_SIZE,
   getITRProgress,
   groupRecordsIntoITRs,
+  sortRecordsForItr,
 } from "@/lib/drainer";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -62,6 +63,7 @@ type RecordRow = {
   id: string;
   chainage: number;
   date_installed: string | null;
+  counter?: number | null;
   pipe_fitting_id?: string | null;
 };
 
@@ -212,7 +214,7 @@ export default function AdminPage() {
   );
 
   const itrBlocks = useMemo(() => {
-    const pages = groupRecordsIntoITRs(records);
+    const pages = groupRecordsIntoITRs(sortRecordsForItr(records, selectedSection));
     return pages.map((page, i) => {
       const status = page.length === ITR_PAGE_SIZE ? "READY" : "OPEN";
       const range =
@@ -231,7 +233,7 @@ export default function AdminPage() {
         chainages: page.map((r) => r.chainage),
       };
     });
-  }, [records]);
+  }, [records, selectedSection]);
 
   const progress = useMemo(
     () => getITRProgress(records.length),

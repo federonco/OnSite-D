@@ -18,25 +18,53 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Input } from "@/components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import type { GuideItem } from "@/lib/installation-guide-xml";
 import {
   downloadGuideCsvTemplate,
   normalizeGuideItemsForSave,
-  parseGuideCsv,
+  parseAndValidateGuideCsv,
+  type GuideCsvInvalidRow,
 } from "@/lib/guide-csv";
 
-type EditableGuideRow = { key: string; sequence_number: number; item_id: string };
+type EditableGuideRow = {
+  key: string;
+  sequence_number: number;
+  item_id: string;
+  joint_type: string;
+};
+
+const JOINT_TYPE_NONE = "__none__";
 
 function rowsFromGuide(items: GuideItem[]): EditableGuideRow[] {
   return items.map((row, index) => ({
     key: `row-${index}-${row.item_id}`,
     sequence_number: row.sequence_number,
     item_id: row.item_id,
+    joint_type: row.joint_type?.trim() ?? "",
   }));
 }
 
 function newRowKey() {
   return `row-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+}
+
+function itemsFromEditableRows(rows: EditableGuideRow[]): GuideItem[] {
+  return rows.map((row) => {
+    const item: GuideItem = {
+      sequence_number: Number(row.sequence_number) || 0,
+      item_id: row.item_id,
+    };
+    const jt = row.joint_type.trim();
+    if (jt) item.joint_type = jt;
+    return item;
+  });
 }
 
 export function WeldGuideKebabMenu({
@@ -59,10 +87,12 @@ export function WeldGuideKebabMenu({
   const [loadingGuide, setLoadingGuide] = useState(false);
   const [saving, setSaving] = useState(false);
   const [rows, setRows] = useState<EditableGuideRow[]>([]);
+  const [sectionJointTypes, setSectionJointTypes] = useState<string[]>([]);
   const [previewRows, setPreviewRows] = useState<GuideItem[]>([]);
+  const [previewInvalid, setPreviewInvalid] = useState<GuideCsvInvalidRow[]>([]);
 
   const loadGuide = useCallback(async () => {
-    if (!sectionId) return [];
+    if (!sectionId) return { guide: [] as GuideItem[], joint_types: [] as string[] };
     setLoadingGuide(true);
     try {
       const token = await getAccessToken();
@@ -71,10 +101,14 @@ export function WeldGuideKebabMenu({
       });
       const data = (await res.json().catch(() => ({}))) as {
         guide_xml?: GuideItem[];
+        joint_types?: string[];
         error?: string;
       };
       if (!res.ok) throw new Error(data.error ?? "Failed to load guide");
-      return Array.isArray(data.guide_xml) ? data.guide_xml : [];
+      return {
+        guide: Array.isArray(data.guide_xml) ? data.guide_xml : [],
+        joint_types: Array.isArray(data.joint_types) ? data.joint_types : [],
+      };
     } finally {
       setLoadingGuide(false);
     }
@@ -83,11 +117,12 @@ export function WeldGuideKebabMenu({
   const openEditor = useCallback(async () => {
     if (!sectionId) return;
     try {
-      const guide = await loadGuide();
+      const { guide, joint_types } = await loadGuide();
+      setSectionJointTypes(joint_types);
       setRows(
         guide.length > 0
           ? rowsFromGuide(guide)
-          : [{ key: newRowKey(), sequence_number: 1, item_id: "" }]
+          : [{ key: newRowKey(), sequence_number: 1, item_id: "", joint_type: "" }]
       );
       setEditorOpen(true);
     } catch (err) {
@@ -135,18 +170,28 @@ export function WeldGuideKebabMenu({
   );
 
   const handleEditorSave = () => {
-    const items = rows.map((row) => ({
-      sequence_number: Number(row.sequence_number) || 0,
-      item_id: row.item_id,
-    }));
-    void saveGuide(items);
+    const allowed = new Set(sectionJointTypes);
+    for (const row of rows) {
+      const jt = row.joint_type.trim();
+      if (jt && !allowed.has(jt)) {
+        pushToast({
+          type: "error",
+          title: "Invalid joint type",
+          message: `"${jt}" is not allowed for this section.`,
+        });
+        return;
+      }
+    }
+    void saveGuide(itemsFromEditableRows(rows));
   };
 
   const handleImportFile = async (file: File) => {
     try {
+      const { guide, joint_types } = await loadGuide();
+      setSectionJointTypes(joint_types);
       const text = await file.text();
-      const parsed = parseGuideCsv(text);
-      if (parsed.length === 0) {
+      const parsed = parseAndValidateGuideCsv(text, joint_types);
+      if (parsed.valid.length === 0 && parsed.invalid.length === 0) {
         pushToast({
           type: "error",
           title: "Import failed",
@@ -154,7 +199,8 @@ export function WeldGuideKebabMenu({
         });
         return;
       }
-      setPreviewRows(parsed);
+      setPreviewRows(parsed.valid);
+      setPreviewInvalid(parsed.invalid);
       setPreviewOpen(true);
     } catch (err) {
       pushToast({
@@ -168,6 +214,7 @@ export function WeldGuideKebabMenu({
   if (!isAdmin) return null;
 
   const disabled = !sectionId || sectionId === "all";
+  const canConfirmImport = previewInvalid.length === 0 && previewRows.length > 0;
 
   return (
     <>
@@ -229,6 +276,7 @@ export function WeldGuideKebabMenu({
                   <tr className="text-left text-xs text-[var(--muted-foreground)]">
                     <th className="w-16 pb-2 pr-2">Seq</th>
                     <th className="pb-2 pr-2">Pipe ID</th>
+                    <th className="w-28 pb-2 pr-2">Joint type</th>
                     <th className="w-10 pb-2" />
                   </tr>
                 </thead>
@@ -267,6 +315,35 @@ export function WeldGuideKebabMenu({
                           }
                         />
                       </td>
+                      <td className="py-1.5 pr-2 align-top">
+                        <Select
+                          value={row.joint_type || JOINT_TYPE_NONE}
+                          onValueChange={(value) =>
+                            setRows((prev) =>
+                              prev.map((r, i) =>
+                                i === index
+                                  ? {
+                                      ...r,
+                                      joint_type: value === JOINT_TYPE_NONE ? "" : value,
+                                    }
+                                  : r
+                              )
+                            )
+                          }
+                        >
+                          <SelectTrigger className="drainer-input h-9 w-full">
+                            <SelectValue placeholder="—" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value={JOINT_TYPE_NONE}>—</SelectItem>
+                            {sectionJointTypes.map((jt) => (
+                              <SelectItem key={jt} value={jt}>
+                                {jt}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </td>
                       <td className="py-1.5 align-top">
                         <Button
                           type="button"
@@ -297,6 +374,7 @@ export function WeldGuideKebabMenu({
                       key: newRowKey(),
                       sequence_number: prev.length + 1,
                       item_id: "",
+                      joint_type: "",
                     },
                   ])
                 }
@@ -327,21 +405,42 @@ export function WeldGuideKebabMenu({
             <DialogTitle>Preview importación CSV</DialogTitle>
           </DialogHeader>
           <p className="text-sm text-[var(--muted-foreground)]">
-            Esto reemplazará la guía completa ({previewRows.length} ítems).
+            Esto reemplazará la guía completa ({previewRows.length} ítems válidos
+            {previewInvalid.length > 0 ? `, ${previewInvalid.length} inválidos` : ""}).
           </p>
+          {previewInvalid.length > 0 ? (
+            <p className="text-sm text-[var(--danger)]">
+              Corregí las filas inválidas antes de importar.
+            </p>
+          ) : null}
           <div className="min-h-0 flex-1 overflow-y-auto rounded border border-[var(--border)]">
             <table className="w-full text-sm">
               <thead className="bg-[var(--surface-alt)] sticky top-0">
                 <tr>
                   <th className="px-3 py-2 text-left">Seq</th>
                   <th className="px-3 py-2 text-left">Pipe ID</th>
+                  <th className="px-3 py-2 text-left">Joint</th>
+                  <th className="px-3 py-2 text-left">Estado</th>
                 </tr>
               </thead>
               <tbody>
                 {previewRows.map((row) => (
-                  <tr key={`${row.sequence_number}-${row.item_id}`} className="border-t">
+                  <tr key={`ok-${row.sequence_number}-${row.item_id}`} className="border-t">
                     <td className="px-3 py-1.5">{row.sequence_number}</td>
                     <td className="px-3 py-1.5 font-mono">{row.item_id}</td>
+                    <td className="px-3 py-1.5">{row.joint_type ?? "—"}</td>
+                    <td className="px-3 py-1.5 text-emerald-700">OK</td>
+                  </tr>
+                ))}
+                {previewInvalid.map((row) => (
+                  <tr
+                    key={`bad-${row.sequence_number}-${row.item_id}-${row.joint_type}`}
+                    className="border-t bg-red-50"
+                  >
+                    <td className="px-3 py-1.5">{row.sequence_number}</td>
+                    <td className="px-3 py-1.5 font-mono">{row.item_id}</td>
+                    <td className="px-3 py-1.5">{row.joint_type ?? "—"}</td>
+                    <td className="px-3 py-1.5 text-red-700">{row.error}</td>
                   </tr>
                 ))}
               </tbody>
@@ -353,7 +452,7 @@ export function WeldGuideKebabMenu({
             </Button>
             <Button
               onClick={() => void saveGuide(previewRows)}
-              disabled={saving}
+              disabled={saving || !canConfirmImport}
               className="bg-[#B8682A] text-white border-0 hover:bg-[#A35D26]"
             >
               {saving ? "Importando…" : "Confirmar reemplazo"}

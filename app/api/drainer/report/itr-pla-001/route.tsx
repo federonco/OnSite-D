@@ -4,8 +4,8 @@ import { isAdmin } from "@/lib/admin";
 import { getSupabaseServer } from "@/lib/supabase/server";
 import { generateITRPla001PdfWithFallback } from "@/lib/reporting/itr-pla-001/generate-with-fallback";
 import { fetchItrSectionById } from "@/lib/drainer-sections-read";
-import { pipeRecordsSectionOrFilter } from "@/lib/section-catalog";
-import { ITR_PAGE_SIZE } from "@/lib/drainer";
+import { pipeRecordsSectionOrFilter, fetchSectionById } from "@/lib/section-catalog";
+import { ITR_PAGE_SIZE, sortRecordsForItr } from "@/lib/drainer";
 
 export async function POST(request: NextRequest) {
   console.log("[ITR] route hit: direct (PDF download)");
@@ -40,14 +40,16 @@ export async function POST(request: NextRequest) {
   const { data: allRecords, error: recordsError } = await supabase
     .from("drainer_pipe_records")
     .select("*")
-    .or(pipeRecordsSectionOrFilter(sectionId))
-    .order("chainage", { ascending: false });
+    .or(pipeRecordsSectionOrFilter(sectionId));
 
   if (recordsError) {
     return NextResponse.json({ error: recordsError.message }, { status: 500 });
   }
 
-  const records = allRecords ?? [];
+  const records = sortRecordsForItr(
+    allRecords ?? [],
+    await fetchSectionById(supabase, sectionId)
+  );
   const startIdx = (itrIndex - 1) * ITR_PAGE_SIZE;
   const pageRecords = records.slice(startIdx, startIdx + ITR_PAGE_SIZE);
 

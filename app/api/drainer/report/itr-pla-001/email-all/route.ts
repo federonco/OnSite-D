@@ -2,9 +2,9 @@ import { NextRequest, NextResponse } from "next/server";
 import { getUserFromRequest } from "@/lib/api-auth";
 import { isAdmin } from "@/lib/admin";
 import { getSupabaseServer } from "@/lib/supabase/server";
-import { ITR_PAGE_SIZE, groupRecordsIntoITRs } from "@/lib/drainer";
+import { ITR_PAGE_SIZE, groupRecordsIntoITRs, sortRecordsForItr } from "@/lib/drainer";
 import { fetchItrSectionById } from "@/lib/drainer-sections-read";
-import { pipeRecordsSectionOrFilter } from "@/lib/section-catalog";
+import { pipeRecordsSectionOrFilter, fetchSectionById } from "@/lib/section-catalog";
 import {
   createEmailTransporter,
   getEmailFrom,
@@ -58,14 +58,14 @@ export async function POST(request: NextRequest) {
   const { data: allRecords, error: recordsError } = await supabase
     .from("drainer_pipe_records")
     .select("*")
-    .or(pipeRecordsSectionOrFilter(sectionId))
-    .order("chainage", { ascending: false });
+    .or(pipeRecordsSectionOrFilter(sectionId));
 
   if (recordsError) {
     return NextResponse.json({ error: recordsError.message }, { status: 500 });
   }
 
-  const records = allRecords ?? [];
+  const catalogSection = await fetchSectionById(supabase, sectionId);
+  const records = sortRecordsForItr(allRecords ?? [], catalogSection);
   const pages = groupRecordsIntoITRs(records);
   const origin = new URL(request.url).origin;
 

@@ -9,10 +9,6 @@ export type WeldWrapSummary = {
   wbWeldsPending: number;
   wrapsDone: number;
   wrapsPending: number;
-  guideDone?: number;
-  guideLaidPending?: number;
-  guideNotLaid?: number;
-  guideOffGuide?: number;
 };
 
 export type WeldWrapDetailRow = {
@@ -27,6 +23,7 @@ export type WeldWrapDetailRow = {
   guideStatus?: GuideRowStatus;
   guideItemId?: string | null;
   guideSequence?: number | null;
+  expectedJointType?: string | null;
   pendingDetailLabel?: string | null;
   isGuideMode?: boolean;
 };

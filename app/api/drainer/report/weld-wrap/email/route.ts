@@ -73,8 +73,6 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: error ?? "Report build failed" }, { status });
   }
 
-  const backfillUpTo = reportData.sectionContext?.backfillUpTo ?? null;
-
   let buffer: Buffer;
   let fileName: string;
   try {
@@ -102,7 +100,6 @@ export async function POST(request: NextRequest) {
   const text = [
     `Weld & Wrap status report for ${section.name}.`,
     `Showing: ${reportData.filterLabel}`,
-    `Backfill up to: ${backfillUpTo != null ? `CH ${backfillUpTo}` : "—"}`,
     `WR/TR welds: ${summary.wrWeldsDone} done, ${summary.wrWeldsPending} pending.`,
     `WB welds: ${summary.wbWeldsDone} done, ${summary.wbWeldsPending} pending.`,
     `Wrap: ${summary.wrapsDone} done, ${summary.wrapsPending} pending.`,

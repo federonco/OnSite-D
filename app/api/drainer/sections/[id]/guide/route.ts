@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getUserFromRequest } from "@/lib/api-auth";
 import { isAdmin } from "@/lib/admin";
 import { normalizeGuideItemsForSave, validateGuideItemsPayload } from "@/lib/guide-csv";
-import { guideConfigFromAppConfig } from "@/lib/section-app-config";
+import { guideConfigFromAppConfig, jointTypesFromAppConfig } from "@/lib/section-app-config";
 import { fetchUnifiedSectionByCatalogId } from "@/lib/section-catalog";
 import { getSupabaseServer } from "@/lib/supabase/server";
 
@@ -29,11 +29,13 @@ export async function GET(
   }
 
   const cfg = guideConfigFromAppConfig(unified.app_config ?? null);
+  const joint_types = jointTypesFromAppConfig(unified.app_config ?? null) ?? [];
   return NextResponse.json({
     section_id: id,
     unified_section_id: unified.id,
     guide_xml: cfg.guide_xml ?? [],
     guide_enabled: cfg.guide_enabled,
+    joint_types,
   });
 }
 
@@ -57,17 +59,6 @@ export async function PATCH(
     return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
   }
 
-  const validated = validateGuideItemsPayload(body.guide_xml);
-  if (!validated) {
-    return NextResponse.json(
-      { error: "guide_xml must be an array of { item_id: string, sequence_number: number }" },
-      { status: 400 }
-    );
-  }
-
-  const normalized = normalizeGuideItemsForSave(validated);
-  const guide_enabled = normalized.length >= 1;
-
   const supabase = getSupabaseServer({ useServiceRole: true });
   const unified = await fetchUnifiedSectionByCatalogId(supabase, id);
   if (!unified) {
@@ -76,6 +67,22 @@ export async function PATCH(
       { status: 404 }
     );
   }
+
+  const cfg = guideConfigFromAppConfig(unified.app_config ?? null);
+  const joint_types = jointTypesFromAppConfig(unified.app_config ?? null) ?? [];
+  const validated = validateGuideItemsPayload(body.guide_xml, { allowedJointTypes: joint_types });
+  if (!validated) {
+    return NextResponse.json(
+      {
+        error:
+          "guide_xml must be an array of { item_id: string, sequence_number: number, joint_type?: string }",
+      },
+      { status: 400 }
+    );
+  }
+
+  const normalized = normalizeGuideItemsForSave(validated);
+  const guide_enabled = normalized.length >= 1;
 
   const { data: current, error: readError } = await supabase
     .from("sections")
