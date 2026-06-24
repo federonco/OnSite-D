@@ -246,16 +246,16 @@ export function WeldGuideKebabMenu({
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end">
           <DropdownMenuItem onClick={() => void openEditor()} disabled={disabled}>
-            Editar guía
+            Edit guide
           </DropdownMenuItem>
           <DropdownMenuItem
             onClick={() => fileInputRef.current?.click()}
             disabled={disabled}
           >
-            Importar CSV
+            Import CSV
           </DropdownMenuItem>
           <DropdownMenuItem onClick={downloadGuideCsvTemplate}>
-            Descargar plantilla CSV
+            Download CSV template
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
@@ -264,7 +264,7 @@ export function WeldGuideKebabMenu({
         <DialogContent className="max-w-2xl max-h-[85vh] flex flex-col">
           <DialogHeader>
             <DialogTitle>
-              Editar guía{sectionName ? ` — ${sectionName}` : ""}
+              Edit guide{sectionName ? ` — ${sectionName}` : ""}
             </DialogTitle>
           </DialogHeader>
           {loadingGuide ? (
@@ -380,20 +380,20 @@ export function WeldGuideKebabMenu({
                 }
               >
                 <Plus className="size-4 mr-1" />
-                Agregar fila
+                Add row
               </Button>
             </div>
           )}
           <DialogFooter>
             <Button variant="outline" onClick={() => setEditorOpen(false)}>
-              Cancelar
+              Cancel
             </Button>
             <Button
               onClick={handleEditorSave}
               disabled={saving || loadingGuide}
               className="bg-[#B8682A] text-white border-0 hover:bg-[#A35D26]"
             >
-              {saving ? "Guardando…" : "Guardar guía"}
+              {saving ? "Saving…" : "Save guide"}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -402,15 +402,16 @@ export function WeldGuideKebabMenu({
       <Dialog open={previewOpen} onOpenChange={setPreviewOpen}>
         <DialogContent className="max-w-lg max-h-[85vh] flex flex-col">
           <DialogHeader>
-            <DialogTitle>Preview importación CSV</DialogTitle>
+            <DialogTitle>Preview CSV import</DialogTitle>
           </DialogHeader>
           <p className="text-sm text-[var(--muted-foreground)]">
-            Esto reemplazará la guía completa ({previewRows.length} ítems válidos
-            {previewInvalid.length > 0 ? `, ${previewInvalid.length} inválidos` : ""}).
+            This will replace the entire guide ({previewRows.length} valid item
+            {previewRows.length === 1 ? "" : "s"}
+            {previewInvalid.length > 0 ? `, ${previewInvalid.length} invalid` : ""}).
           </p>
           {previewInvalid.length > 0 ? (
             <p className="text-sm text-[var(--danger)]">
-              Corregí las filas inválidas antes de importar.
+              Fix invalid rows before importing.
             </p>
           ) : null}
           <div className="min-h-0 flex-1 overflow-y-auto rounded border border-[var(--border)]">
@@ -420,7 +421,7 @@ export function WeldGuideKebabMenu({
                   <th className="px-3 py-2 text-left">Seq</th>
                   <th className="px-3 py-2 text-left">Pipe ID</th>
                   <th className="px-3 py-2 text-left">Joint</th>
-                  <th className="px-3 py-2 text-left">Estado</th>
+                  <th className="px-3 py-2 text-left">Status</th>
                 </tr>
               </thead>
               <tbody>
@@ -448,14 +449,14 @@ export function WeldGuideKebabMenu({
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setPreviewOpen(false)}>
-              Cancelar
+              Cancel
             </Button>
             <Button
               onClick={() => void saveGuide(previewRows)}
               disabled={saving || !canConfirmImport}
               className="bg-[#B8682A] text-white border-0 hover:bg-[#A35D26]"
             >
-              {saving ? "Importando…" : "Confirmar reemplazo"}
+              {saving ? "Importing…" : "Confirm replace"}
             </Button>
           </DialogFooter>
         </DialogContent>
