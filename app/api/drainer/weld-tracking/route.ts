@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getUserFromRequest } from "@/lib/api-auth";
 import { isAdmin } from "@/lib/admin";
 import { getSupabaseServer } from "@/lib/supabase/server";
-import { fetchSectionById, recordCatalogSectionId } from "@/lib/section-catalog";
+import { fetchSectionById, fetchUnifiedSectionByCatalogId } from "@/lib/section-catalog";
 
 const ALLOWED_FIELDS = new Set(["welded_at", "wrapped_at", "welded_steps", "comments"]);
 
@@ -14,27 +14,36 @@ async function enrichWeldTrackingRecords(
     [key: string]: unknown;
   }>
 ) {
-  const ids = new Set<string>();
+  const rawIds = new Set<string>();
   for (const record of records) {
-    const id = recordCatalogSectionId(record);
-    if (id) ids.add(id);
+    const raw = record.unified_section_id ?? record.section_id;
+    if (raw) rawIds.add(raw);
   }
 
-  const nameById = new Map<string, string>();
+  const canonicalByRaw = new Map<string, string>();
+  const nameByCanonical = new Map<string, string>();
   await Promise.all(
-    Array.from(ids).map(async (id) => {
-      const section = await fetchSectionById(supabase, id);
-      if (section?.name) nameById.set(id, section.name);
+    Array.from(rawIds).map(async (rawId) => {
+      const unified = await fetchUnifiedSectionByCatalogId(supabase, rawId);
+      const canonical = unified?.id ?? rawId;
+      canonicalByRaw.set(rawId, canonical);
+      if (unified?.name) {
+        nameByCanonical.set(canonical, unified.name);
+        return;
+      }
+      const section = await fetchSectionById(supabase, rawId);
+      if (section?.name) nameByCanonical.set(canonical, section.name);
     })
   );
 
   return records.map((record) => {
-    const catalogId = recordCatalogSectionId(record);
+    const rawId = record.unified_section_id ?? record.section_id ?? null;
+    const catalog_section_id = rawId ? (canonicalByRaw.get(rawId) ?? rawId) : null;
     return {
       ...record,
-      section_id: catalogId,
-      drainer_sections: catalogId
-        ? { name: nameById.get(catalogId) ?? null }
+      catalog_section_id,
+      drainer_sections: catalog_section_id
+        ? { name: nameByCanonical.get(catalog_section_id) ?? null }
         : null,
     };
   });

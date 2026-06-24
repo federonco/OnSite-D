@@ -494,7 +494,7 @@ export default function AdminPage() {
               <CardTitle className="text-sm">Weld &amp; Wrap Tracker</CardTitle>
             </CardHeader>
             <CardContent>
-              <WeldTrackingTable />
+              <WeldTrackingTable isAdmin={isAdmin ?? false} />
             </CardContent>
           </Card>
         ) : (

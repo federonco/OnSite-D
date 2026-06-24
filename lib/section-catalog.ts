@@ -204,12 +204,60 @@ export function pipeRecordsSectionOrFilter(sectionId: string): string {
   return `section_id.eq.${sectionId},unified_section_id.eq.${sectionId}`;
 }
 
-/** Catalog section id on a pipe record (legacy or unified). */
+/** Catalog section id on a pipe record (prefer unified when migrated). */
 export function recordCatalogSectionId(record: {
+  catalog_section_id?: string | null;
   section_id?: string | null;
   unified_section_id?: string | null;
 }): string | null {
-  return record.section_id ?? record.unified_section_id ?? null;
+  return (
+    record.catalog_section_id ?? record.unified_section_id ?? record.section_id ?? null
+  );
+}
+
+/**
+ * Resolve a catalog section id to the unified `sections` row (app_config source).
+ * Tries direct id match, then legacy_id bridge when a legacy drainer_sections id is passed.
+ */
+export async function fetchUnifiedSectionByCatalogId(
+  supabase: SupabaseClient,
+  sectionId: string,
+  options?: { crewIds?: string[] }
+): Promise<CatalogSection | null> {
+  const id = sectionId.trim();
+  if (!id) return null;
+  if (options?.crewIds?.length === 0) return null;
+
+  let directQuery = supabase.from("sections").select(UNIFIED_SELECT).eq("id", id);
+  if (options?.crewIds) {
+    directQuery = directQuery.in("crew_id", options.crewIds);
+  }
+  const { data: directUnified, error: directError } = await directQuery.maybeSingle();
+  if (directError) {
+    console.error("[section-catalog] unified direct fetch failed:", directError.message);
+    return null;
+  }
+  if (directUnified && directUnified.is_active !== false) {
+    return mapUnifiedRow(directUnified as Record<string, unknown>);
+  }
+
+  let bridgeQuery = supabase
+    .from("sections")
+    .select(UNIFIED_SELECT)
+    .eq("app_config->>legacy_id", id);
+  if (options?.crewIds) {
+    bridgeQuery = bridgeQuery.in("crew_id", options.crewIds);
+  }
+  const { data: bridged, error: bridgeError } = await bridgeQuery.maybeSingle();
+  if (bridgeError) {
+    console.error("[section-catalog] unified legacy bridge fetch failed:", bridgeError.message);
+    return null;
+  }
+  if (bridged && bridged.is_active !== false) {
+    return mapUnifiedRow(bridged as Record<string, unknown>);
+  }
+
+  return null;
 }
 
 export async function verifyQrTokenForSection(

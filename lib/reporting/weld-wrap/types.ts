@@ -1,5 +1,6 @@
 import type { SectionInfo } from "@/lib/reporting/itr-pla-001/types";
 import type { WeldWrapSectionContext } from "@/lib/weld-wrap/section-context";
+import type { GuideRowStatus } from "@/lib/guide-record-matching";
 
 export type WeldWrapSummary = {
   wrWeldsDone: number;
@@ -8,6 +9,10 @@ export type WeldWrapSummary = {
   wbWeldsPending: number;
   wrapsDone: number;
   wrapsPending: number;
+  guideDone?: number;
+  guideLaidPending?: number;
+  guideNotLaid?: number;
+  guideOffGuide?: number;
 };
 
 export type WeldWrapDetailRow = {
@@ -19,6 +24,11 @@ export type WeldWrapDetailRow = {
   wrappedLabel: string;
   comments: string | null;
   pending: boolean;
+  guideStatus?: GuideRowStatus;
+  guideItemId?: string | null;
+  guideSequence?: number | null;
+  pendingDetailLabel?: string | null;
+  isGuideMode?: boolean;
 };
 
 export type WeldWrapReportData = {
@@ -27,5 +37,6 @@ export type WeldWrapReportData = {
   rows: WeldWrapDetailRow[];
   generatedAtLabel: string;
   filterLabel: string;
+  guideMode?: boolean;
   sectionContext?: WeldWrapSectionContext | null;
 };

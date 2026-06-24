@@ -121,7 +121,25 @@ type FittingRecord = {
   pipe_fitting_id: string | null;
   date_installed: string | null;
 };
-type FittingsSection = { section_id: string; section_name?: string; records: FittingRecord[] };
+type FittingsSection = {
+  section_id: string;
+  section_name?: string;
+  records: FittingRecord[];
+  guide_validation?: {
+    guide_enabled: boolean;
+    matched_valid: Array<{
+      record_id: string;
+      item_id: string;
+      sequence_number: number;
+      pipe_fitting_id: string | null;
+      chainage: number;
+      counter: number | null;
+    }>;
+    off_guide: FittingRecord[];
+    not_laid: Array<{ sequence_number: number; item_id: string }>;
+  };
+  not_laid?: Array<{ sequence_number: number; item_id: string }>;
+};
 type FilterSection = { id: string; name: string };
 
 export default function NotificationsPage() {
@@ -174,6 +192,10 @@ export default function NotificationsPage() {
   const [criteriaLoading, setCriteriaLoading] = useState(false);
   const [criteriaSaving, setCriteriaSaving] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [jointTypes, setJointTypes] = useState<string[]>([]);
+  const [savedJointTypes, setSavedJointTypes] = useState<string[]>([]);
+  const [jointTypesLoading, setJointTypesLoading] = useState(false);
+  const [jointTypesSaving, setJointTypesSaving] = useState(false);
   const getAccessToken = useCallback(async () => {
     const { data } = await supabase.auth.getSession();
     return data.session?.access_token ?? null;
@@ -260,9 +282,25 @@ export default function NotificationsPage() {
         setFittingsOpen(false);
         return;
       }
-      const sections: FittingsSection[] = data.sections ?? (data.records ? [{ section_id: data.section_id ?? "", section_name: data.section_name, records: data.records }] : []);
+      const sections: FittingsSection[] =
+        data.sections ??
+        (data.records
+          ? [
+              {
+                section_id: data.section_id ?? "",
+                section_name: data.section_name,
+                records: data.records,
+                guide_validation: data.guide_validation,
+                not_laid: data.not_laid,
+              },
+            ]
+          : []);
       setFittingsData(sections);
-      const total = sections.reduce((s, sec) => s + (sec.records?.length ?? 0), 0);
+      const total = sections.reduce((s, sec) => {
+        const off = sec.records?.length ?? 0;
+        const gaps = sec.not_laid?.length ?? sec.guide_validation?.not_laid.length ?? 0;
+        return s + off + gaps;
+      }, 0);
       setFittingsOpen(total > 0);
       console.log("[data-analysis] ✓ fittings done");
     } finally {
@@ -360,6 +398,73 @@ export default function NotificationsPage() {
   const hasUnsavedCriteria =
     selectedSectionId !== "all" && JSON.stringify(criteria) !== JSON.stringify(savedCriteria);
 
+  const hasUnsavedJointTypes =
+    selectedSectionId !== "all" &&
+    JSON.stringify(jointTypes) !== JSON.stringify(savedJointTypes);
+
+  const loadJointTypes = useCallback(async () => {
+    if (selectedSectionId === "all") return;
+    const token = await getAccessToken();
+    if (!token) return;
+    setJointTypesLoading(true);
+    try {
+      const res = await fetch(`/api/drainer/sections/${selectedSectionId}/joint-types`, {
+        cache: "no-store",
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const data = (await res.json().catch(() => ({}))) as {
+        joint_types?: string[];
+        error?: string;
+      };
+      if (!res.ok) throw new Error(data.error ?? "Failed to load joint types");
+      const next = Array.isArray(data.joint_types) ? data.joint_types : [];
+      setJointTypes(next);
+      setSavedJointTypes(next);
+    } catch (err) {
+      pushToast({
+        type: "error",
+        title: "Could not load joint types",
+        message: err instanceof Error ? err.message : "Unknown error",
+      });
+    } finally {
+      setJointTypesLoading(false);
+    }
+  }, [getAccessToken, pushToast, selectedSectionId]);
+
+  const handleSaveJointTypes = useCallback(async () => {
+    if (selectedSectionId === "all") return;
+    setJointTypesSaving(true);
+    try {
+      const token = await getAccessToken();
+      if (!token) throw new Error("Sign in required");
+      const res = await fetch(`/api/drainer/sections/${selectedSectionId}/joint-types`, {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ joint_types: jointTypes }),
+      });
+      const data = (await res.json().catch(() => ({}))) as {
+        joint_types?: string[];
+        error?: string;
+      };
+      if (!res.ok) throw new Error(data.error ?? "Save failed");
+      const saved = data.joint_types ?? jointTypes;
+      setJointTypes(saved);
+      setSavedJointTypes(saved);
+      pushToast({ type: "success", title: "Joint types saved" });
+    } catch (err) {
+      pushToast({
+        type: "error",
+        title: "Save failed",
+        message: err instanceof Error ? err.message : "Unknown error",
+      });
+    } finally {
+      setJointTypesSaving(false);
+    }
+  }, [getAccessToken, jointTypes, pushToast, selectedSectionId]);
+
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => {
       setAuthEmail(data.session?.user.email ?? null);
@@ -403,7 +508,8 @@ export default function NotificationsPage() {
   useEffect(() => {
     if (!authEmail || !isAdmin || selectedSectionId === "all") return;
     void loadCriteria();
-  }, [authEmail, isAdmin, selectedSectionId, loadCriteria]);
+    void loadJointTypes();
+  }, [authEmail, isAdmin, selectedSectionId, loadCriteria, loadJointTypes]);
 
   useEffect(() => {
     if (selectedSectionId === "all") {
@@ -858,6 +964,43 @@ export default function NotificationsPage() {
                           />
                         </label>
                       </div>
+                      <div className="rounded-lg border border-[var(--border)] p-3">
+                        <p className="text-xs font-semibold text-[var(--ink)] mb-2">Section joint types</p>
+                        {jointTypesLoading ? (
+                          <p className="text-xs text-[var(--muted-foreground)]">Loading joint types…</p>
+                        ) : (
+                          <div className="flex flex-wrap gap-3">
+                            {(["RRJ", "WR", "WB", "Transition"] as const).map((jt) => (
+                              <label key={jt} className="inline-flex items-center gap-1.5 text-xs">
+                                <input
+                                  type="checkbox"
+                                  className="size-3 accent-[#B8682A]"
+                                  checked={jointTypes.includes(jt)}
+                                  onChange={(e) =>
+                                    setJointTypes((prev) =>
+                                      e.target.checked
+                                        ? [...prev, jt]
+                                        : prev.filter((t) => t !== jt)
+                                    )
+                                  }
+                                />
+                                {jt}
+                              </label>
+                            ))}
+                          </div>
+                        )}
+                        <div className="mt-3 flex justify-end">
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="min-h-[36px]"
+                            disabled={jointTypesSaving || !hasUnsavedJointTypes}
+                            onClick={() => void handleSaveJointTypes()}
+                          >
+                            {jointTypesSaving ? "Saving…" : "Save joint types"}
+                          </Button>
+                        </div>
+                      </div>
                       <div className="flex flex-wrap justify-end gap-2">
                         <Button
                           variant="outline"
@@ -949,7 +1092,11 @@ export default function NotificationsPage() {
                 <span>Fittings (non-pipe names)</span>
                 {!fittingsLoading && (
                   <Badge variant="secondary" className="text-xs">
-                    {fittingsData.reduce((s, sec) => s + (sec.records?.length ?? 0), 0)}
+                    {fittingsData.reduce((s, sec) => {
+                      const off = sec.records?.length ?? 0;
+                      const gaps = sec.not_laid?.length ?? sec.guide_validation?.not_laid.length ?? 0;
+                      return s + off + gaps;
+                    }, 0)}
                   </Badge>
                 )}
               </button>
@@ -957,12 +1104,62 @@ export default function NotificationsPage() {
                 <div className="mt-2">
                   {fittingsLoading ? (
                     <p className="text-sm text-[var(--muted-foreground)] py-2">Loading…</p>
-                  ) : fittingsData.reduce((s, sec) => s + (sec.records?.length ?? 0), 0) === 0 ? (
+                  ) : fittingsData.reduce((s, sec) => {
+                      const off = sec.records?.length ?? 0;
+                      const gaps = sec.not_laid?.length ?? sec.guide_validation?.not_laid.length ?? 0;
+                      return s + off + gaps;
+                    }, 0) === 0 ? (
                     <p className="text-sm text-[var(--muted-foreground)] py-2">No fittings to validate</p>
                   ) : (
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      {fittingsData.flatMap((sec) =>
-                        (sec.records ?? []).map((r) => (
+                      {fittingsData.flatMap((sec) => {
+                        if (sec.guide_validation?.guide_enabled === true) {
+                          return [
+                            ...(sec.not_laid ?? sec.guide_validation.not_laid).map((gap) => (
+                              <div key={`gap-${sec.section_id}-${gap.sequence_number}`} className="rounded-xl border border-red-200 bg-red-50 p-4 shadow-sm">
+                                <div className="flex items-center gap-2 mb-2">
+                                  <Badge className="bg-red-600 text-white text-xs">Not laid</Badge>
+                                  <span className="text-sm font-mono font-semibold">{gap.item_id}</span>
+                                </div>
+                                <p className="text-xs text-[var(--muted-foreground)]">
+                                  Guide seq {gap.sequence_number} — no matching record lodged.
+                                </p>
+                              </div>
+                            )),
+                            ...(sec.records ?? []).map((r) => (
+                              <div key={r.id} className="rounded-xl border border-amber-200 bg-amber-50 p-4 shadow-sm flex flex-col min-h-[140px]">
+                                <div className="flex items-center justify-between gap-2 mb-2">
+                                  <Badge className="bg-amber-600 text-white text-xs">Off-guide</Badge>
+                                  <span className="text-sm font-medium">Record #{r.counter ?? "—"}</span>
+                                </div>
+                                <p className="text-sm mb-1">CH {r.chainage.toLocaleString("en-AU", { minimumFractionDigits: 2 })} · <span className="font-mono">{r.pipe_fitting_id ?? "—"}</span></p>
+                                <p className="text-xs text-[var(--muted-foreground)] mb-3">
+                                  Record does not match any installation-guide item.
+                                </p>
+                                <div className="mt-auto flex flex-wrap gap-2 justify-between items-center w-full">
+                                  <Button variant="outline" size="sm" className="min-h-[33px] h-[33px] px-3 text-xs bg-[#2F7D55] text-white border-0 hover:bg-[#267348] shrink-0" onClick={() => setValidateFittingConfirm({ sec, r })} disabled={validatingFittingKey === r.id}>
+                                    {validatingFittingKey === r.id ? "Validating…" : "Validate"}
+                                  </Button>
+                                  <Button variant="outline" size="sm" className="min-h-[33px] h-[33px] px-3 text-xs bg-[#B8682A] text-white border-0 hover:bg-[#A35D26] shrink-0" onClick={() => openViewRecordById(r.id, `Off-guide: ${r.pipe_fitting_id ?? "—"}`, r.chainage, r.chainage)}>
+                                    Edit record
+                                  </Button>
+                                </div>
+                              </div>
+                            )),
+                            ...(sec.guide_validation.matched_valid.length > 0 &&
+                            (sec.records?.length ?? 0) === 0 &&
+                            (sec.not_laid?.length ?? sec.guide_validation.not_laid.length) === 0
+                              ? [
+                                  <div key={`matched-${sec.section_id}`} className="rounded-xl border border-emerald-200 bg-emerald-50 p-4 shadow-sm md:col-span-2">
+                                    <p className="text-sm text-emerald-800">
+                                      ✅ All {sec.guide_validation.matched_valid.length} lodged item(s) match the installation guide.
+                                    </p>
+                                  </div>,
+                                ]
+                              : []),
+                          ];
+                        }
+                        return (sec.records ?? []).map((r) => (
                           <div key={r.id} className="rounded-xl border border-[var(--border)] bg-white p-4 shadow-sm flex flex-col min-h-[140px]">
                             <div className="flex items-center justify-between gap-2 mb-2">
                               <Badge variant="secondary" className="text-xs">Fitting</Badge>
@@ -973,13 +1170,7 @@ export default function NotificationsPage() {
                               Name differs from pipe format (000536-000096 or PP000010-000169).
                             </p>
                             <div className="mt-auto flex flex-wrap gap-2 justify-between items-center w-full">
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                className="min-h-[33px] h-[33px] px-3 text-xs bg-[#2F7D55] text-white border-0 hover:bg-[#267348] shrink-0"
-                                onClick={() => setValidateFittingConfirm({ sec, r })}
-                                disabled={validatingFittingKey === r.id}
-                              >
+                              <Button variant="outline" size="sm" className="min-h-[33px] h-[33px] px-3 text-xs bg-[#2F7D55] text-white border-0 hover:bg-[#267348] shrink-0" onClick={() => setValidateFittingConfirm({ sec, r })} disabled={validatingFittingKey === r.id}>
                                 {validatingFittingKey === r.id ? "Validating…" : "Validate"}
                               </Button>
                               <Button variant="outline" size="sm" className="min-h-[33px] h-[33px] px-3 text-xs bg-[#B8682A] text-white border-0 hover:bg-[#A35D26] shrink-0" onClick={() => openViewRecordById(r.id, `Fitting: ${r.pipe_fitting_id ?? "—"}`, r.chainage, r.chainage)}>
@@ -987,8 +1178,8 @@ export default function NotificationsPage() {
                               </Button>
                             </div>
                           </div>
-                        ))
-                      )}
+                        ));
+                      })}
                     </div>
                   )}
                 </div>

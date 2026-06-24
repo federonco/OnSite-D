@@ -15,6 +15,12 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { getSupabaseBrowser } from "@/lib/supabase/browser";
 import { recordCatalogSectionId } from "@/lib/section-catalog";
+import {
+  buildGuideDisplayRows,
+  formatWwPendingDetail,
+  type GuideDisplayRow,
+} from "@/lib/guide-record-matching";
+import { recordMatchesJointTypes, isGuideModeActive } from "@/lib/section-app-config";
 import { RecordEditForm } from "@/components/admin/record-edit-form";
 import type { WeldWrapSectionContext } from "@/lib/weld-wrap/section-context";
 import {
@@ -22,6 +28,7 @@ import {
   type WeldWrapStatusFilterKey,
 } from "@/lib/reporting/weld-wrap/report-filters";
 import { Loader2, RefreshCw } from "lucide-react";
+import { WeldGuideKebabMenu } from "@/components/weld-tracking/WeldGuideKebabMenu";
 
 type SectionInfo = { name: string | null } | null;
 
@@ -43,6 +50,7 @@ type WeldRecord = {
   } | null;
   section_id: string | null;
   unified_section_id?: string | null;
+  catalog_section_id?: string | null;
   drainer_sections?: SectionInfo;
 };
 
@@ -175,7 +183,41 @@ function SummaryRow({
   );
 }
 
-export function WeldTrackingTable() {
+function guideRowClass(status: GuideDisplayRow<WeldRecord>["status"]): string {
+  switch (status) {
+    case "done":
+      return "bg-emerald-50";
+    case "laid_ww_pending":
+      return "bg-amber-50";
+    case "not_laid":
+      return "bg-red-50";
+    case "off_guide":
+      return "bg-orange-50";
+    default:
+      return "";
+  }
+}
+
+function guideStatusBadge(status: GuideDisplayRow<WeldRecord>["status"], pendingDetail: GuideDisplayRow<WeldRecord>["pendingDetail"]) {
+  switch (status) {
+    case "done":
+      return <Badge className="bg-emerald-600 text-white text-[10px]">Done</Badge>;
+    case "laid_ww_pending":
+      return (
+        <Badge className="bg-amber-500 text-white text-[10px]">
+          {pendingDetail ? formatWwPendingDetail(pendingDetail) : "W/W pending"}
+        </Badge>
+      );
+    case "not_laid":
+      return <Badge className="bg-red-600 text-white text-[10px]">Not laid</Badge>;
+    case "off_guide":
+      return <Badge className="bg-orange-600 text-white text-[10px]">Off-guide</Badge>;
+    default:
+      return null;
+  }
+}
+
+export function WeldTrackingTable({ isAdmin = false }: { isAdmin?: boolean }) {
   const supabase = getSupabaseBrowser();
   const { pushToast } = useToast();
   const [loading, setLoading] = useState(true);
@@ -260,15 +302,18 @@ export function WeldTrackingTable() {
       setSectionContext(null);
       return;
     }
+    const requestedId = sectionFilter;
     const token = await getAccessToken();
     if (!token) return;
     const res = await fetch(
-      `/api/drainer/weld-tracking/section-context?sectionId=${encodeURIComponent(sectionFilter)}`,
+      `/api/drainer/weld-tracking/section-context?sectionId=${encodeURIComponent(requestedId)}`,
       { headers: { Authorization: `Bearer ${token}` } }
     );
+    if (requestedId !== sectionFilter) return;
     const data = (await res.json().catch(() => ({}))) as {
       context?: WeldWrapSectionContext;
     };
+    if (requestedId !== sectionFilter) return;
     if (res.ok && data.context) {
       setSectionContext(data.context);
     } else {
@@ -277,8 +322,15 @@ export function WeldTrackingTable() {
   }, [sectionFilter, getAccessToken]);
 
   useEffect(() => {
-    loadSectionContext();
-  }, [loadSectionContext, records]);
+    let cancelled = false;
+    void (async () => {
+      if (cancelled) return;
+      await loadSectionContext();
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [loadSectionContext]);
 
   const sections = useMemo(() => {
     const map = new Map<string, string>();
@@ -310,6 +362,28 @@ export function WeldTrackingTable() {
     [records, sectionFilter]
   );
 
+  const guideMode = isGuideModeActive(
+    sectionContext?.guide_enabled,
+    sectionContext?.guide_xml
+  );
+
+  const sectionJointRecords = useMemo(() => {
+    if (!guideMode) return visibleRecords;
+    return visibleRecords.filter((record) =>
+      recordMatchesJointTypes(
+        record.joint_type,
+        sectionContext?.joint_types ?? ["WR", "WB", "Transition"]
+      )
+    );
+  }, [guideMode, visibleRecords, sectionContext?.joint_types]);
+
+  const guideRows = useMemo(() => {
+    if (!guideMode || !sectionContext?.guide_xml) return null;
+    return buildGuideDisplayRows(sectionContext.guide_xml, sectionJointRecords);
+  }, [guideMode, sectionContext?.guide_xml, sectionJointRecords]);
+
+  const tableRecords = guideMode ? sectionJointRecords : visibleRecords;
+
   const {
     wrWeldDone,
     wrWeldPending,
@@ -320,20 +394,20 @@ export function WeldTrackingTable() {
     weldingDoneToday,
     wrappingDoneToday,
   } = useMemo(() => {
-    const wrRecords = visibleRecords.filter((r) => isSimpleWeldJoint(r.joint_type));
-    const wbRecords = visibleRecords.filter((r) => r.joint_type === "WB");
+    const wrRecords = tableRecords.filter((r) => isSimpleWeldJoint(r.joint_type));
+    const wbRecords = tableRecords.filter((r) => r.joint_type === "WB");
     const wrWeldDoneCount = wrRecords.filter((r) => !!r.welded_at).length;
     const wrWeldPendingCount = wrRecords.length - wrWeldDoneCount;
     const wbWeldDoneCount = wbRecords.filter((r) =>
       WB_STEPS.every((step) => !!r.welded_steps?.[step])
     ).length;
     const wbWeldPendingCount = wbRecords.length - wbWeldDoneCount;
-    const wrapDoneCount = visibleRecords.filter((r) => !!r.wrapped_at).length;
-    const wrapPendingCount = visibleRecords.length - wrapDoneCount;
-    const weldingDoneTodayCount = visibleRecords.filter((r) =>
+    const wrapDoneCount = tableRecords.filter((r) => !!r.wrapped_at).length;
+    const wrapPendingCount = tableRecords.length - wrapDoneCount;
+    const weldingDoneTodayCount = tableRecords.filter((r) =>
       isWeldCompletedToday(r)
     ).length;
-    const wrappingDoneTodayCount = visibleRecords.filter((r) =>
+    const wrappingDoneTodayCount = tableRecords.filter((r) =>
       isToday(r.wrapped_at)
     ).length;
     return {
@@ -346,7 +420,17 @@ export function WeldTrackingTable() {
       weldingDoneToday: weldingDoneTodayCount,
       wrappingDoneToday: wrappingDoneTodayCount,
     };
-  }, [visibleRecords]);
+  }, [tableRecords]);
+
+  const guideSummary = useMemo(() => {
+    if (!guideRows) return null;
+    return {
+      done: guideRows.filter((r) => r.status === "done").length,
+      pending: guideRows.filter((r) => r.status === "laid_ww_pending").length,
+      notLaid: guideRows.filter((r) => r.status === "not_laid").length,
+      offGuide: guideRows.filter((r) => r.status === "off_guide").length,
+    };
+  }, [guideRows]);
 
   const onToggle = useCallback(
     async (recordId: string, field: ToggleField) => {
@@ -692,6 +776,16 @@ export function WeldTrackingTable() {
             </Select>
           </div>
         ) : null}
+        <WeldGuideKebabMenu
+          sectionId={sectionFilter}
+          sectionName={sections.find((s) => s.id === sectionFilter)?.name}
+          isAdmin={isAdmin}
+          getAccessToken={getAccessToken}
+          onGuideSaved={() => {
+            void loadSectionContext();
+            void loadRecords();
+          }}
+        />
         <Button
           type="button"
           variant="outline"
@@ -821,6 +915,15 @@ export function WeldTrackingTable() {
             value={wrappingDoneToday}
           />
           <hr className="col-span-full my-0.5 border-0 border-t border-[var(--border)]" />
+          {guideSummary ? (
+            <>
+              <SummaryRow label="Guide — done" formula={<>Matched records with weld + wrap complete</>} value={guideSummary.done} />
+              <SummaryRow label="Guide — W/W pending" formula={<>Matched records missing weld and/or wrap</>} value={guideSummary.pending} />
+              <SummaryRow label="Guide — not laid" formula={<>Guide items without any matching record</>} value={guideSummary.notLaid} />
+              <SummaryRow label="Guide — off-guide" formula={<>Records with no guide item match</>} value={guideSummary.offGuide} />
+              <hr className="col-span-full my-0.5 border-0 border-t border-[var(--border)]" />
+            </>
+          ) : null}
           <SummaryRow
             label="Backfill up to"
             formula={<>MIN(chainage) from PSP records in this section</>}
@@ -834,15 +937,18 @@ export function WeldTrackingTable() {
       </div>
 
       <div className="overflow-x-auto rounded-lg border border-[var(--border)]">
-        <div className={visibleRecords.length > 20 ? "max-h-[720px] overflow-y-auto" : ""}>
+        <div className={tableRecords.length > 20 || (guideRows?.length ?? 0) > 20 ? "max-h-[720px] overflow-y-auto" : ""}>
           <table className="min-w-[600px] w-full text-sm">
             <thead className="bg-[var(--surface-alt)]">
               <tr className="text-left uppercase tracking-wide text-[var(--muted-foreground)]">
-                <th className="w-10 px-2 py-1.5 sm:px-3 sm:py-2 text-xs sm:text-sm">#</th>
+                <th className="w-10 px-2 py-1.5 sm:px-3 sm:py-2 text-xs sm:text-sm">{guideMode ? "Seq" : "#"}</th>
                 <th className="w-16 px-2 py-1.5 sm:px-3 sm:py-2 text-xs sm:text-sm">CH</th>
                 <th className="w-28 px-2 py-1.5 sm:px-3 sm:py-2 text-xs sm:text-sm">
                   Pipe/Fitting ID
                 </th>
+                {guideMode ? (
+                  <th className="w-28 px-2 py-1.5 sm:px-3 sm:py-2 text-xs sm:text-sm">Status</th>
+                ) : null}
                 <th className="w-16 px-2 py-1.5 sm:px-3 sm:py-2 text-xs sm:text-sm">Joint Type</th>
                 <th className="w-24 px-2 py-1.5 sm:px-3 sm:py-2 text-xs sm:text-sm">Welded</th>
                 <th className="w-24 px-2 py-1.5 sm:px-3 sm:py-2 text-xs sm:text-sm">Wrapped</th>
@@ -851,7 +957,84 @@ export function WeldTrackingTable() {
               </tr>
             </thead>
             <tbody>
-            {visibleRecords.length === 0 ? (
+            {guideMode && guideRows ? (
+              guideRows.length === 0 ? (
+                <tr>
+                  <td colSpan={9} className="px-2 py-6 text-center text-xs sm:text-sm text-[var(--muted-foreground)]">
+                    No guide rows.
+                  </td>
+                </tr>
+              ) : (
+                guideRows.map((guideRow, idx) => {
+                  if (guideRow.kind === "not_laid") {
+                    return (
+                      <tr key={`not-laid-${guideRow.sequence_number}-${idx}`} className={`border-t border-[var(--border)] align-top ${guideRowClass(guideRow.status)}`}>
+                        <td className="px-2 py-1.5 sm:px-3 sm:py-2 font-medium">{guideRow.sequence_number}</td>
+                        <td className="px-2 py-1.5 sm:px-3 sm:py-2">—</td>
+                        <td className="max-w-[7rem] truncate px-2 py-1.5 sm:px-3 sm:py-2 font-mono">{guideRow.item_id}</td>
+                        <td className="px-2 py-1.5 sm:px-3 sm:py-2">{guideStatusBadge(guideRow.status, guideRow.pendingDetail)}</td>
+                        <td className="px-2 py-1.5 sm:px-3 sm:py-2">—</td>
+                        <td className="px-2 py-1.5 sm:px-3 sm:py-2">—</td>
+                        <td className="px-2 py-1.5 sm:px-3 sm:py-2">—</td>
+                        <td className="px-2 py-1.5 sm:px-3 sm:py-2">—</td>
+                        <td className="px-2 py-1.5 sm:px-3 sm:py-2" />
+                      </tr>
+                    );
+                  }
+                  const record = guideRow.record!;
+                  const weldedOn = formatDate(record.welded_at);
+                  const wrappedOn = formatDate(record.wrapped_at);
+                  const isWR = record.joint_type === "WR";
+                  const isTransition = record.joint_type === "Transition";
+                  const steps = record.welded_steps ?? {};
+                  return (
+                    <tr key={`${guideRow.kind}-${record.id}-${idx}`} className={`border-t border-[var(--border)] align-top ${guideRowClass(guideRow.status)}`}>
+                      <td className="px-2 py-1.5 sm:px-3 sm:py-2 font-medium">{guideRow.sequence_number ?? record.counter ?? "-"}</td>
+                      <td className="px-2 py-1.5 sm:px-3 sm:py-2">{record.chainage ?? "-"}</td>
+                      <td className="max-w-[7rem] truncate px-2 py-1.5 sm:px-3 sm:py-2">{record.pipe_fitting_id || guideRow.item_id || "-"}</td>
+                      <td className="px-2 py-1.5 sm:px-3 sm:py-2">{guideStatusBadge(guideRow.status, guideRow.pendingDetail)}</td>
+                      <td className="px-2 py-1.5 sm:px-3 sm:py-2">
+                        {isTransition ? (
+                          <Badge variant="secondary" className="bg-purple-100 text-purple-700">TR</Badge>
+                        ) : (
+                          <Badge variant="secondary" className={isWR ? "bg-blue-100 text-blue-700" : "bg-orange-100 text-orange-700"}>
+                            {record.joint_type ?? "-"}
+                          </Badge>
+                        )}
+                      </td>
+                      <td className="px-2 py-1.5 sm:px-3 sm:py-2">
+                        {record.joint_type === "WB" ? (
+                          <div className="grid grid-cols-2 gap-1">
+                            {WB_STEPS.map((step, index) => (
+                              <button key={step} type="button" onClick={() => onToggleWbStep(record.id, step)} className={`h-6 w-10 rounded border text-[10px] font-semibold ${steps[step] ? "border-emerald-600 bg-emerald-600 text-white" : "border-[var(--border)] bg-transparent text-[var(--muted-foreground)]"}`}>
+                                {index < 2 ? `E${index + 1}` : `I${index - 1}`}
+                              </button>
+                            ))}
+                          </div>
+                        ) : (
+                          <button type="button" onClick={() => onToggle(record.id, "welded_at")} className={`h-6 w-6 rounded border text-xs font-bold ${record.welded_at ? "border-emerald-600 bg-emerald-600 text-white" : "border-[var(--border)] bg-transparent text-[var(--muted-foreground)]"}`}>
+                            {record.welded_at ? "✓" : ""}
+                          </button>
+                        )}
+                        {weldedOn ? <p className="mt-1 text-xs text-[var(--muted-foreground)]">{weldedOn}</p> : null}
+                      </td>
+                      <td className="px-2 py-1.5 sm:px-3 sm:py-2">
+                        <button type="button" onClick={() => onToggle(record.id, "wrapped_at")} className={`h-6 w-6 rounded border text-xs font-bold ${record.wrapped_at ? "border-emerald-600 bg-emerald-600 text-white" : "border-[var(--border)] bg-transparent text-[var(--muted-foreground)]"}`}>
+                          {record.wrapped_at ? "✓" : ""}
+                        </button>
+                        {wrappedOn ? <p className="mt-1 text-xs text-[var(--muted-foreground)]">{wrappedOn}</p> : null}
+                      </td>
+                      <td className="px-2 py-1.5 sm:px-3 sm:py-2">
+                        <textarea rows={1} value={commentDrafts[record.id] ?? ""} onChange={(e) => setCommentDrafts((prev) => ({ ...prev, [record.id]: e.target.value }))} onBlur={() => onSaveComments(record.id, commentDrafts[record.id] ?? "")} className="w-full min-w-[8rem] resize-y rounded border border-[var(--border)] bg-white px-2 py-1 text-xs sm:text-sm" placeholder="Add comment…" />
+                      </td>
+                      <td className="px-2 py-1.5 sm:px-3 sm:py-2">
+                        <Button type="button" variant="outline" size="sm" className="min-h-[32px] px-2 text-xs sm:px-3" onClick={() => setEditingRecordId(record.id)}>Edit record</Button>
+                      </td>
+                    </tr>
+                  );
+                })
+              )
+            ) : tableRecords.length === 0 ? (
               <tr>
                 <td
                   colSpan={8}
@@ -861,7 +1044,7 @@ export function WeldTrackingTable() {
                 </td>
               </tr>
             ) : (
-              visibleRecords.map((record) => {
+              tableRecords.map((record) => {
                 const weldedOn = formatDate(record.welded_at);
                 const wrappedOn = formatDate(record.wrapped_at);
                 const isWR = record.joint_type === "WR";

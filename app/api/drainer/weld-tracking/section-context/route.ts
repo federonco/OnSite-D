@@ -3,7 +3,8 @@ import { getUserFromRequest } from "@/lib/api-auth";
 import { isAdmin } from "@/lib/admin";
 import { getSupabaseServer } from "@/lib/supabase/server";
 import { getAdminCrewIds } from "@/lib/admin-crew";
-import { fetchSectionById } from "@/lib/section-catalog";
+import { fetchSectionById, fetchUnifiedSectionByCatalogId } from "@/lib/section-catalog";
+import { guideConfigFromAppConfig, guideModeContextFields } from "@/lib/section-app-config";
 import {
   computeBackfillUpTo,
   fetchPspBackfillRecordsForDrainerSection,
@@ -28,7 +29,11 @@ export async function GET(request: NextRequest) {
 
   const supabase = getSupabaseServer({ accessToken: token });
   const crewIds = await getAdminCrewIds(supabase);
-  const section = await fetchSectionById(supabase, sectionId, { crewIds });
+  const unifiedSection = await fetchUnifiedSectionByCatalogId(supabase, sectionId, {
+    crewIds,
+  });
+  const section =
+    unifiedSection ?? (await fetchSectionById(supabase, sectionId, { crewIds }));
   if (!section) {
     return NextResponse.json({ error: "Section not found" }, { status: 404 });
   }
@@ -74,6 +79,8 @@ export async function GET(request: NextRequest) {
     })
     .filter((cp): cp is NonNullable<typeof cp> => cp != null);
 
+  const guideCfg = guideConfigFromAppConfig(unifiedSection?.app_config ?? null);
+
   const context: WeldWrapSectionContext = {
     startCh,
     endCh,
@@ -86,6 +93,7 @@ export async function GET(request: NextRequest) {
       backfillUpTo,
       direction
     ),
+    ...guideModeContextFields(guideCfg),
   };
 
   return NextResponse.json({ context });

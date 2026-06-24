@@ -8,12 +8,17 @@ export type CheckpointPin = {  id: string;
   passed: boolean;
 };
 
+import type { GuideItem } from "@/lib/installation-guide-xml";
+
 export type WeldWrapSectionContext = {
   startCh: number | null;
   endCh: number | null;
   direction: string | null;
   backfillUpTo: number | null;
   checkpoints: CheckpointPin[];
+  guide_enabled?: boolean;
+  guide_xml?: GuideItem[] | null;
+  joint_types?: string[] | null;
 };
 
 export function isBackwardsDirection(direction: string | null | undefined): boolean {
