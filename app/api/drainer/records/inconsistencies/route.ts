@@ -14,12 +14,14 @@ export type RecordInconsistencyItem = {
   ch_from: number;
   ch_to: number;
   diff: number;
-  type: "gap" | "overlap";
+  type: "gap" | "overlap" | "doubleup";
   record_from_id: string;
   record_to_id: string;
   record_from_counter: number | null;
   record_from_fitting_id: string;
   record_to_fitting_id: string;
+  from_joint_type: string | null;
+  to_joint_type: string | null;
   inferred_type_from: "pipe" | "fitting";
   inferred_type_to: "pipe" | "fitting";
 };
@@ -92,7 +94,7 @@ async function getSectionInconsistencies(
 
   let recordsQuery = supabase
     .from("drainer_pipe_records")
-    .select("id,chainage,pipe_fitting_id,counter")
+    .select("id,chainage,pipe_fitting_id,counter,joint_type")
     .or(pipeRecordsSectionOrFilter(sectionId))
     .order("chainage", { ascending: !isBackwards });
   if (subsectionId) {
@@ -118,6 +120,7 @@ async function getSectionInconsistencies(
     chainage: Number(r.chainage),
     pipe_fitting_id: r.pipe_fitting_id ?? "",
     counter: r.counter ?? null,
+    joint_type: typeof r.joint_type === "string" && r.joint_type.trim() ? r.joint_type.trim() : null,
   }));
 
   const inconsistencies: RecordInconsistencyItem[] = [];
@@ -127,48 +130,45 @@ async function getSectionInconsistencies(
     const b = ordered[i + 1];
     const diff = Math.abs(b.chainage - a.chainage);
 
-    if (diff > criteria.gap_threshold_m) {
-      inconsistencies.push({
-        ch_from: a.chainage,
-        ch_to: b.chainage,
-        diff,
-        type: "gap",
-        record_from_id: a.id,
-        record_to_id: b.id,
-        record_from_counter: a.counter,
-        record_from_fitting_id: a.pipe_fitting_id,
-        record_to_fitting_id: b.pipe_fitting_id,
-        inferred_type_from: pipeRegex.test((a.pipe_fitting_id ?? "").trim()) ? "pipe" : "fitting",
-        inferred_type_to: pipeRegex.test((b.pipe_fitting_id ?? "").trim()) ? "pipe" : "fitting",
-      });
+    let type: RecordInconsistencyItem["type"] | null = null;
+    if (diff < criteria.doubleup_threshold_m) {
+      type = "doubleup";
     } else if (diff < criteria.overlap_threshold_m) {
-      inconsistencies.push({
-        ch_from: a.chainage,
-        ch_to: b.chainage,
-        diff,
-        type: "overlap",
-        record_from_id: a.id,
-        record_to_id: b.id,
-        record_from_counter: a.counter,
-        record_from_fitting_id: a.pipe_fitting_id,
-        record_to_fitting_id: b.pipe_fitting_id,
-        inferred_type_from: pipeRegex.test((a.pipe_fitting_id ?? "").trim()) ? "pipe" : "fitting",
-        inferred_type_to: pipeRegex.test((b.pipe_fitting_id ?? "").trim()) ? "pipe" : "fitting",
-      });
+      type = "overlap";
+    } else if (diff > criteria.gap_threshold_m) {
+      type = "gap";
     }
+
+    if (!type) continue;
+
+    inconsistencies.push({
+      ch_from: a.chainage,
+      ch_to: b.chainage,
+      diff,
+      type,
+      record_from_id: a.id,
+      record_to_id: b.id,
+      record_from_counter: a.counter,
+      record_from_fitting_id: a.pipe_fitting_id,
+      record_to_fitting_id: b.pipe_fitting_id,
+      from_joint_type: a.joint_type,
+      to_joint_type: b.joint_type,
+      inferred_type_from: pipeRegex.test((a.pipe_fitting_id ?? "").trim()) ? "pipe" : "fitting",
+      inferred_type_to: pipeRegex.test((b.pipe_fitting_id ?? "").trim()) ? "pipe" : "fitting",
+    });
   }
 
   const { data: validated } = await supabase
     .from("drainer_validated_inconsistencies")
-    .select("record_from_id, record_to_id")
+    .select("record_from_id, record_to_id, issue_type")
     .eq("section_id", sectionId);
 
   const validatedKeys = new Set(
-    (validated ?? []).map((v) => `${v.record_from_id}:${v.record_to_id}`)
+    (validated ?? []).map((v) => `${v.record_from_id}:${v.record_to_id}:${v.issue_type}`)
   );
 
   const filtered = inconsistencies.filter(
-    (inc) => !validatedKeys.has(`${inc.record_from_id}:${inc.record_to_id}`)
+    (inc) => !validatedKeys.has(`${inc.record_from_id}:${inc.record_to_id}:${inc.type}`)
   );
 
   return {

@@ -3,6 +3,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 export interface AnalysisCriteria {
   gap_threshold_m: number;
   overlap_threshold_m: number;
+  doubleup_threshold_m: number;
   pipe_id_pattern: string;
   near_tolerance_v_warn: number;
   near_tolerance_v_alert: number;
@@ -16,6 +17,7 @@ export interface AnalysisCriteria {
 export const DEFAULT_CRITERIA: AnalysisCriteria = {
   gap_threshold_m: 13,
   overlap_threshold_m: 12,
+  doubleup_threshold_m: 1.0,
   pipe_id_pattern: "^\\d+-\\d+$",
   near_tolerance_v_warn: 40,
   near_tolerance_v_alert: 45,
@@ -37,6 +39,11 @@ export function mergeCriteria(input?: Partial<AnalysisCriteria> | null): Analysi
   return {
     gap_threshold_m: toNumberOrDefault(src.gap_threshold_m, DEFAULT_CRITERIA.gap_threshold_m, 0),
     overlap_threshold_m: toNumberOrDefault(src.overlap_threshold_m, DEFAULT_CRITERIA.overlap_threshold_m, 0),
+    doubleup_threshold_m: toNumberOrDefault(
+      src.doubleup_threshold_m,
+      DEFAULT_CRITERIA.doubleup_threshold_m,
+      0
+    ),
     pipe_id_pattern:
       typeof src.pipe_id_pattern === "string" && src.pipe_id_pattern.trim()
         ? src.pipe_id_pattern

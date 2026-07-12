@@ -476,12 +476,6 @@ export default function AdminPage() {
               Weld &amp; Wrap
             </button>
             <Link
-              href="/admin/checkpoints"
-              className="text-sm font-medium px-4 py-3 min-h-[44px] flex items-center gap-2 rounded-md text-[var(--muted-foreground)] hover:bg-[var(--surface-alt)]"
-            >
-              Checkpoints
-            </Link>
-            <Link
               href="/admin/notifications"
               className="text-sm font-medium px-4 py-3 min-h-[44px] flex items-center gap-2 rounded-md text-[var(--muted-foreground)] hover:bg-[var(--surface-alt)]"
             >

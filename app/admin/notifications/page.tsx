@@ -9,7 +9,6 @@ import { AdminNav } from "@/components/admin-nav";
 import { RecordEditForm } from "@/components/admin/record-edit-form";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import {
   Dialog,
   DialogContent,
@@ -57,12 +56,14 @@ type InconsistencyItem = {
   ch_from: number;
   ch_to: number;
   diff: number;
-  type: "gap" | "overlap";
+  type: "gap" | "overlap" | "doubleup";
   record_from_id: string;
   record_to_id: string;
   record_from_counter: number | null;
   record_from_fitting_id: string;
   record_to_fitting_id: string;
+  from_joint_type: string | null;
+  to_joint_type: string | null;
   inferred_type_from: "pipe" | "fitting";
   inferred_type_to: "pipe" | "fitting";
 };
@@ -75,72 +76,35 @@ type SectionInconsistencies = {
   inconsistencies: InconsistencyItem[];
 };
 
-type DuplicateGroup = {
-  pipe_fitting_id: string;
-  count: number;
-  records: { id: string; counter: number | null; chainage: number; date_installed: string | null }[];
-};
-type DuplicatesSection = { section_id: string; section_name?: string; duplicates: DuplicateGroup[] };
-
-type NearToleranceRecord = {
-  id: string;
-  counter: number | null;
-  chainage: number;
-  pipe_fitting_id: string | null;
-  deflection_v_sign: string | null;
-  deflection_v_mm: number | null;
-  deflection_h_side: string | null;
-  deflection_h_mm: number | null;
-  level: "warning" | "critical";
-};
-type NearToleranceSection = { section_id: string; section_name?: string; records: NearToleranceRecord[] };
-
-type DeflectionTrendRecord = {
-  counter: number | null;
-  chainage: number;
-  date_installed?: string | null;
-  deflection_v_sign?: string | null;
-  deflection_v_mm?: number | null;
-  deflection_h_side?: string | null;
-  deflection_h_mm?: number | null;
-};
-type DeflectionTrendEntry = {
-  type: "vertical" | "horizontal";
-  direction: string;
-  records: DeflectionTrendRecord[];
-  avg_mm: number;
-  first_record_id?: string;
-  first_record_counter?: number | null;
-};
-type DeflectionTrendSection = { section_id: string; section_name?: string; trends: DeflectionTrendEntry[] };
-
-type FittingRecord = {
-  id: string;
-  counter: number | null;
-  chainage: number;
-  pipe_fitting_id: string | null;
-  date_installed: string | null;
-};
-type FittingsSection = {
-  section_id: string;
-  section_name?: string;
-  records: FittingRecord[];
-  guide_validation?: {
-    guide_enabled: boolean;
-    matched_valid: Array<{
-      record_id: string;
-      item_id: string;
-      sequence_number: number;
-      pipe_fitting_id: string | null;
-      chainage: number;
-      counter: number | null;
-    }>;
-    off_guide: FittingRecord[];
-    not_laid: Array<{ sequence_number: number; item_id: string }>;
-  };
-  not_laid?: Array<{ sequence_number: number; item_id: string }>;
-};
 type FilterSection = { id: string; name: string };
+
+function formatJointType(value: string | null | undefined) {
+  return value?.trim() || "—";
+}
+
+function issueHint(type: InconsistencyItem["type"]) {
+  if (type === "gap") return "Possible missing record between these chainages.";
+  if (type === "doubleup") return "Records are within 1 m — likely a double-up / duplicate lodging.";
+  return "Possible duplicate or incorrect chainage entry.";
+}
+
+function issueBadge(type: InconsistencyItem["type"]) {
+  if (type === "gap") {
+    return <span className="drainer-badge-gap drainer-badge-gap-lg">Gap</span>;
+  }
+  if (type === "doubleup") {
+    return <span className="drainer-badge-gap drainer-badge-gap-lg">Doubleup</span>;
+  }
+  return <span className="drainer-badge-open drainer-badge-open-lg">Overlap</span>;
+}
+
+function issueDiffBadge(type: InconsistencyItem["type"], diff: number) {
+  const text = `${diff.toLocaleString("en-AU", { minimumFractionDigits: 1 })}m`;
+  if (type === "overlap") {
+    return <span className="drainer-badge-open">{text}</span>;
+  }
+  return <span className="drainer-badge-gap">{text}</span>;
+}
 
 export default function NotificationsPage() {
   const supabase = getSupabaseBrowser();
@@ -149,20 +113,6 @@ export default function NotificationsPage() {
   const [isAdmin, setIsAdmin] = useState<boolean | null>(null);
   const [sectionData, setSectionData] = useState<SectionInconsistencies[]>([]);
   const [inconsistenciesLoading, setInconsistenciesLoading] = useState(true);
-  const [duplicatesData, setDuplicatesData] = useState<DuplicatesSection[]>([]);
-  const [duplicatesLoading, setDuplicatesLoading] = useState(false);
-  const [nearToleranceData, setNearToleranceData] = useState<NearToleranceSection[]>([]);
-  const [nearToleranceLoading, setNearToleranceLoading] = useState(false);
-  const [deflectionTrendData, setDeflectionTrendData] = useState<DeflectionTrendSection[]>([]);
-  const [deflectionTrendLoading, setDeflectionTrendLoading] = useState(false);
-  const [fittingsData, setFittingsData] = useState<FittingsSection[]>([]);
-  const [fittingsLoading, setFittingsLoading] = useState(false);
-  const [fittingsOpen, setFittingsOpen] = useState(false);
-  const [dupOpen, setDupOpen] = useState(false);
-  const [nearOpen, setNearOpen] = useState(false);
-  const [trendOpen, setTrendOpen] = useState(false);
-  const [validateFittingConfirm, setValidateFittingConfirm] = useState<{ sec: FittingsSection; r: FittingRecord } | null>(null);
-  const [validatingFittingKey, setValidatingFittingKey] = useState<string | null>(null);
   const [editRecordId, setEditRecordId] = useState<string | null>(null);
   const [editOpen, setEditOpen] = useState(false);
   const [editContextualNote, setEditContextualNote] = useState<string | null>(null);
@@ -180,11 +130,6 @@ export default function NotificationsPage() {
     sec: SectionInconsistencies;
     inc: InconsistencyItem;
   } | null>(null);
-  const [validateNearConfirm, setValidateNearConfirm] = useState<{
-    sec: NearToleranceSection;
-    r: NearToleranceRecord;
-  } | null>(null);
-  const [validatingNearKey, setValidatingNearKey] = useState<string | null>(null);
   const [filterSections, setFilterSections] = useState<FilterSection[]>([]);
   const [selectedSectionId, setSelectedSectionId] = useState<string>("all");
   const [criteria, setCriteria] = useState<AnalysisCriteria>(DEFAULT_CRITERIA);
@@ -192,10 +137,7 @@ export default function NotificationsPage() {
   const [criteriaLoading, setCriteriaLoading] = useState(false);
   const [criteriaSaving, setCriteriaSaving] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
-  const [jointTypes, setJointTypes] = useState<string[]>([]);
-  const [savedJointTypes, setSavedJointTypes] = useState<string[]>([]);
-  const [jointTypesLoading, setJointTypesLoading] = useState(false);
-  const [jointTypesSaving, setJointTypesSaving] = useState(false);
+
   const getAccessToken = useCallback(async () => {
     const { data } = await supabase.auth.getSession();
     return data.session?.access_token ?? null;
@@ -223,135 +165,19 @@ export default function NotificationsPage() {
       if (data.sections) setSectionData(data.sections);
       else if (data.section_id) setSectionData([data]);
       else setSectionData([]);
-      console.log("[data-analysis] ✓ inconsistencies done");
     } finally {
       setInconsistenciesLoading(false);
     }
   }, [getAccessToken, buildFilterQuery]);
 
-  const loadDuplicates = useCallback(async () => {
-    const token = await getAccessToken();
-    setDuplicatesLoading(true);
-    try {
-      const url = `/api/drainer/records/duplicates${buildFilterQuery()}`;
-      const data = await fetchWithTimeout(url, token ? { Authorization: `Bearer ${token}` } : undefined);
-      if (!data) {
-        setDuplicatesData([]);
-        setDupOpen(false);
-        return;
-      }
-      const sections: DuplicatesSection[] = data.sections ?? (data.duplicates ? [{ section_id: data.section_id ?? "", section_name: data.section_name, duplicates: data.duplicates }] : []);
-      setDuplicatesData(sections);
-      const total = sections.reduce((s, sec) => s + (sec.duplicates?.length ?? 0), 0);
-      setDupOpen(total > 0);
-      console.log("[data-analysis] ✓ duplicates done");
-    } finally {
-      setDuplicatesLoading(false);
-    }
-  }, [getAccessToken, buildFilterQuery]);
-
-  const loadNearTolerance = useCallback(async () => {
-    const token = await getAccessToken();
-    setNearToleranceLoading(true);
-    try {
-      const url = `/api/drainer/records/near-tolerance${buildFilterQuery()}`;
-      const data = await fetchWithTimeout(url, token ? { Authorization: `Bearer ${token}` } : undefined);
-      if (!data) {
-        setNearToleranceData([]);
-        setNearOpen(false);
-        return;
-      }
-      const sections: NearToleranceSection[] = data.sections ?? (data.records ? [{ section_id: data.section_id ?? "", section_name: data.section_name, records: data.records }] : []);
-      setNearToleranceData(sections);
-      const total = sections.reduce((s, sec) => s + (sec.records?.length ?? 0), 0);
-      setNearOpen(total > 0);
-      console.log("[data-analysis] ✓ near-tolerance done");
-    } finally {
-      setNearToleranceLoading(false);
-    }
-  }, [getAccessToken, buildFilterQuery]);
-
-  const loadFittings = useCallback(async () => {
-    const token = await getAccessToken();
-    setFittingsLoading(true);
-    try {
-      const url = `/api/drainer/records/fittings${buildFilterQuery()}`;
-      const data = await fetchWithTimeout(url, token ? { Authorization: `Bearer ${token}` } : undefined);
-      if (!data) {
-        setFittingsData([]);
-        setFittingsOpen(false);
-        return;
-      }
-      const sections: FittingsSection[] =
-        data.sections ??
-        (data.records
-          ? [
-              {
-                section_id: data.section_id ?? "",
-                section_name: data.section_name,
-                records: data.records,
-                guide_validation: data.guide_validation,
-                not_laid: data.not_laid,
-              },
-            ]
-          : []);
-      setFittingsData(sections);
-      const total = sections.reduce((s, sec) => {
-        const off = sec.records?.length ?? 0;
-        const gaps = sec.not_laid?.length ?? sec.guide_validation?.not_laid.length ?? 0;
-        return s + off + gaps;
-      }, 0);
-      setFittingsOpen(total > 0);
-      console.log("[data-analysis] ✓ fittings done");
-    } finally {
-      setFittingsLoading(false);
-    }
-  }, [getAccessToken, buildFilterQuery]);
-
-  const loadDeflectionTrend = useCallback(async () => {
-    const token = await getAccessToken();
-    setDeflectionTrendLoading(true);
-    try {
-      const url = `/api/drainer/records/deflection-trend${buildFilterQuery()}`;
-      const data = await fetchWithTimeout(url, token ? { Authorization: `Bearer ${token}` } : undefined);
-      if (!data) {
-        setDeflectionTrendData([]);
-        setTrendOpen(false);
-        return;
-      }
-      const sections: DeflectionTrendSection[] = data.sections ?? (data.trends ? [{ section_id: data.section_id ?? "", section_name: data.section_name, trends: data.trends }] : []);
-      setDeflectionTrendData(sections);
-      const total = sections.reduce((s, sec) => s + (sec.trends?.length ?? 0), 0);
-      setTrendOpen(total > 0);
-      console.log("[data-analysis] ✓ deflection-trend done");
-    } finally {
-      setDeflectionTrendLoading(false);
-    }
-  }, [getAccessToken, buildFilterQuery]);
-
   const loadAllValidation = useCallback(
     async (showToast = false) => {
-      console.log("[data-analysis] starting fetch for section:", selectedSectionId);
-      await Promise.all([
-        loadInconsistencies(),
-        loadFittings(),
-        loadDuplicates(),
-        loadNearTolerance(),
-        loadDeflectionTrend(),
-      ]);
+      await loadInconsistencies();
       if (showToast) {
         pushToast({ type: "success", title: "Data refreshed" });
       }
     },
-    [
-      loadInconsistencies,
-      loadFittings,
-      loadDuplicates,
-      loadNearTolerance,
-      loadDeflectionTrend,
-      pushToast,
-      selectedSectionId,
-    ]
+    [loadInconsistencies, pushToast]
   );
 
   const loadFilterOptions = useCallback(async () => {
@@ -398,73 +224,6 @@ export default function NotificationsPage() {
   const hasUnsavedCriteria =
     selectedSectionId !== "all" && JSON.stringify(criteria) !== JSON.stringify(savedCriteria);
 
-  const hasUnsavedJointTypes =
-    selectedSectionId !== "all" &&
-    JSON.stringify(jointTypes) !== JSON.stringify(savedJointTypes);
-
-  const loadJointTypes = useCallback(async () => {
-    if (selectedSectionId === "all") return;
-    const token = await getAccessToken();
-    if (!token) return;
-    setJointTypesLoading(true);
-    try {
-      const res = await fetch(`/api/drainer/sections/${selectedSectionId}/joint-types`, {
-        cache: "no-store",
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      const data = (await res.json().catch(() => ({}))) as {
-        joint_types?: string[];
-        error?: string;
-      };
-      if (!res.ok) throw new Error(data.error ?? "Failed to load joint types");
-      const next = Array.isArray(data.joint_types) ? data.joint_types : [];
-      setJointTypes(next);
-      setSavedJointTypes(next);
-    } catch (err) {
-      pushToast({
-        type: "error",
-        title: "Could not load joint types",
-        message: err instanceof Error ? err.message : "Unknown error",
-      });
-    } finally {
-      setJointTypesLoading(false);
-    }
-  }, [getAccessToken, pushToast, selectedSectionId]);
-
-  const handleSaveJointTypes = useCallback(async () => {
-    if (selectedSectionId === "all") return;
-    setJointTypesSaving(true);
-    try {
-      const token = await getAccessToken();
-      if (!token) throw new Error("Sign in required");
-      const res = await fetch(`/api/drainer/sections/${selectedSectionId}/joint-types`, {
-        method: "PATCH",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({ joint_types: jointTypes }),
-      });
-      const data = (await res.json().catch(() => ({}))) as {
-        joint_types?: string[];
-        error?: string;
-      };
-      if (!res.ok) throw new Error(data.error ?? "Save failed");
-      const saved = data.joint_types ?? jointTypes;
-      setJointTypes(saved);
-      setSavedJointTypes(saved);
-      pushToast({ type: "success", title: "Joint types saved" });
-    } catch (err) {
-      pushToast({
-        type: "error",
-        title: "Save failed",
-        message: err instanceof Error ? err.message : "Unknown error",
-      });
-    } finally {
-      setJointTypesSaving(false);
-    }
-  }, [getAccessToken, jointTypes, pushToast, selectedSectionId]);
-
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => {
       setAuthEmail(data.session?.user.email ?? null);
@@ -485,7 +244,7 @@ export default function NotificationsPage() {
       }
     };
     check();
-  }, [authEmail, getAccessToken, loadFilterOptions, loadAllValidation]);
+  }, [authEmail, getAccessToken, loadFilterOptions]);
 
   useEffect(() => {
     if (!authEmail || !isAdmin) return;
@@ -496,11 +255,6 @@ export default function NotificationsPage() {
     if (!authEmail || !isAdmin) return;
     const safety = setTimeout(() => {
       setInconsistenciesLoading(false);
-      setDuplicatesLoading(false);
-      setFittingsLoading(false);
-      setNearToleranceLoading(false);
-      setDeflectionTrendLoading(false);
-      console.warn("[data-analysis] safety timeout triggered — some fetch hung");
     }, 10000);
     return () => clearTimeout(safety);
   }, [authEmail, isAdmin, selectedSectionId]);
@@ -508,8 +262,7 @@ export default function NotificationsPage() {
   useEffect(() => {
     if (!authEmail || !isAdmin || selectedSectionId === "all") return;
     void loadCriteria();
-    void loadJointTypes();
-  }, [authEmail, isAdmin, selectedSectionId, loadCriteria, loadJointTypes]);
+  }, [authEmail, isAdmin, selectedSectionId, loadCriteria]);
 
   useEffect(() => {
     if (selectedSectionId === "all") {
@@ -521,27 +274,15 @@ export default function NotificationsPage() {
   const openViewRecord = (inc: InconsistencyItem) => {
     const note =
       inc.type === "gap"
-        ? `Possible missing record between CH ${inc.ch_from.toLocaleString("en-AU", { minimumFractionDigits: 2 })} and CH ${inc.ch_to.toLocaleString("en-AU", { minimumFractionDigits: 2 })}. A fitting or pipe may not have been lodged.`
-        : `Possible duplicate or incorrect chainage entry near CH ${inc.ch_from.toLocaleString("en-AU", { minimumFractionDigits: 2 })}.`;
+        ? `Possible missing record between CH ${inc.ch_from.toLocaleString("en-AU", { minimumFractionDigits: 2 })} and CH ${inc.ch_to.toLocaleString("en-AU", { minimumFractionDigits: 2 })}.`
+        : inc.type === "doubleup"
+          ? `Likely double-up near CH ${inc.ch_from.toLocaleString("en-AU", { minimumFractionDigits: 2 })} (Δ ${inc.diff.toLocaleString("en-AU", { minimumFractionDigits: 2 })} m).`
+          : `Possible duplicate or incorrect chainage entry near CH ${inc.ch_from.toLocaleString("en-AU", { minimumFractionDigits: 2 })}.`;
     setEditContextualNote(note);
     setEditContextChFrom(inc.ch_from);
     setEditContextChTo(inc.ch_to);
     setEditContextRecordToId(inc.record_to_id);
     setEditRecordId(inc.record_from_id);
-    setEditOpen(true);
-  };
-
-  const openViewRecordById = (
-    recordId: string,
-    note?: string | null,
-    chFrom?: number | null,
-    chTo?: number | null
-  ) => {
-    setEditContextualNote(note ?? null);
-    setEditContextChFrom(chFrom ?? null);
-    setEditContextChTo(chTo ?? null);
-    setEditContextRecordToId(null);
-    setEditRecordId(recordId);
     setEditOpen(true);
   };
 
@@ -557,7 +298,7 @@ export default function NotificationsPage() {
     sec: SectionInconsistencies,
     inc: InconsistencyItem
   ) => {
-    const key = `${sec.section_id}:${inc.record_from_id}:${inc.record_to_id}`;
+    const key = `${sec.section_id}:${inc.record_from_id}:${inc.record_to_id}:${inc.type}`;
     setValidatingKey(key);
     const ac = new AbortController();
     const timeout = setTimeout(() => ac.abort(), 15000);
@@ -594,79 +335,6 @@ export default function NotificationsPage() {
     } finally {
       clearTimeout(timeout);
       setValidatingKey(null);
-    }
-  };
-
-  const handleValidateFitting = async (sec: FittingsSection, r: FittingRecord) => {
-    setValidatingFittingKey(r.id);
-    const ac = new AbortController();
-    const timeout = setTimeout(() => ac.abort(), 15000);
-    try {
-      const token = await getAccessToken();
-      if (!token) throw new Error("Sign in required");
-      const res = await fetch("/api/drainer/records/fittings/validate", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({ record_id: r.id }),
-        signal: ac.signal,
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error ?? "Validation failed");
-      pushToast({ type: "success", title: "Fitting validated" });
-      setValidateFittingConfirm(null);
-      loadFittings();
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : "Unknown error";
-      const isAbort = err instanceof Error && err.name === "AbortError";
-      pushToast({
-        type: "error",
-        title: "Validation failed",
-        message: isAbort ? "Request timed out. Please try again." : msg,
-      });
-    } finally {
-      clearTimeout(timeout);
-      setValidatingFittingKey(null);
-    }
-  };
-
-  const handleValidateNearTolerance = async (
-    sec: NearToleranceSection,
-    r: NearToleranceRecord
-  ) => {
-    setValidatingNearKey(r.id);
-    const ac = new AbortController();
-    const timeout = setTimeout(() => ac.abort(), 15000);
-    try {
-      const token = await getAccessToken();
-      if (!token) throw new Error("Sign in required");
-      const res = await fetch("/api/drainer/records/near-tolerance/validate", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({ record_id: r.id }),
-        signal: ac.signal,
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error ?? "Validation failed");
-      pushToast({ type: "success", title: "Near-tolerance validated" });
-      setValidateNearConfirm(null);
-      loadNearTolerance();
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : "Unknown error";
-      const isAbort = err instanceof Error && err.name === "AbortError";
-      pushToast({
-        type: "error",
-        title: "Validation failed",
-        message: isAbort ? "Request timed out. Please try again." : msg,
-      });
-    } finally {
-      clearTimeout(timeout);
-      setValidatingNearKey(null);
     }
   };
 
@@ -731,6 +399,7 @@ export default function NotificationsPage() {
     sec.inconsistencies.map((inc) => ({ inc, sec }))
   );
   const hasInconsistencies = allInconsistencies.length > 0;
+
   if (authEmail === null || isAdmin === null) {
     return (
       <div className="drainer-page">
@@ -778,10 +447,7 @@ export default function NotificationsPage() {
               <div className="space-y-3 w-full">
                 <div className="drainer-title">Data validation</div>
                 <div className="grid grid-cols-1 md:grid-cols-1 gap-2 max-w-sm">
-                  <Select
-                    value={selectedSectionId}
-                    onValueChange={setSelectedSectionId}
-                  >
+                  <Select value={selectedSectionId} onValueChange={setSelectedSectionId}>
                     <SelectTrigger className="drainer-input">
                       <SelectValue placeholder="Section" />
                     </SelectTrigger>
@@ -801,10 +467,10 @@ export default function NotificationsPage() {
                 size="sm"
                 className="min-h-[44px] min-w-[44px] shrink-0 rounded-full bg-[var(--card-bg)] border-0 hover:bg-[var(--surface)]"
                 onClick={() => void loadAllValidation(true)}
-                disabled={inconsistenciesLoading || duplicatesLoading || nearToleranceLoading || deflectionTrendLoading || fittingsLoading}
+                disabled={inconsistenciesLoading}
                 title="Refresh"
               >
-                {inconsistenciesLoading || duplicatesLoading || nearToleranceLoading || deflectionTrendLoading || fittingsLoading ? (
+                {inconsistenciesLoading ? (
                   <RefreshCw className="size-4 animate-spin" />
                 ) : (
                   <RefreshCw className="size-4" />
@@ -831,545 +497,154 @@ export default function NotificationsPage() {
               )}
             </div>
             <div className="mt-4">
-            {selectedSectionId !== "all" && settingsOpen && (
-              <div className="mb-4 rounded-xl border border-[var(--border)] bg-white p-4 shadow-sm">
-                <div className="mb-3 flex items-center justify-between gap-2">
-                  <span className="text-sm font-semibold text-[var(--ink)]">Analysis Settings</span>
-                  {hasUnsavedCriteria ? (
-                    <span className="text-xs font-medium text-amber-700">Unsaved changes</span>
-                  ) : (
-                    <span className="text-xs text-[var(--muted-foreground)]">Saved</span>
-                  )}
-                </div>
-                <div className="space-y-4">
-                  {criteriaLoading ? (
-                    <p className="text-sm text-[var(--muted-foreground)]">Loading settings…</p>
-                  ) : (
-                    <>
-                      <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-                        <label className="text-xs text-[var(--muted-foreground)]">
-                          Gap threshold (m)
-                          <Input
-                            type="number"
-                            className="drainer-input mt-1"
-                            value={criteria.gap_threshold_m}
-                            onChange={(e) =>
-                              setCriteria((c) => ({ ...c, gap_threshold_m: Number(e.target.value) || 0 }))
-                            }
-                          />
-                        </label>
-                        <label className="text-xs text-[var(--muted-foreground)]">
-                          Overlap threshold (m)
-                          <Input
-                            type="number"
-                            className="drainer-input mt-1"
-                            value={criteria.overlap_threshold_m}
-                            onChange={(e) =>
-                              setCriteria((c) => ({ ...c, overlap_threshold_m: Number(e.target.value) || 0 }))
-                            }
-                          />
-                        </label>
-                        <label className="text-xs text-[var(--muted-foreground)] md:col-span-2">
-                          Pipe ID format (pattern)
-                          <Input
-                            className="drainer-input mt-1"
-                            value={criteria.pipe_id_pattern}
-                            onChange={(e) => setCriteria((c) => ({ ...c, pipe_id_pattern: e.target.value }))}
-                            placeholder="Example: 1234-5"
-                          />
-                          <span className="mt-1 block text-[11px] text-[var(--muted-foreground)]">
-                            Use simple formats like: 1234-5, 12345-678, 000536-000096.
-                            Any ID outside this format is treated as a fitting.
-                          </span>
-                        </label>
-                        <label className="text-xs text-[var(--muted-foreground)]">
-                          V warn / V alert (mm)
-                          <div className="mt-1 grid grid-cols-2 gap-2">
+              {selectedSectionId !== "all" && settingsOpen && (
+                <div className="mb-4 rounded-xl border border-[var(--border)] bg-white p-4 shadow-sm">
+                  <div className="mb-3 flex items-center justify-between gap-2">
+                    <span className="text-sm font-semibold text-[var(--ink)]">Analysis Settings</span>
+                    {hasUnsavedCriteria ? (
+                      <span className="text-xs font-medium text-amber-700">Unsaved changes</span>
+                    ) : (
+                      <span className="text-xs text-[var(--muted-foreground)]">Saved</span>
+                    )}
+                  </div>
+                  <div className="space-y-4">
+                    {criteriaLoading ? (
+                      <p className="text-sm text-[var(--muted-foreground)]">Loading settings…</p>
+                    ) : (
+                      <>
+                        <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+                          <label className="text-xs text-[var(--muted-foreground)]">
+                            Gap threshold (m)
                             <Input
                               type="number"
-                              className="drainer-input"
-                              value={criteria.near_tolerance_v_warn}
+                              className="drainer-input mt-1"
+                              value={criteria.gap_threshold_m}
                               onChange={(e) =>
-                                setCriteria((c) => ({ ...c, near_tolerance_v_warn: Number(e.target.value) || 0 }))
+                                setCriteria((c) => ({
+                                  ...c,
+                                  gap_threshold_m: Number(e.target.value) || 0,
+                                }))
                               }
                             />
+                          </label>
+                          <label className="text-xs text-[var(--muted-foreground)]">
+                            Overlap threshold (m)
                             <Input
                               type="number"
-                              className="drainer-input"
-                              value={criteria.near_tolerance_v_alert}
+                              className="drainer-input mt-1"
+                              value={criteria.overlap_threshold_m}
                               onChange={(e) =>
-                                setCriteria((c) => ({ ...c, near_tolerance_v_alert: Number(e.target.value) || 0 }))
+                                setCriteria((c) => ({
+                                  ...c,
+                                  overlap_threshold_m: Number(e.target.value) || 0,
+                                }))
                               }
                             />
-                          </div>
-                        </label>
-                        <label className="text-xs text-[var(--muted-foreground)]">
-                          H warn / H alert (mm)
-                          <div className="mt-1 grid grid-cols-2 gap-2">
+                          </label>
+                          <label className="text-xs text-[var(--muted-foreground)]">
+                            Doubleup threshold (m)
                             <Input
                               type="number"
-                              className="drainer-input"
-                              value={criteria.near_tolerance_h_warn}
+                              className="drainer-input mt-1"
+                              value={criteria.doubleup_threshold_m}
                               onChange={(e) =>
-                                setCriteria((c) => ({ ...c, near_tolerance_h_warn: Number(e.target.value) || 0 }))
+                                setCriteria((c) => ({
+                                  ...c,
+                                  doubleup_threshold_m: Number(e.target.value) || 0,
+                                }))
                               }
                             />
-                            <Input
-                              type="number"
-                              className="drainer-input"
-                              value={criteria.near_tolerance_h_alert}
-                              onChange={(e) =>
-                                setCriteria((c) => ({ ...c, near_tolerance_h_alert: Number(e.target.value) || 0 }))
-                              }
-                            />
-                          </div>
-                        </label>
-                        <label className="text-xs text-[var(--muted-foreground)]">
-                          Window (consecutive records)
-                          <Input
-                            type="number"
-                            className="drainer-input mt-1"
-                            value={criteria.deflection_trend_window}
-                            onChange={(e) =>
-                              setCriteria((c) => ({ ...c, deflection_trend_window: Number(e.target.value) || 2 }))
-                            }
-                          />
-                        </label>
-                        <label className="text-xs text-[var(--muted-foreground)]">
-                          V tolerance (mm)
-                          <Input
-                            type="number"
-                            className="drainer-input mt-1"
-                            value={criteria.deflection_trend_v_threshold}
-                            onChange={(e) =>
-                              setCriteria((c) => ({
-                                ...c,
-                                deflection_trend_v_threshold: Number(e.target.value) || 0,
-                              }))
-                            }
-                          />
-                        </label>
-                        <label className="text-xs text-[var(--muted-foreground)]">
-                          H tolerance (mm)
-                          <Input
-                            type="number"
-                            className="drainer-input mt-1"
-                            value={criteria.deflection_trend_h_threshold}
-                            onChange={(e) =>
-                              setCriteria((c) => ({
-                                ...c,
-                                deflection_trend_h_threshold: Number(e.target.value) || 0,
-                              }))
-                            }
-                          />
-                        </label>
-                      </div>
-                      <div className="rounded-lg border border-[var(--border)] p-3">
-                        <p className="text-xs font-semibold text-[var(--ink)] mb-2">Section joint types</p>
-                        {jointTypesLoading ? (
-                          <p className="text-xs text-[var(--muted-foreground)]">Loading joint types…</p>
-                        ) : (
-                          <div className="flex flex-wrap gap-3">
-                            {(["RRJ", "WR", "WB", "Transition"] as const).map((jt) => (
-                              <label key={jt} className="inline-flex items-center gap-1.5 text-xs">
-                                <input
-                                  type="checkbox"
-                                  className="size-3 accent-[#B8682A]"
-                                  checked={jointTypes.includes(jt)}
-                                  onChange={(e) =>
-                                    setJointTypes((prev) =>
-                                      e.target.checked
-                                        ? [...prev, jt]
-                                        : prev.filter((t) => t !== jt)
-                                    )
-                                  }
-                                />
-                                {jt}
-                              </label>
-                            ))}
-                          </div>
-                        )}
-                        <div className="mt-3 flex justify-end">
+                          </label>
+                        </div>
+                        <div className="flex flex-wrap justify-end gap-2">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="min-h-[40px]"
+                            disabled={criteriaSaving}
+                            onClick={() => void handleSaveCriteria(DEFAULT_CRITERIA)}
+                          >
+                            Reset to defaults
+                          </Button>
                           <Button
                             size="sm"
-                            variant="outline"
-                            className="min-h-[36px]"
-                            disabled={jointTypesSaving || !hasUnsavedJointTypes}
-                            onClick={() => void handleSaveJointTypes()}
+                            className="min-h-[40px] bg-[#B8682A] text-white border-0 hover:bg-[#A35D26]"
+                            disabled={criteriaSaving || !hasUnsavedCriteria}
+                            onClick={() => void handleSaveCriteria(criteria)}
                           >
-                            {jointTypesSaving ? "Saving…" : "Save joint types"}
+                            {criteriaSaving ? "Saving…" : "Save & Re-analyse"}
+                          </Button>
+                        </div>
+                      </>
+                    )}
+                  </div>
+                </div>
+              )}
+              {inconsistenciesLoading ? (
+                <p className="text-sm text-[var(--muted-foreground)] py-4">Loading…</p>
+              ) : !hasInconsistencies ? (
+                <p className="text-sm text-green-600 py-4">✅ No inconsistencies detected</p>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {allInconsistencies.map(({ inc, sec }, idx) => {
+                    const validatingId = `${sec.section_id}:${inc.record_from_id}:${inc.record_to_id}:${inc.type}`;
+                    return (
+                      <div
+                        key={`${sec.section_id}-${inc.type}-${idx}`}
+                        className="rounded-xl border border-[var(--border)] bg-white p-4 shadow-sm flex flex-col min-h-[180px]"
+                      >
+                        <div className="flex items-center justify-between gap-2 mb-2">
+                          {issueBadge(inc.type)}
+                          <span className="text-sm font-medium">
+                            Record #{inc.record_from_counter ?? "—"}
+                          </span>
+                        </div>
+                        <p className="text-sm mb-1">
+                          CH {inc.ch_from.toLocaleString("en-AU", { minimumFractionDigits: 2 })} →{" "}
+                          {inc.ch_to.toLocaleString("en-AU", { minimumFractionDigits: 2 })} ·{" "}
+                          {issueDiffBadge(inc.type, inc.diff)}
+                        </p>
+                        <p className="text-xs text-[var(--muted-foreground)] mb-1">
+                          Joint: {formatJointType(inc.from_joint_type)} →{" "}
+                          {formatJointType(inc.to_joint_type)}
+                        </p>
+                        <p className="text-xs text-[var(--muted-foreground)] mb-3">
+                          {issueHint(inc.type)}
+                        </p>
+                        <div className="mt-auto flex flex-wrap gap-2 justify-between items-center w-full">
+                          <div className="flex gap-2">
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="min-h-[33px] h-[33px] px-3 text-xs bg-[var(--surface)] text-[var(--ink)] border-[var(--border)] hover:bg-[var(--surface-alt)]"
+                              onClick={() => openDeleteConfirm(inc)}
+                            >
+                              Delete
+                            </Button>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="min-h-[33px] h-[33px] px-3 text-xs bg-[#2F7D55] text-white border-0 hover:bg-[#267348] shrink-0"
+                              onClick={() => setValidateConfirm({ sec, inc })}
+                              disabled={validatingKey === validatingId}
+                            >
+                              {validatingKey === validatingId ? "Validating…" : "Validate"}
+                            </Button>
+                          </div>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="min-h-[33px] h-[33px] px-3 text-xs bg-[#B8682A] text-white border-0 hover:bg-[#A35D26] shrink-0"
+                            onClick={() => openViewRecord(inc)}
+                          >
+                            View Record
                           </Button>
                         </div>
                       </div>
-                      <div className="flex flex-wrap justify-end gap-2">
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          className="min-h-[40px]"
-                          disabled={criteriaSaving}
-                          onClick={() => void handleSaveCriteria(DEFAULT_CRITERIA)}
-                        >
-                          Reset to defaults
-                        </Button>
-                        <Button
-                          size="sm"
-                          className="min-h-[40px] bg-[#B8682A] text-white border-0 hover:bg-[#A35D26]"
-                          disabled={criteriaSaving || !hasUnsavedCriteria}
-                          onClick={() => void handleSaveCriteria(criteria)}
-                        >
-                          {criteriaSaving ? "Saving…" : "Save & Re-analyse"}
-                        </Button>
-                      </div>
-                    </>
-                  )}
-                </div>
-              </div>
-            )}
-            {inconsistenciesLoading ? (
-              <p className="text-sm text-[var(--muted-foreground)] py-4">
-                Loading…
-              </p>
-            ) : !hasInconsistencies ? (
-              <p className="text-sm text-green-600 py-4">
-                ✅ No inconsistencies detected
-              </p>
-            ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {allInconsistencies.map(({ inc, sec }, idx) => (
-                  <div
-                    key={`${sec.section_id}-${idx}`}
-                    className="rounded-xl border border-[var(--border)] bg-white p-4 shadow-sm flex flex-col min-h-[180px]"
-                  >
-                    <div className="flex items-center justify-between gap-2 mb-2">
-                      {inc.type === "gap" ? (
-                        <span className="drainer-badge-gap drainer-badge-gap-lg">Gap</span>
-                      ) : (
-                        <span className="drainer-badge-open drainer-badge-open-lg">Overlap</span>
-                      )}
-                      <span className="text-sm font-medium">Record #{inc.record_from_counter ?? "—"}</span>
-                    </div>
-                    <p className="text-sm mb-2">
-                      CH {inc.ch_from.toLocaleString("en-AU", { minimumFractionDigits: 2 })} → {inc.ch_to.toLocaleString("en-AU", { minimumFractionDigits: 2 })} · {inc.type === "gap" ? (
-                        <span className="drainer-badge-gap">{inc.diff.toLocaleString("en-AU", { minimumFractionDigits: 1 })}m</span>
-                      ) : (
-                        <span className="drainer-badge-open">{inc.diff.toLocaleString("en-AU", { minimumFractionDigits: 1 })}m</span>
-                      )}
-                    </p>
-                    <p className="text-xs text-[var(--muted-foreground)] mb-3">
-                      {inc.type === "gap" ? "Possible missing record between these chainages." : "Possible duplicate or incorrect chainage entry."}
-                    </p>
-                    <div className="mt-auto flex flex-wrap gap-2 justify-between items-center w-full">
-                      <div className="flex gap-2">
-                        <Button variant="outline" size="sm" className="min-h-[33px] h-[33px] px-3 text-xs bg-[var(--surface)] text-[var(--ink)] border-[var(--border)] hover:bg-[var(--surface-alt)]" onClick={() => openDeleteConfirm(inc)}>
-                          Delete
-                        </Button>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          className="min-h-[33px] h-[33px] px-3 text-xs bg-[#2F7D55] text-white border-0 hover:bg-[#267348] shrink-0"
-                          onClick={() => setValidateConfirm({ sec, inc })}
-                          disabled={validatingKey === `${sec.section_id}:${inc.record_from_id}:${inc.record_to_id}`}
-                        >
-                          {validatingKey === `${sec.section_id}:${inc.record_from_id}:${inc.record_to_id}` ? "Validating…" : "Validate"}
-                        </Button>
-                      </div>
-                      <Button variant="outline" size="sm" className="min-h-[33px] h-[33px] px-3 text-xs bg-[#B8682A] text-white border-0 hover:bg-[#A35D26] shrink-0" onClick={() => openViewRecord(inc)}>
-                        View Record
-                      </Button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-            {/* CHECK 1 — Fittings (non-pipe pipe_fitting_id) */}
-            <div className="mt-6 border-t border-[var(--border)] pt-4">
-              <button
-                type="button"
-                className="flex items-center gap-2 w-full text-left font-medium text-sm"
-                onClick={() => setFittingsOpen((o) => !o)}
-              >
-                <span>{fittingsOpen ? "▼" : "▶"}</span>
-                <span>Fittings (non-pipe names)</span>
-                {!fittingsLoading && (
-                  <Badge variant="secondary" className="text-xs">
-                    {fittingsData.reduce((s, sec) => {
-                      const off = sec.records?.length ?? 0;
-                      const gaps = sec.not_laid?.length ?? sec.guide_validation?.not_laid.length ?? 0;
-                      return s + off + gaps;
-                    }, 0)}
-                  </Badge>
-                )}
-              </button>
-              {fittingsOpen && (
-                <div className="mt-2">
-                  {fittingsLoading ? (
-                    <p className="text-sm text-[var(--muted-foreground)] py-2">Loading…</p>
-                  ) : fittingsData.reduce((s, sec) => {
-                      const off = sec.records?.length ?? 0;
-                      const gaps = sec.not_laid?.length ?? sec.guide_validation?.not_laid.length ?? 0;
-                      return s + off + gaps;
-                    }, 0) === 0 ? (
-                    <p className="text-sm text-[var(--muted-foreground)] py-2">No fittings to validate</p>
-                  ) : (
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      {fittingsData.flatMap((sec) => {
-                        if (sec.guide_validation?.guide_enabled === true) {
-                          return [
-                            ...(sec.not_laid ?? sec.guide_validation.not_laid).map((gap) => (
-                              <div key={`gap-${sec.section_id}-${gap.sequence_number}`} className="rounded-xl border border-red-200 bg-red-50 p-4 shadow-sm">
-                                <div className="flex items-center gap-2 mb-2">
-                                  <Badge className="bg-red-600 text-white text-xs">Not laid</Badge>
-                                  <span className="text-sm font-mono font-semibold">{gap.item_id}</span>
-                                </div>
-                                <p className="text-xs text-[var(--muted-foreground)]">
-                                  Guide seq {gap.sequence_number} — no matching record lodged.
-                                </p>
-                              </div>
-                            )),
-                            ...(sec.records ?? []).map((r) => (
-                              <div key={r.id} className="rounded-xl border border-amber-200 bg-amber-50 p-4 shadow-sm flex flex-col min-h-[140px]">
-                                <div className="flex items-center justify-between gap-2 mb-2">
-                                  <Badge className="bg-amber-600 text-white text-xs">Off-guide</Badge>
-                                  <span className="text-sm font-medium">Record #{r.counter ?? "—"}</span>
-                                </div>
-                                <p className="text-sm mb-1">CH {r.chainage.toLocaleString("en-AU", { minimumFractionDigits: 2 })} · <span className="font-mono">{r.pipe_fitting_id ?? "—"}</span></p>
-                                <p className="text-xs text-[var(--muted-foreground)] mb-3">
-                                  Record does not match any installation-guide item.
-                                </p>
-                                <div className="mt-auto flex flex-wrap gap-2 justify-between items-center w-full">
-                                  <Button variant="outline" size="sm" className="min-h-[33px] h-[33px] px-3 text-xs bg-[#2F7D55] text-white border-0 hover:bg-[#267348] shrink-0" onClick={() => setValidateFittingConfirm({ sec, r })} disabled={validatingFittingKey === r.id}>
-                                    {validatingFittingKey === r.id ? "Validating…" : "Validate"}
-                                  </Button>
-                                  <Button variant="outline" size="sm" className="min-h-[33px] h-[33px] px-3 text-xs bg-[#B8682A] text-white border-0 hover:bg-[#A35D26] shrink-0" onClick={() => openViewRecordById(r.id, `Off-guide: ${r.pipe_fitting_id ?? "—"}`, r.chainage, r.chainage)}>
-                                    Edit record
-                                  </Button>
-                                </div>
-                              </div>
-                            )),
-                            ...(sec.guide_validation.matched_valid.length > 0 &&
-                            (sec.records?.length ?? 0) === 0 &&
-                            (sec.not_laid?.length ?? sec.guide_validation.not_laid.length) === 0
-                              ? [
-                                  <div key={`matched-${sec.section_id}`} className="rounded-xl border border-emerald-200 bg-emerald-50 p-4 shadow-sm md:col-span-2">
-                                    <p className="text-sm text-emerald-800">
-                                      ✅ All {sec.guide_validation.matched_valid.length} lodged item(s) match the installation guide.
-                                    </p>
-                                  </div>,
-                                ]
-                              : []),
-                          ];
-                        }
-                        return (sec.records ?? []).map((r) => (
-                          <div key={r.id} className="rounded-xl border border-[var(--border)] bg-white p-4 shadow-sm flex flex-col min-h-[140px]">
-                            <div className="flex items-center justify-between gap-2 mb-2">
-                              <Badge variant="secondary" className="text-xs">Fitting</Badge>
-                              <span className="text-sm font-medium">Record #{r.counter ?? "—"}</span>
-                            </div>
-                            <p className="text-sm mb-1">CH {r.chainage.toLocaleString("en-AU", { minimumFractionDigits: 2 })} · <span className="font-mono">{r.pipe_fitting_id ?? "—"}</span></p>
-                            <p className="text-xs text-[var(--muted-foreground)] mb-3">
-                              Name differs from pipe format (000536-000096 or PP000010-000169).
-                            </p>
-                            <div className="mt-auto flex flex-wrap gap-2 justify-between items-center w-full">
-                              <Button variant="outline" size="sm" className="min-h-[33px] h-[33px] px-3 text-xs bg-[#2F7D55] text-white border-0 hover:bg-[#267348] shrink-0" onClick={() => setValidateFittingConfirm({ sec, r })} disabled={validatingFittingKey === r.id}>
-                                {validatingFittingKey === r.id ? "Validating…" : "Validate"}
-                              </Button>
-                              <Button variant="outline" size="sm" className="min-h-[33px] h-[33px] px-3 text-xs bg-[#B8682A] text-white border-0 hover:bg-[#A35D26] shrink-0" onClick={() => openViewRecordById(r.id, `Fitting: ${r.pipe_fitting_id ?? "—"}`, r.chainage, r.chainage)}>
-                                View Record
-                              </Button>
-                            </div>
-                          </div>
-                        ));
-                      })}
-                    </div>
-                  )}
+                    );
+                  })}
                 </div>
               )}
-            </div>
-
-            {/* CHECK 2 — Duplicate Pipe ID */}
-            <div className="mt-6 border-t border-[var(--border)] pt-4">
-              <button
-                type="button"
-                className="flex items-center gap-2 w-full text-left font-medium text-sm"
-                onClick={() => setDupOpen((o) => !o)}
-              >
-                <span>{dupOpen ? "▼" : "▶"}</span>
-                <span>Duplicated pipe IDs</span>
-                {!duplicatesLoading && (
-                  <Badge variant="secondary" className="text-xs">
-                    {duplicatesData.reduce((s, sec) => s + (sec.duplicates?.length ?? 0), 0)}
-                  </Badge>
-                )}
-              </button>
-              {dupOpen && (
-                <div className="mt-2">
-                  {duplicatesLoading ? (
-                    <p className="text-sm text-[var(--muted-foreground)] py-2">Loading…</p>
-                  ) : duplicatesData.reduce((s, sec) => s + (sec.duplicates?.length ?? 0), 0) === 0 ? (
-                    <p className="text-sm text-[var(--muted-foreground)] py-2">No duplicate pipe IDs found</p>
-                  ) : (
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      {duplicatesData.flatMap((sec) =>
-                        (sec.duplicates ?? []).map((dup, idx) => (
-                          <div key={`${sec.section_id}-${dup.pipe_fitting_id}-${idx}`} className="rounded-xl border border-[var(--border)] bg-white p-4 shadow-sm">
-                            <div className="flex items-center justify-between gap-2 mb-2">
-                              <div className="flex items-center gap-2">
-                                <Badge variant="secondary" className="text-xs">⚠️ Duplicate</Badge>
-                                <span className="font-mono font-bold">{dup.pipe_fitting_id}</span>
-                              </div>
-                              {duplicatesData.length > 1 && <span className="text-xs text-[var(--muted-foreground)]">{sec.section_name ?? sec.section_id}</span>}
-                            </div>
-                            <p className="text-sm text-[var(--muted-foreground)] mb-3">
-                              {dup.count} occurrences · {dup.records.map((r) => `CH ${r.chainage.toLocaleString("en-AU", { minimumFractionDigits: 2 })}`).join(", ")}
-                            </p>
-                            <div className="flex flex-wrap gap-2">
-                              {dup.records.map((r) => (
-                                <Button key={r.id} variant="outline" size="sm" className="min-h-[44px]" onClick={() => openViewRecordById(r.id, `Duplicate pipe ID: ${dup.pipe_fitting_id}`, r.chainage, r.chainage)}>
-                                  View #{r.counter ?? "?"}
-                                </Button>
-                              ))}
-                            </div>
-                          </div>
-                        ))
-                      )}
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
-
-            {/* CHECK 2 — Near-Tolerance Deflection */}
-            <div className="mt-6 border-t border-[var(--border)] pt-4">
-              <button
-                type="button"
-                className="flex items-center gap-2 w-full text-left font-medium text-sm"
-                onClick={() => setNearOpen((o) => !o)}
-              >
-                <span>{nearOpen ? "▼" : "▶"}</span>
-                <span>Near-tolerance deflections</span>
-                {!nearToleranceLoading && (
-                  <Badge variant="secondary" className="text-xs">
-                    {nearToleranceData.reduce((s, sec) => s + (sec.records?.length ?? 0), 0)}
-                  </Badge>
-                )}
-              </button>
-              {nearOpen && (
-                <div className="mt-2">
-                  {nearToleranceLoading ? (
-                    <p className="text-sm text-[var(--muted-foreground)] py-2">Loading…</p>
-                  ) : nearToleranceData.reduce((s, sec) => s + (sec.records?.length ?? 0), 0) === 0 ? (
-                    <p className="text-sm text-[var(--muted-foreground)] py-2">All deflections within safe range</p>
-                  ) : (
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      {nearToleranceData.flatMap((sec) =>
-                        (sec.records ?? []).map((r) => (
-                          <div key={r.id} className="rounded-xl border border-[var(--border)] bg-white p-4 shadow-sm flex flex-col min-h-[180px]">
-                            <div className="flex items-center justify-between gap-2 mb-2">
-                              {r.level === "critical" ? (
-                                <span className="drainer-badge-gap drainer-badge-gap-xl">Critical</span>
-                              ) : (
-                                <span className="drainer-badge-open drainer-badge-open-xl">Warning</span>
-                              )}
-                              <span className="text-sm font-medium">Record #{r.counter ?? "—"}</span>
-                            </div>
-                            <p className="text-sm mb-1">CH {r.chainage.toLocaleString("en-AU", { minimumFractionDigits: 2 })} · {r.pipe_fitting_id ?? "—"}</p>
-                            <p className="text-sm mb-2">V: {(r.deflection_v_sign ?? "+")}{Math.abs(r.deflection_v_mm ?? 0)}mm  H: {(r.deflection_h_side ?? "L")}{Math.abs(r.deflection_h_mm ?? 0)}mm</p>
-                            <p className="text-xs text-[var(--muted-foreground)] mb-3">
-                              {r.level === "critical"
-                                ? "Deflection approaching limit. Review installation before next ITR."
-                                : "Deflection within range but elevated. Monitor next records."}
-                            </p>
-                            <div className="mt-auto flex flex-wrap gap-2 justify-between items-center w-full">
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                className="min-h-[33px] h-[33px] px-3 text-xs bg-[#2F7D55] text-white border-0 hover:bg-[#267348] shrink-0"
-                                onClick={() => setValidateNearConfirm({ sec, r })}
-                                disabled={validatingNearKey === r.id}
-                              >
-                                {validatingNearKey === r.id ? "Validating…" : "Validate"}
-                              </Button>
-                              <Button variant="outline" size="sm" className="min-h-[33px] h-[33px] px-3 text-xs bg-[#B8682A] text-white border-0 hover:bg-[#A35D26] shrink-0" onClick={() => openViewRecordById(r.id, r.level === "critical" ? "Deflection approaching limit. Review installation before next ITR." : "Deflection within range but elevated. Monitor next records.", r.chainage, r.chainage)}>
-                                View Record
-                              </Button>
-                            </div>
-                          </div>
-                        ))
-                      )}
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
-
-            {/* CHECK 3 — Deflection Trend */}
-            <div className="mt-6 border-t border-[var(--border)] pt-4">
-              <button
-                type="button"
-                className="flex items-center gap-2 w-full text-left font-medium text-sm"
-                onClick={() => setTrendOpen((o) => !o)}
-              >
-                <span>{trendOpen ? "▼" : "▶"}</span>
-                <span>Deflection trends</span>
-                {!deflectionTrendLoading && (
-                  <Badge variant="secondary" className="text-xs">
-                    {deflectionTrendData.reduce((s, sec) => s + (sec.trends?.length ?? 0), 0)}
-                  </Badge>
-                )}
-              </button>
-              {trendOpen && (
-                <div className="mt-2">
-                  {deflectionTrendLoading ? (
-                    <p className="text-sm text-[var(--muted-foreground)] py-2">Loading…</p>
-                  ) : deflectionTrendData.reduce((s, sec) => s + (sec.trends?.length ?? 0), 0) === 0 ? (
-                    <p className="text-sm text-[var(--muted-foreground)] py-2">No deflection trends detected</p>
-                  ) : (
-                    <div className="grid grid-cols-1 gap-4">
-                      {deflectionTrendData.flatMap((sec) =>
-                        (sec.trends ?? []).map((t, idx) => {
-                          const chMin = Math.min(...t.records.map((r) => r.chainage));
-                          const chMax = Math.max(...t.records.map((r) => r.chainage));
-                          const formatRec = (r: DeflectionTrendRecord) => {
-                            const dateText = r.date_installed
-                              ? new Date(r.date_installed).toLocaleDateString("en-AU")
-                              : "No date";
-                            if (t.type === "vertical") {
-                              const v = `${r.deflection_v_sign ?? "+"}${Math.abs(r.deflection_v_mm ?? 0)}mm`;
-                              return `Date ${dateText} · CH ${r.chainage.toLocaleString("en-AU", { minimumFractionDigits: 2 })} · Deflection ${v}`;
-                            }
-                            const h = `${r.deflection_h_side ?? "L"}${Math.abs(r.deflection_h_mm ?? 0)}mm`;
-                            return `Date ${dateText} · CH ${r.chainage.toLocaleString("en-AU", { minimumFractionDigits: 2 })} · Deflection ${h}`;
-                          };
-                          return (
-                            <div key={`${sec.section_id}-${t.type}-${idx}`} className="rounded-xl border border-[var(--border)] bg-white p-4 shadow-sm">
-                              <div className="flex items-center justify-between gap-2 mb-2">
-                                <div className="flex items-center gap-2">
-                                  <Badge variant="secondary" className="text-xs">📈 Trend</Badge>
-                                  <span className="text-sm font-medium capitalize">{t.type} — {t.direction}</span>
-                                </div>
-                                {deflectionTrendData.length > 1 && <span className="text-xs text-[var(--muted-foreground)]">{sec.section_name ?? sec.section_id}</span>}
-                              </div>
-                              <p className="text-sm mb-2">
-                                CH {chMin.toLocaleString("en-AU", { minimumFractionDigits: 2 })} → CH {chMax.toLocaleString("en-AU", { minimumFractionDigits: 2 })} · Avg: {t.avg_mm}mm
-                              </p>
-                              <p className="text-xs text-[var(--muted-foreground)] mb-2">
-                                4 consecutive records accumulating deflection in the same direction. Possible alignment issue in trench.
-                              </p>
-                              <ul className="text-xs text-[var(--muted-foreground)] list-disc list-inside mb-3 space-y-0.5">
-                                {t.records.map((r, i) => (
-                                  <li key={i}>{formatRec(r)}</li>
-                                ))}
-                              </ul>
-                              {null}
-                            </div>
-                          );
-                        })
-                      )}
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
             </div>
           </CardContent>
         </Card>
@@ -1394,56 +669,6 @@ export default function NotificationsPage() {
         contextRecordToId={editContextRecordToId}
       />
 
-      <Dialog open={!!validateFittingConfirm} onOpenChange={(o) => !o && setValidateFittingConfirm(null)}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Validate fitting</DialogTitle>
-          </DialogHeader>
-          {validateFittingConfirm && (
-            <p className="text-sm text-[var(--muted-foreground)]">
-              Mark Record #{validateFittingConfirm.r.counter ?? "?"} (CH {validateFittingConfirm.r.chainage.toLocaleString("en-AU", { minimumFractionDigits: 2 })}, {validateFittingConfirm.r.pipe_fitting_id ?? "—"}) as accepted? It will be removed from the list.
-            </p>
-          )}
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setValidateFittingConfirm(null)} className="min-h-[44px]">
-              Cancel
-            </Button>
-            <Button
-              onClick={() => validateFittingConfirm && handleValidateFitting(validateFittingConfirm.sec, validateFittingConfirm.r)}
-              disabled={!validateFittingConfirm || validatingFittingKey !== null}
-              className="min-h-[44px] bg-[#2F7D55] text-white hover:bg-[#267348]"
-            >
-              {validatingFittingKey ? "Validating…" : "Validate"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      <Dialog open={!!validateNearConfirm} onOpenChange={(o) => !o && setValidateNearConfirm(null)}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Validate near-tolerance</DialogTitle>
-          </DialogHeader>
-          {validateNearConfirm && (
-            <p className="text-sm text-[var(--muted-foreground)]">
-              Mark Record #{validateNearConfirm.r.counter ?? "?"} (CH {validateNearConfirm.r.chainage.toLocaleString("en-AU", { minimumFractionDigits: 2 })}, {validateNearConfirm.r.level}) as accepted? It will be removed from the list.
-            </p>
-          )}
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setValidateNearConfirm(null)} className="min-h-[44px]">
-              Cancel
-            </Button>
-            <Button
-              onClick={() => validateNearConfirm && handleValidateNearTolerance(validateNearConfirm.sec, validateNearConfirm.r)}
-              disabled={!validateNearConfirm || validatingNearKey !== null}
-              className="min-h-[44px] bg-[#2F7D55] text-white hover:bg-[#267348]"
-            >
-              {validatingNearKey ? "Validating…" : "Validate"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
       <Dialog open={!!validateConfirm} onOpenChange={(o) => !o && setValidateConfirm(null)}>
         <DialogContent>
           <DialogHeader>
@@ -1451,7 +676,10 @@ export default function NotificationsPage() {
           </DialogHeader>
           {validateConfirm && (
             <p className="text-sm text-[var(--muted-foreground)]">
-              Mark this {validateConfirm.inc.type} (CH {validateConfirm.inc.ch_from.toLocaleString("en-AU", { minimumFractionDigits: 2 })} → {validateConfirm.inc.ch_to.toLocaleString("en-AU", { minimumFractionDigits: 2 })}) as accepted? It will be removed from the potential issues list.
+              Mark this {validateConfirm.inc.type} (CH{" "}
+              {validateConfirm.inc.ch_from.toLocaleString("en-AU", { minimumFractionDigits: 2 })} →{" "}
+              {validateConfirm.inc.ch_to.toLocaleString("en-AU", { minimumFractionDigits: 2 })}) as
+              accepted? It will be removed from the potential issues list.
             </p>
           )}
           <DialogFooter>
@@ -1459,7 +687,10 @@ export default function NotificationsPage() {
               Cancel
             </Button>
             <Button
-              onClick={() => validateConfirm && handleValidateInconsistency(validateConfirm.sec, validateConfirm.inc)}
+              onClick={() =>
+                validateConfirm &&
+                handleValidateInconsistency(validateConfirm.sec, validateConfirm.inc)
+              }
               disabled={!validateConfirm || validatingKey !== null}
               className="min-h-[44px] bg-[#2F7D55] text-white hover:bg-[#267348]"
             >
@@ -1475,13 +706,20 @@ export default function NotificationsPage() {
             <DialogTitle>Delete record</DialogTitle>
           </DialogHeader>
           <p className="text-sm text-[var(--muted-foreground)]">
-            Delete record #{deleteConfirm?.counter ?? "?"} (CH {deleteConfirm?.chainage.toLocaleString("en-AU", { minimumFractionDigits: 2 }) ?? "?"})? This cannot be undone from the app.
+            Delete record #{deleteConfirm?.counter ?? "?"} (CH{" "}
+            {deleteConfirm?.chainage.toLocaleString("en-AU", { minimumFractionDigits: 2 }) ?? "?"})?
+            This cannot be undone from the app.
           </p>
           <DialogFooter>
             <Button variant="outline" onClick={() => setDeleteConfirm(null)} className="min-h-[44px]">
               Cancel
             </Button>
-            <Button variant="destructive" onClick={handleDeleteRecord} disabled={deleteLoading} className="min-h-[44px]">
+            <Button
+              variant="destructive"
+              onClick={handleDeleteRecord}
+              disabled={deleteLoading}
+              className="min-h-[44px]"
+            >
               {deleteLoading ? "Deleting…" : "Delete"}
             </Button>
           </DialogFooter>

@@ -3,7 +3,6 @@ import { getUserFromRequest } from "@/lib/api-auth";
 import { resolvePipeRecordSectionRef } from "@/lib/drainer-section-resolve";
 import { getSupabaseServer } from "@/lib/supabase/server";
 import { pipeRecordsSectionOrFilter, verifyQrTokenForSection } from "@/lib/section-catalog";
-import { processCheckpointAlerts } from "@/lib/checkpoint-notify";
 import { detectRecordInconsistencies } from "@/lib/record-inconsistencies";
 
 export async function GET(request: NextRequest) {
@@ -202,11 +201,6 @@ export async function POST(request: NextRequest) {
   }
 
   const supabaseAdmin = getSupabaseServer({ useServiceRole: true });
-  if (ref.section_id) {
-    processCheckpointAlerts(supabaseAdmin, ref.section_id).catch((err) =>
-      console.error("Checkpoint alerts:", err)
-    );
-  }
   detectRecordInconsistencies(supabaseAdmin).catch((err) =>
     console.error("Record inconsistencies:", err)
   );

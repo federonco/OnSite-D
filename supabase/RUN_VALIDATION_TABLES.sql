@@ -2,16 +2,16 @@
 -- Creates the 3 validation tables for Data Analysis (Validate buttons).
 -- Prerequisites: drainer_sections and drainer_pipe_records must exist.
 
--- 1. drainer_validated_inconsistencies (gaps/overlaps)
+-- 1. drainer_validated_inconsistencies (gaps/overlaps/doubleup)
 create table if not exists drainer_validated_inconsistencies (
   id uuid primary key default gen_random_uuid(),
   section_id uuid not null references drainer_sections(id) on delete cascade,
   record_from_id uuid not null,
   record_to_id uuid not null,
-  issue_type text not null check (issue_type in ('gap', 'overlap')),
+  issue_type text not null check (issue_type in ('gap', 'overlap', 'doubleup')),
   validated_by text,
   validated_at timestamptz default now(),
-  unique (section_id, record_from_id, record_to_id)
+  unique (section_id, record_from_id, record_to_id, issue_type)
 );
 create index if not exists drainer_validated_inconsistencies_section_idx on drainer_validated_inconsistencies (section_id);
 alter table drainer_validated_inconsistencies enable row level security;

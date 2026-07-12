@@ -9,7 +9,6 @@ import { getSupabaseBrowser } from "@/lib/supabase/browser";
 const links = [
   { href: "/admin", label: "Admin center" },
   { href: "/admin?tab=weld-wrap", label: "Weld & Wrap" },
-  { href: "/admin/checkpoints", label: "Checkpoints" },
   { href: "/admin/notifications", label: "Data Analysis" },
 ];
 
