@@ -67,20 +67,42 @@ type RecordRow = {
   pipe_fitting_id?: string | null;
 };
 
-/**
- * Pipes: 000536-000096, PP000010-000169, or just numbers. Fittings: rest (double scour, bend, valve, etc).
- * Empty not counted as fitting.
- */
-function countPipesAndFittings(records: RecordRow[]): { pipes: number; fittings: number } {
+/** Pipes: 000536-000096, PP000010-000169, or just numbers. Empty skipped. */
+function countPipesInstalled(records: RecordRow[]): number {
   let pipes = 0;
-  let fittings = 0;
   for (const r of records) {
     const pf = (r.pipe_fitting_id ?? "").trim();
     if (!pf) continue;
     if (PIPE_REGEX.test(pf)) pipes++;
-    else fittings++;
   }
-  return { pipes, fittings };
+  return pipes;
+}
+
+/** Calendar date in Australia/Perth (AWST), YYYY-MM-DD. */
+function todayDateAWST(): string {
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Australia/Perth",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(new Date());
+}
+
+function recordInstallDate(r: RecordRow): string | null {
+  const raw = r.date_installed?.trim();
+  if (!raw) return null;
+  return raw.slice(0, 10);
+}
+
+function countPipesInstalledToday(records: RecordRow[], today = todayDateAWST()): number {
+  let pipes = 0;
+  for (const r of records) {
+    if (recordInstallDate(r) !== today) continue;
+    const pf = (r.pipe_fitting_id ?? "").trim();
+    if (!pf) continue;
+    if (PIPE_REGEX.test(pf)) pipes++;
+  }
+  return pipes;
 }
 
 export default function AdminPage() {
@@ -240,8 +262,10 @@ export default function AdminPage() {
     [records.length]
   );
 
-  const { pipes: pipesInstalled, fittings: fittingsInstalled } = useMemo(
-    () => countPipesAndFittings(records),
+  const pipesInstalled = useMemo(() => countPipesInstalled(records), [records]);
+
+  const pipesInstalledToday = useMemo(
+    () => countPipesInstalledToday(records),
     [records]
   );
 
@@ -635,8 +659,8 @@ export default function AdminPage() {
                     <span className="font-semibold text-[var(--ink)]">{pipesInstalled}</span>
                   </div>
                   <div className="flex justify-between items-center">
-                    <span className="text-[var(--muted-foreground)]">Fittings installed</span>
-                    <span className="font-semibold text-[var(--ink)]">{fittingsInstalled}</span>
+                    <span className="text-[var(--muted-foreground)]">Pipes installed today</span>
+                    <span className="font-semibold text-[var(--ink)]">{pipesInstalledToday}</span>
                   </div>
                 </div>
               </div>

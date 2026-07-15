@@ -69,6 +69,20 @@ function validateChainage(value: string): string | null {
   return null;
 }
 
+/** Calendar date in Australia/Perth (AWST), YYYY-MM-DD. */
+function getAwstDate(): string {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "Australia/Perth",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(new Date());
+  const y = parts.find((p) => p.type === "year")!.value;
+  const m = parts.find((p) => p.type === "month")!.value;
+  const d = parts.find((p) => p.type === "day")!.value;
+  return `${y}-${m}-${d}`;
+}
+
 export function LodgeForm({
   sections,
   sectionId,
@@ -86,9 +100,6 @@ export function LodgeForm({
   const { pushToast } = useToast();
   const supabase = getSupabaseBrowser();
   const [loading, setLoading] = useState(false);
-  const [dateInstalled] = useState(() =>
-    new Date().toISOString().slice(0, 10)
-  );
   const [chainage, setChainage] = useState("");
   const [chainageStatus, setChainageStatus] = useState<ChainageStatus>("idle");
   const [chainageError, setChainageError] = useState<string | null>(null);
@@ -356,6 +367,7 @@ export function LodgeForm({
     try {
       const token = await getAccessToken();
       const ch = Number(chainage);
+      const freshDate = getAwstDate();
       const res = await fetch("/api/drainer/records", {
         method: "POST",
         headers: {
@@ -365,7 +377,7 @@ export function LodgeForm({
         body: JSON.stringify({
           section_id: sectionId,
           ...(subsectionId ? { subsection_id: subsectionId } : {}),
-          date_installed: dateInstalled,
+          date_installed: freshDate,
           chainage: ch,
           pipe_fitting_id: pipeFittingId.trim(),
           joint_type: jointType,
